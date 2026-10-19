@@ -15,6 +15,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::Manager;
 
+pub mod business;
+
 pub struct AppState {
     pub conn: Mutex<Connection>,
 }
@@ -67,6 +69,11 @@ pub fn migrations() -> Vec<Migration> {
             name: "products_catalog",
             sql: include_str!("migrations/008_products_catalog.sql"),
         },
+        Migration {
+            version: 9,
+            name: "cobros_recurrentes_presupuestos_email",
+            sql: include_str!("migrations/009_cobros_recurrentes_presupuestos_email.sql"),
+        },
     ]
 }
 
@@ -106,6 +113,7 @@ pub fn update_app_settings(
     input: AppSettingsInput,
 ) -> Result<AppSettings, String> {
     input.validate()?;
+    let current = get_app_settings(conn)?;
     let settings = AppSettings {
         export_dir: input
             .export_dir
@@ -114,6 +122,7 @@ pub fn update_app_settings(
         default_territory_flags: input.default_territory_flags,
         onboarding_completed: input.onboarding_completed,
         updated_at: chrono::Utc::now().to_rfc3339(),
+        qr_environment: input.qr_environment.unwrap_or(current.qr_environment),
     };
     let value =
         serde_json::to_string(&settings).map_err(|err| format!("settings json error: {err}"))?;
@@ -196,9 +205,10 @@ pub fn update_company(conn: &Connection, input: &CompanyUpdateInput) -> Result<C
 
 pub fn upsert_customer(conn: &Connection, customer: &Customer) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO customers (id, display_name, tax_id, kind, address, postal_code, municipality, province, country_code, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+        "INSERT INTO customers (id, display_name, tax_id, kind, address, postal_code, municipality, province, country_code, updated_at, email)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
          ON CONFLICT(id) DO UPDATE SET
+           email = excluded.email,
            display_name = excluded.display_name,
            tax_id = excluded.tax_id,
            kind = excluded.kind,
@@ -219,6 +229,7 @@ pub fn upsert_customer(conn: &Connection, customer: &Customer) -> Result<(), Str
             customer.province,
             customer.country_code,
             customer.updated_at,
+            customer.email,
         ],
     )
     .map(|_| ())
@@ -655,6 +666,7 @@ pub struct CustomerSummary {
     pub province: String,
     pub country_code: String,
     pub updated_at: String,
+    pub email: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -834,7 +846,7 @@ pub fn list_companies(conn: &Connection) -> Result<Vec<CompanySummary>, String> 
 pub fn list_customers(conn: &Connection) -> Result<Vec<CustomerSummary>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, display_name, tax_id, kind, address, postal_code, municipality, province, country_code, updated_at
+            "SELECT id, display_name, tax_id, kind, address, postal_code, municipality, province, country_code, updated_at, email
              FROM customers ORDER BY updated_at DESC",
         )
         .map_err(db_error)?;
@@ -851,6 +863,7 @@ pub fn list_customers(conn: &Connection) -> Result<Vec<CustomerSummary>, String>
                 province: row.get(7)?,
                 country_code: row.get(8)?,
                 updated_at: row.get(9)?,
+                email: row.get(10)?,
             })
         })
         .map_err(db_error)?;
@@ -1566,7 +1579,7 @@ fn insert_fiscal_record_tx(tx: &Transaction<'_>, record: &FiscalRecordInput) -> 
     .map_err(db_error)
 }
 
-fn db_error(err: rusqlite::Error) -> String {
+pub(crate) fn db_error(err: rusqlite::Error) -> String {
     format!("database error: {err}")
 }
 
@@ -1621,6 +1634,7 @@ mod tests {
             municipality: "Madrid".to_string(),
             province: "Madrid".to_string(),
             country_code: "ES".to_string(),
+            email: None,
         })
     }
 
@@ -1713,6 +1727,7 @@ mod tests {
             municipality: "Madrid".to_string(),
             province: "Madrid".to_string(),
             country_code: "ES".to_string(),
+            email: None,
         });
         insert_company(&conn, &company).expect("company insert");
         upsert_customer(&conn, &customer).expect("customer upsert");
@@ -1900,6 +1915,7 @@ mod tests {
                     "VeriFactu".to_string(),
                 ],
                 onboarding_completed: true,
+                qr_environment: Some("production".to_string()),
             },
         )
         .expect("save settings");
@@ -1969,6 +1985,7 @@ mod tests {
             municipality: "Madrid".to_string(),
             province: "Madrid".to_string(),
             country_code: "ES".to_string(),
+            email: None,
         });
         upsert_customer(&conn, &updated).expect("customer update");
 

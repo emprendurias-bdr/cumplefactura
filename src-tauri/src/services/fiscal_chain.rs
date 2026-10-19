@@ -333,6 +333,7 @@ mod tests {
             municipality: "Madrid".to_string(),
             province: "Madrid".to_string(),
             country_code: "ES".to_string(),
+            email: None,
         })
     }
 

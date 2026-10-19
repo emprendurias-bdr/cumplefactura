@@ -41,6 +41,7 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
         municipality: "Madrid".to_string(),
         province: "Madrid".to_string(),
         country_code: "ES".to_string(),
+        email: None,
     });
     db::insert_company(&conn, &company).expect("company insert");
     db::upsert_customer(&conn, &customer).expect("customer insert");
@@ -156,8 +157,12 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
         ))
     };
     remove_if_exists(&pdf_path);
-    pdf::write_invoice_pdf(pdf_path.to_str().expect("pdf utf8"), &invoice_data)
-        .expect("PDF export");
+    pdf::write_invoice_pdf(
+        pdf_path.to_str().expect("pdf utf8"),
+        &invoice_data,
+        crate::services::qr::QrEnvironment::Test,
+    )
+    .expect("PDF export");
 
     let json_path = if write_evidence {
         evidence_dir.join("latest-core-e2e-invoice.json")

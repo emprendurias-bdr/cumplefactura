@@ -5,8 +5,13 @@ import ts from "typescript";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const appPath = path.join(root, "src", "App.tsx");
-const sourceText = fs.readFileSync(appPath, "utf8");
-const sourceFile = ts.createSourceFile(appPath, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const featuresDir = path.join(root, "src", "features");
+const featurePaths = fs.existsSync(featuresDir)
+  ? fs.readdirSync(featuresDir).filter((name) => name.endsWith(".tsx")).map((name) => path.join(featuresDir, name))
+  : [];
+// App.tsx mas los componentes de src/features/: el contrato cubre toda la UI.
+const sourcePaths = [appPath, ...featurePaths];
+const sourceText = sourcePaths.map((file) => fs.readFileSync(file, "utf8")).join("\n");
 
 const invokedCommands = new Set();
 
@@ -24,7 +29,9 @@ function visit(node) {
   ts.forEachChild(node, visit);
 }
 
-visit(sourceFile);
+for (const file of sourcePaths) {
+  visit(ts.createSourceFile(file, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX));
+}
 
 const checks = [
   ...[
@@ -63,6 +70,26 @@ const checks = [
     "verifactu_submit_sidecar_preflight",
     "verifactu_submit_sidecar_invoke",
     "rectification_advice",
+    "invoice_due_date_set",
+    "payment_register",
+    "payment_delete",
+    "payment_list",
+    "receivables_list",
+    "recurring_upsert",
+    "recurring_list",
+    "recurring_set_active",
+    "recurring_generate_due",
+    "quote_upsert",
+    "quote_list",
+    "quote_set_status",
+    "quote_convert",
+    "email_settings_get",
+    "email_settings_update",
+    "email_password_set",
+    "email_log_list",
+    "email_send_test",
+    "email_send_invoice",
+    "email_send_reminder",
   ].map((command) => ({
     id: `invoke:${command}`,
     ok: invokedCommands.has(command),
@@ -219,7 +246,7 @@ const failed = checks.filter((check) => !check.ok);
 const summary = {
   app: "CumpleFactura",
   status: failed.length === 0 ? "passed" : "failed",
-  source: appPath,
+  source: sourcePaths,
   invoked_commands: [...invokedCommands].sort(),
   checks,
 };

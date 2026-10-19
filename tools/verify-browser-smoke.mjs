@@ -82,6 +82,13 @@ function installTauriMock(page) {
         updated_at: new Date().toISOString(),
       },
       lastXmlPath: "C:\\CumpleFactura\\Evidence\\cumplefactura-verifactu-e2e.xml",
+      payments: [],
+      dueDates: {},
+      recurring: [],
+      quotes: [],
+      emailSettings: null,
+      passwordSaved: false,
+      emailLog: [],
     };
 
     function id(prefix) {
@@ -200,7 +207,11 @@ function installTauriMock(page) {
         };
       }
       if (cmd === "app_settings_update") {
-        state.settings = { ...args.input, updated_at: new Date().toISOString() };
+        state.settings = {
+          ...args.input,
+          qr_environment: args.input.qr_environment ?? state.settings.qr_environment ?? "test",
+          updated_at: new Date().toISOString(),
+        };
         state.exportDir = args.input.export_dir || state.exportDir;
         return state.settings;
       }
@@ -351,6 +362,137 @@ function installTauriMock(page) {
           transmission_status: "prepared_for_signature",
         };
       }
+      // ── Gestion: cobros, recurrentes, presupuestos, email ──
+      const paidFor = (invoiceId) => state.payments.filter((p) => p.invoice_id === invoiceId).reduce((sum, p) => sum + p.amount_cents, 0);
+      if (cmd === "receivables_list") {
+        return state.invoices
+          .filter((invoice) => invoice.status === "Issued")
+          .map((invoice) => {
+            const customer = state.customers.find((c) => c.id === invoice.customer_id);
+            const paid = paidFor(invoice.id);
+            const outstanding = Math.max(invoice.total_cents - paid, 0);
+            return {
+              invoice_id: invoice.id,
+              company_id: invoice.company_id,
+              customer_id: invoice.customer_id,
+              customer_name: customer?.display_name ?? "",
+              customer_tax_id: customer?.tax_id ?? "",
+              series: invoice.series,
+              number: invoice.number,
+              issued_at: "2026-10-19T10:00:00Z",
+              due_date: state.dueDates[invoice.id] ?? null,
+              total_cents: invoice.total_cents,
+              paid_cents: paid,
+              outstanding_cents: outstanding,
+              status: outstanding === 0 ? "paid" : paid > 0 ? "partial" : "pending",
+              days_overdue: 0,
+            };
+          });
+      }
+      if (cmd === "invoice_due_date_set") {
+        state.dueDates[args.invoiceId] = args.dueDate;
+        return null;
+      }
+      if (cmd === "payment_list") return state.payments.filter((p) => p.invoice_id === args.invoiceId);
+      if (cmd === "payment_register") {
+        const payment = { id: id("payment"), created_at: new Date().toISOString(), ...args.input };
+        state.payments.push(payment);
+        return payment;
+      }
+      if (cmd === "payment_delete") {
+        state.payments = state.payments.filter((p) => p.id !== args.paymentId);
+        return null;
+      }
+      if (cmd === "recurring_list") return state.recurring;
+      if (cmd === "recurring_upsert") {
+        const item = {
+          id: args.input.id || id("recurring"),
+          company_id: args.input.draft.company_id,
+          customer_id: args.input.draft.customer_id,
+          label: args.input.label,
+          frequency: args.input.frequency,
+          next_run_date: args.input.next_run_date,
+          end_date: args.input.end_date,
+          active: true,
+          last_invoice_id: null,
+          total_cents: invoiceTotals(args.input.draft.lines).total_cents,
+          draft: args.input.draft,
+        };
+        state.recurring = [item, ...state.recurring.filter((r) => r.id !== item.id)];
+        return item;
+      }
+      if (cmd === "recurring_set_active") {
+        state.recurring = state.recurring.map((r) => (r.id === args.id ? { ...r, active: args.active } : r));
+        return null;
+      }
+      if (cmd === "recurring_generate_due") {
+        const today = new Date().toISOString().slice(0, 10);
+        const runs = [];
+        state.recurring = state.recurring.map((r) => {
+          if (!r.active || r.next_run_date > today) return r;
+          runs.push({ recurring_id: r.id, label: r.label, run_date: r.next_run_date, invoice: { id: id("draft") } });
+          const next = new Date(`${r.next_run_date}T00:00:00Z`);
+          next.setUTCMonth(next.getUTCMonth() + 1);
+          return { ...r, next_run_date: next.toISOString().slice(0, 10) };
+        });
+        return runs;
+      }
+      if (cmd === "quote_list") return state.quotes;
+      if (cmd === "quote_upsert") {
+        const number = state.quotes.length + 1;
+        const quote = {
+          id: args.input.id || id("quote"),
+          code: `P2026-${String(number).padStart(4, "0")}`,
+          customer_id: args.input.draft.customer_id,
+          status: "draft",
+          valid_until: args.input.valid_until,
+          notes: args.input.notes,
+          total_cents: invoiceTotals(args.input.draft.lines).total_cents,
+          invoice_id: null,
+          created_at: new Date().toISOString(),
+          draft: args.input.draft,
+        };
+        state.quotes = [quote, ...state.quotes.filter((q) => q.id !== quote.id)];
+        return quote;
+      }
+      if (cmd === "quote_set_status") {
+        state.quotes = state.quotes.map((q) => (q.id === args.id ? { ...q, status: args.status } : q));
+        return state.quotes.find((q) => q.id === args.id);
+      }
+      if (cmd === "quote_convert") {
+        const invoiceId = id("draft");
+        state.quotes = state.quotes.map((q) => (q.id === args.id ? { ...q, status: "invoiced", invoice_id: invoiceId } : q));
+        return { id: invoiceId };
+      }
+      const emailView = () => ({
+        settings: state.emailSettings ?? { smtp_host: "", smtp_port: 587, smtp_security: "starttls", smtp_username: "", from_email: "", from_name: "" },
+        configured: Boolean(state.emailSettings),
+        password_saved: state.passwordSaved,
+      });
+      if (cmd === "email_settings_get") return emailView();
+      if (cmd === "email_settings_update") {
+        state.emailSettings = args.settings;
+        return emailView();
+      }
+      if (cmd === "email_password_set") {
+        state.passwordSaved = true;
+        return null;
+      }
+      if (cmd === "email_log_list") return state.emailLog.filter((e) => !args.invoiceId || e.invoice_id === args.invoiceId);
+      if (cmd === "email_send_test" || cmd === "email_send_invoice" || cmd === "email_send_reminder") {
+        const entry = {
+          id: id("email"),
+          invoice_id: args.invoiceId ?? null,
+          kind: cmd === "email_send_test" ? "test" : cmd === "email_send_invoice" ? "invoice" : "reminder",
+          recipient: args.to,
+          subject: "browser smoke",
+          status: "sent",
+          error: null,
+          sent_at: new Date().toISOString(),
+        };
+        state.emailLog = [entry, ...state.emailLog];
+        return entry;
+      }
       throw new Error(`Unexpected E2E command: ${cmd}`);
     }
 
@@ -498,6 +640,60 @@ const result = await withServer(async (serverLogPath) => {
   await clickByRole(page, "Buscar facturas");
   await expectTextVisible(page, "1 resultado(s) con filtros actuales.");
 
+  // Cobros y vencimientos + email desde la factura emitida.
+  await goTo(page, "Facturas", "Cobros");
+  await expectTextVisible(page, "Facturas por cobrar");
+  await page.locator(".receivablesPanel .rowLink").first().click();
+  await page.getByLabel("Fecha de vencimiento").fill("2026-11-30");
+  await clickByRole(page, "Guardar vencimiento");
+  await expectTextVisible(page, "30/11/2026");
+  await page.getByLabel("Importe cobro").fill("100");
+  await clickByRole(page, "Registrar cobro");
+  await expectTextVisible(page, "Parcial");
+  await page.getByLabel("Email destinatario").fill("cliente@example.org");
+  await clickByRole(page, "Enviar factura");
+  await expectTextVisible(page, "Factura · enviado");
+  await clickByRole(page, "Enviar recordatorio");
+  await expectTextVisible(page, "Recordatorio · enviado");
+
+  // Facturas recurrentes: plantilla y generacion de borrador.
+  await goTo(page, "Facturas", "Recurrentes");
+  await page.getByLabel("Nombre recurrente").fill("Cuota mensual mantenimiento");
+  await page.getByLabel("Cliente recurrente").selectOption({ index: 1 });
+  await page.getByLabel("Recurrente descripcion linea 1").fill("Mantenimiento mensual");
+  await page.getByLabel("Recurrente precio linea 1").fill("150");
+  await clickByRole(page, "Guardar plantilla");
+  await expectTextVisible(page, "Cuota mensual mantenimiento");
+  await clickByRole(page, "Generar borradores pendientes");
+  await expectTextVisible(page, "1 borrador(es) creado(s)");
+
+  // Presupuestos: alta, aceptacion y conversion en factura.
+  await goTo(page, "Facturas", "Presupuestos");
+  await page.getByLabel("Cliente presupuesto").selectOption({ index: 1 });
+  await page.getByLabel("Presupuesto descripcion linea 1").fill("Instalacion inicial");
+  await page.getByLabel("Presupuesto precio linea 1").fill("900");
+  await clickByRole(page, "Guardar presupuesto");
+  await expectTextVisible(page, "Presupuesto P2026-0001 guardado.");
+  await clickByRole(page, "Aceptar");
+  await expectTextVisible(page, "Aceptado");
+  await clickByRole(page, "Convertir en factura");
+  await expectTextVisible(page, "P2026-0001 convertido en borrador de factura");
+
+  // Ajustes: QR tributario y servidor de correo.
+  await goTo(page, "Ajustes", "QR tributario");
+  await expectTextVisible(page, "QR tributario VERI*FACTU");
+  await page.getByLabel("Entorno QR").selectOption("production");
+  await clickByRole(page, "Guardar");
+  await goTo(page, "Ajustes", "Email");
+  await page.getByLabel("Servidor SMTP").fill("smtp.example.com");
+  await page.getByLabel("Usuario SMTP").fill("facturas@example.com");
+  await page.getByLabel("Email remitente").fill("facturas@example.com");
+  await clickByRole(page, "Guardar servidor");
+  await expectTextVisible(page, "Configurado");
+  await page.getByLabel("Contraseña SMTP").fill("secreto-de-prueba");
+  await clickByRole(page, "Guardar contraseña");
+  await expectTextVisible(page, "Guardada");
+
   // Vistas de red (pendientes de servicio): deben mostrarse sin errores.
   await goTo(page, "Facturas", "Recibidas");
   await expectTextVisible(page, "Bandeja de recibidas");
@@ -541,7 +737,7 @@ const result = await withServer(async (serverLogPath) => {
     viewport: "1366x900",
     browser: "Playwright Chromium headless",
     browser_plugin_note: "Repeatable npm gate uses Playwright because MCP Browser cannot be invoked from npm scripts.",
-    flow: "app loads -> navigate areas/views -> create company/customer/series -> edit invoice line with discount/IRPF -> draft -> issue -> audit -> search issued -> export VERI*FACTU XML -> prepare signature/submission package",
+    flow: "app loads -> navigate areas/views -> create company/customer/series -> edit invoice line with discount/IRPF -> draft -> issue -> audit -> search issued -> due date + partial payment + email invoice/reminder -> recurring template + draft generation -> quote accept + convert -> QR/email settings -> export VERI*FACTU XML -> prepare signature/submission package",
     checks: {
       page_identity: true,
       not_blank: true,

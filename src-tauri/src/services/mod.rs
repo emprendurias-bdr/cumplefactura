@@ -1,8 +1,10 @@
 pub mod aeat_transport;
 pub mod audit;
+pub mod email;
 pub mod export;
 pub mod fiscal_chain;
 pub mod pdf;
+pub mod qr;
 pub mod rectification_advisor;
 pub mod sidecar_channels;
 pub mod submission;

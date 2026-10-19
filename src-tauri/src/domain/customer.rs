@@ -20,6 +20,9 @@ pub struct CustomerInput {
     pub municipality: String,
     pub province: String,
     pub country_code: String,
+    /// Email para envio de facturas y recordatorios (opcional).
+    #[serde(default)]
+    pub email: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,6 +36,8 @@ pub struct Customer {
     pub municipality: String,
     pub province: String,
     pub country_code: String,
+    #[serde(default)]
+    pub email: Option<String>,
     pub updated_at: String,
 }
 
@@ -48,6 +53,16 @@ impl CustomerInput {
         require("municipality", &self.municipality)?;
         require("province", &self.province)?;
         require("country_code", &self.country_code)?;
+        if let Some(email) = self
+            .email
+            .as_deref()
+            .map(str::trim)
+            .filter(|e| !e.is_empty())
+        {
+            if !is_plausible_email(email) {
+                return Err(format!("invalid customer email: {email}"));
+            }
+        }
         Ok(())
     }
 }
@@ -64,8 +79,27 @@ impl Customer {
             municipality: input.municipality,
             province: input.province,
             country_code: input.country_code,
+            email: input
+                .email
+                .map(|e| e.trim().to_string())
+                .filter(|e| !e.is_empty()),
             updated_at: Utc::now().to_rfc3339(),
         }
+    }
+}
+
+/// Comprobacion basica (usuario@dominio.tld); la validacion real la hace el transporte SMTP.
+pub fn is_plausible_email(value: &str) -> bool {
+    let mut parts = value.split('@');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(user), Some(domain), None) => {
+            !user.is_empty()
+                && domain.contains('.')
+                && !domain.starts_with('.')
+                && !domain.ends_with('.')
+                && !value.contains(char::is_whitespace)
+        }
+        _ => false,
     }
 }
 

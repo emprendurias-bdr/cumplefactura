@@ -2,6 +2,7 @@ use crate::db::{self, AppState, InvoiceListFilters, InvoiceSummary, ListPaginati
 use crate::domain::invoice::{Invoice, InvoiceDraftInput, InvoiceIssueInput, IssuedInvoice};
 use crate::services::audit::AuditEvent;
 use crate::services::pdf;
+use crate::services::qr::QrEnvironment;
 use crate::services::verifactu;
 use tauri::State;
 
@@ -172,6 +173,7 @@ pub fn invoice_export_pdf(
         .lock()
         .map_err(|_| "database lock poisoned".to_string())?;
     let invoice = db::invoice_pdf_data(&conn, &invoice_id)?;
-    pdf::write_invoice_pdf(&target_path, &invoice)?;
+    let qr_environment = QrEnvironment::parse(&db::get_app_settings(&conn)?.qr_environment)?;
+    pdf::write_invoice_pdf(&target_path, &invoice, qr_environment)?;
     Ok(target_path)
 }

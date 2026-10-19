@@ -30,7 +30,7 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite
 | `invoice_list` | `InvoiceListFilters?`, `ListPagination?` | `InvoiceSummary[]` | Busca/filtra por empresa, cliente, año, serie, estado, tipo y texto con `limit/offset` |
 | `invoice_next_number_preview` | `company_id`, `fiscal_year`, `series` | `NextNumberPreview` | Lee `invoice_sequences`; preview UI, no reserva |
 | `invoice_issue` | `InvoiceIssueInput` | `IssuedInvoice` | Ignora numero UI, reserva desde `invoice_sequences`, huella RegistroAlta AEAT + auditoria + registro fiscal persistido; soporta `Rectifying` R1-R5/I-S |
-| `invoice_export_pdf` | `invoice_id`, `target_path` | `FilePath` | PDF basico local |
+| `invoice_export_pdf` | `invoice_id`, `target_path` | `FilePath` | PDF profesional paginado; emitidas con QR tributario VERI*FACTU (35 mm, nivel M, leyenda AEAT); borradores con marca BORRADOR y sin QR |
 | `invoice_export_json` | `invoice_id`, `target_path` | `ExportResult` | JSON de factura local |
 | `invoice_export_csv` | `filters`, `target_path` | `ExportResult` | CSV local; filtros aceptados por contrato, MVP exporta todo |
 | `fiscal_audit_export` | `filters`, `target_path` | `ExportResult` | JSON de trazabilidad fiscal local con verificacion de cadena; no certificacion |
@@ -46,6 +46,19 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite
 | `verifactu_xades_sidecar_sign` | `XadesSidecarSignRequest` | `XadesSidecarSignature` | Revalida XML, llama sidecar local con HMAC, exige modo XAdES real, escribe XML firmado y registra export `signed_xades`; sin envio AEAT |
 | `verifactu_submit_sidecar_preflight` | `VerifactuSubmitSidecarPreflightRequest` | `VerifactuSubmitSidecarPreflight` | Revalida XML firmado, llama sidecar local `/verifactu/submit-preflight` con HMAC y comprueba WSDL/vault/flags; sin SOAP AEAT |
 | `verifactu_submit_sidecar_invoke` | `VerifactuSubmitSidecarInvokeRequest` | `VerifactuSubmitSidecarInvocation` | Envia XML firmado al sidecar local `/verifactu/invoke-submit` con HMAC; registra export `submitted_via_sidecar`; gate con sidecar falso |
+| `invoice_due_date_set` | `invoice_id`, `due_date?` | `()` | Vencimiento de una emitida; sin vencimiento = vence en fecha de emision |
+| `payment_register` | `PaymentInput` | `InvoicePayment` | Cobro parcial/total de una emitida; metodo transfer/card/cash/direct_debit/bizum/other; rechaza sobrecobro |
+| `payment_delete` / `payment_list` | `payment_id` / `invoice_id` | `()` / `InvoicePayment[]` | Anula o lista cobros; audit event operativo |
+| `receivables_list` | `company_id?` | `Receivable[]` | Estado de cobro paid/partial/pending/overdue con dias de retraso |
+| `recurring_upsert` / `recurring_list` / `recurring_set_active` | plantilla / filtro / `id, active` | `RecurringInvoice` | Plantillas mensual/trimestral/anual con fecha fin opcional |
+| `recurring_generate_due` | - | `RecurringRun[]` | Crea un BORRADOR por plantilla vencida y avanza la fecha; nunca emite. Se lanza al abrir la app |
+| `quote_upsert` / `quote_list` | `QuoteInput` / `company_id?` | `Quote` | Presupuesto `P{año}-NNNN`; solo editable en borrador |
+| `quote_set_status` | `id`, `status` | `()` | draft->sent/accepted/rejected, sent->accepted/rejected, rejected->draft |
+| `quote_convert` | `id` | `Invoice` (borrador) | Convierte en borrador de factura y marca `invoiced` con `invoice_id` |
+| `email_settings_get` / `email_settings_update` | - / `EmailSettings` | `EmailSettingsView` | SMTP propio (starttls/tls/none); devuelve `configured` y `password_saved`, nunca la contraseña |
+| `email_password_set` | `password` | `()` | Guarda la contraseña SMTP en el almacen de credenciales del SO (keyring `CumpleFactura-SMTP`), no en SQLite |
+| `email_send_test` / `email_send_invoice` / `email_send_reminder` | destino / `invoice_id` | `EmailLogEntry` | Envia PDF adjunto; solo emitidas; recordatorio exige importe pendiente; todo queda en `email_log` |
+| `email_log_list` | `invoice_id?` | `EmailLogEntry[]` | Historial de envios |
 | `company_list` / `customer_list` / `invoice_list` / `audit_list` / `fiscal_record_list` | filtros/paginacion segun lista | listas resumen | Lectura SQLite |
 | `backup_export` | `target_path` | `BackupResult` | Export SQLite con `VACUUM INTO` |
 | `backup_restore` | `source_path` | `BackupRestoreResult` | Preflight `validated-only`; no reemplazo destructivo en MVP |
@@ -86,6 +99,11 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite
 - La seleccion principal de carpeta export, backup, restore y artefactos fiscales usa dialogo nativo Tauri con filtros de extension; los campos de ruta quedan en solo lectura desde la UI.
 - Restore destructivo queda fuera del MVP: `backup_restore` valida origen y devuelve `destructive_restore_performed=false`.
 - La huella fiscal de `Alta`/`Anulacion` se recalcula con los campos oficiales AEAT cubiertos por los tests.
+
+- QR tributario: URL `ValidarQR` (prewww2 en pruebas, www2 en produccion) segun `app_settings.qr_environment` (defecto `test`); en pruebas el PDF lo indica bajo el QR.
+- Cobros, recurrentes, presupuestos y emails generan `AuditEvent::operational` encadenado; no alteran `fiscal_records` ni la numeracion.
+- `recurring_generate_due` y `quote_convert` solo crean borradores: la emision sigue siendo manual (`invoice_issue`).
+- Secretos SMTP solo en keyring del sistema; SQLite guarda host/puerto/usuario/remitente.
 
 ## Fronteras
 

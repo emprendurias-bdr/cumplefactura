@@ -603,7 +603,7 @@ fn operation_description(invoice: &InvoicePdfData) -> String {
     text.chars().take(500).collect()
 }
 
-fn aeat_date(value: &str) -> Result<String, String> {
+pub(crate) fn aeat_date(value: &str) -> Result<String, String> {
     let dt = DateTime::parse_from_rfc3339(value)
         .map_err(|err| format!("invalid issued_at for AEAT date: {err}"))?;
     Ok(format!(
@@ -614,11 +614,11 @@ fn aeat_date(value: &str) -> Result<String, String> {
     ))
 }
 
-fn format_invoice_number(series: &str, number: i64) -> String {
+pub(crate) fn format_invoice_number(series: &str, number: i64) -> String {
     format!("{}-{}", series, number)
 }
 
-fn money(cents: i64) -> String {
+pub(crate) fn money(cents: i64) -> String {
     let sign = if cents < 0 { "-" } else { "" };
     let abs = cents.abs();
     format!("{}{}.{:02}", sign, abs / 100, abs % 100)

@@ -22,6 +22,26 @@ pub struct AuditTrail {
 }
 
 impl AuditEvent {
+    /// Evento generico de gestion (cobros, recurrentes, presupuestos, emails).
+    pub fn operational(
+        entity_type: &str,
+        entity_id: &str,
+        action: &str,
+        payload_hash: String,
+        previous_hash: Option<String>,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            entity_type: entity_type.to_string(),
+            entity_id: entity_id.to_string(),
+            action: action.to_string(),
+            actor: "local-user".to_string(),
+            occurred_at: Utc::now().to_rfc3339(),
+            payload_hash,
+            previous_hash,
+        }
+    }
+
     pub fn invoice_issued(
         entity_id: String,
         actor: String,

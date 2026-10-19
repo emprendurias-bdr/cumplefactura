@@ -3,6 +3,8 @@ import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialo
 import {
   Archive,
   BookOpenCheck,
+  Banknote,
+  ClipboardList,
   Building2,
   FileCheck2,
   FileCode2,
@@ -13,6 +15,9 @@ import {
   Hash,
   Home,
   Inbox,
+  Mail,
+  QrCode,
+  Repeat,
   ListOrdered,
   LockKeyhole,
   Network,
@@ -28,6 +33,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { QuotesView } from "./features/QuotesView";
+import { ReceivablesView } from "./features/ReceivablesView";
+import { RecurringView } from "./features/RecurringView";
+import { EmailSettingsView, QrSettingsView } from "./features/SettingsViews";
 
 type Company = {
   id: string;
@@ -67,6 +76,7 @@ type Customer = {
   municipality: string;
   province: string;
   country_code: string;
+  email?: string | null;
   updated_at?: string;
 };
 type Product = {
@@ -157,6 +167,7 @@ type AppSettings = {
   default_territory_flags: string[];
   onboarding_completed: boolean;
   updated_at: string;
+  qr_environment?: "test" | "production";
 };
 type NextNumberPreview = {
   company_id: string;
@@ -356,6 +367,9 @@ type ViewId =
   | "panel"
   | "nueva"
   | "emitidas"
+  | "cobros"
+  | "recurrentes"
+  | "presupuestos"
   | "recibidas"
   | "exportar"
   | "clientes"
@@ -366,6 +380,8 @@ type ViewId =
   | "sidecar"
   | "emisor"
   | "series"
+  | "qr"
+  | "email"
   | "copias";
 
 type NavView = { id: ViewId; label: string; icon: LucideIcon; soon?: boolean };
@@ -381,6 +397,9 @@ const NAV_AREAS: NavArea[] = [
     views: [
       { id: "nueva", label: "Nueva factura", icon: FilePlus2 },
       { id: "emitidas", label: "Emitidas", icon: FileCheck2 },
+      { id: "cobros", label: "Cobros", icon: Banknote },
+      { id: "recurrentes", label: "Recurrentes", icon: Repeat },
+      { id: "presupuestos", label: "Presupuestos", icon: ClipboardList },
       { id: "recibidas", label: "Recibidas", icon: Inbox, soon: true },
       { id: "exportar", label: "Exportar", icon: FileDown },
     ],
@@ -412,6 +431,8 @@ const NAV_AREAS: NavArea[] = [
     views: [
       { id: "emisor", label: "Empresa emisora", icon: Building2 },
       { id: "series", label: "Series", icon: ListOrdered },
+      { id: "qr", label: "QR tributario", icon: QrCode },
+      { id: "email", label: "Email", icon: Mail },
       { id: "copias", label: "Copias de seguridad", icon: Archive },
     ],
   },
@@ -421,6 +442,9 @@ const PAGE_HEADS: Record<ViewId, { title: string; subtitle: string }> = {
   panel: { title: "Facturacion local-first", subtitle: "" },
   nueva: { title: "Nueva factura", subtitle: "Lineas, borrador, emision y rectificativas con numeracion por serie." },
   emitidas: { title: "Facturas emitidas", subtitle: "Busca por texto, empresa, cliente, año, serie, estado o tipo." },
+  cobros: { title: "Cobros y vencimientos", subtitle: "Que esta pendiente, que ha vencido y quien te debe; registra cobros y envia recordatorios." },
+  recurrentes: { title: "Facturas recurrentes", subtitle: "Cuotas, alquileres y mantenimientos que se preparan solos cada periodo." },
+  presupuestos: { title: "Presupuestos", subtitle: "Ofertas a clientes que pasan a factura con un clic al aceptarse." },
   recibidas: { title: "Facturas recibidas", subtitle: "Facturas que otras empresas de la red te emiten, registradas automaticamente." },
   exportar: { title: "Exportar facturas", subtitle: "PDF, JSON y CSV generados en local." },
   clientes: { title: "Clientes", subtitle: "Empresas, personas fisicas y administraciones a las que facturas." },
@@ -431,6 +455,8 @@ const PAGE_HEADS: Record<ViewId, { title: string; subtitle: string }> = {
   sidecar: { title: "Canales sidecar", subtitle: "SII y TicketBAI a traves del sidecar fiscal de ContaPro." },
   emisor: { title: "Empresa emisora", subtitle: "Datos fiscales de las empresas que emiten facturas." },
   series: { title: "Series", subtitle: "Numeracion por serie y ejercicio." },
+  qr: { title: "QR tributario", subtitle: "Codigo QR de cotejo VERI*FACTU impreso en cada factura emitida." },
+  email: { title: "Email", subtitle: "Servidor de correo propio para enviar facturas y recordatorios." },
   copias: { title: "Copias de seguridad", subtitle: "Backup y restauracion de la base SQLite local." },
 };
 
@@ -482,6 +508,7 @@ function emptyCustomerForm(): CustomerForm {
     municipality: "",
     province: "",
     country_code: "ES",
+    email: "",
   };
 }
 
@@ -522,6 +549,7 @@ function customerToForm(value: Customer): CustomerForm {
     municipality: value.municipality,
     province: value.province,
     country_code: value.country_code,
+    email: value.email ?? "",
   };
 }
 
@@ -785,6 +813,22 @@ export default function App() {
 
   useEffect(() => {
     void loadDefaults();
+  }, []);
+
+  // Al abrir la app se preparan los borradores de las facturas recurrentes vencidas (nunca se emiten solas).
+  useEffect(() => {
+    void (async () => {
+      try {
+        const runs = await invoke<{ label: string }[]>("recurring_generate_due");
+        if (runs.length > 0) {
+          setStatus(`${runs.length} borrador(es) recurrente(s) generado(s): ${runs.map((item) => item.label).join(", ")}`);
+          await refreshData();
+        }
+      } catch {
+        // Sin base inicializada todavia: se reintenta al abrir Facturas > Recurrentes.
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -1190,6 +1234,7 @@ export default function App() {
           municipality: customerForm.municipality,
           province: customerForm.province,
           country_code: customerForm.country_code,
+          email: customerForm.email?.trim() || null,
         },
       }),
     );
@@ -2038,6 +2083,30 @@ export default function App() {
             </>
           ) : null}
 
+          {view === "cobros" ? <ReceivablesView companyId={company?.id} customers={customers} run={run} /> : null}
+
+          {view === "recurrentes" ? (
+            <RecurringView
+              companyId={company?.id}
+              customers={customers}
+              series={seriesConfigs}
+              territoryFlags={defaultTerritoryFlags}
+              run={run}
+              onDraftsCreated={() => void refreshData()}
+            />
+          ) : null}
+
+          {view === "presupuestos" ? (
+            <QuotesView
+              companyId={company?.id}
+              customers={customers}
+              series={seriesConfigs}
+              territoryFlags={defaultTerritoryFlags}
+              run={run}
+              onInvoiced={() => void refreshData()}
+            />
+          ) : null}
+
           {view === "recibidas" ? <ReceivedInvoicesView /> : null}
 
           {view === "exportar" ? (
@@ -2101,6 +2170,7 @@ export default function App() {
                     <label className="fieldBlock"><span>Municipio</span><input aria-label="Municipio cliente" required value={customerForm.municipality} onChange={(event) => updateCustomerForm("municipality", event.target.value)} /></label>
                     <label className="fieldBlock"><span>Provincia</span><input aria-label="Provincia cliente" required value={customerForm.province} onChange={(event) => updateCustomerForm("province", event.target.value)} /></label>
                     <label className="fieldBlock"><span>Pais</span><input aria-label="Pais cliente" required value={customerForm.country_code} onChange={(event) => updateCustomerForm("country_code", event.target.value.toUpperCase())} /></label>
+                <label className="fieldBlock wide"><span>Email (envio de facturas)</span><input aria-label="Email cliente" type="email" value={customerForm.email ?? ""} onChange={(event) => updateCustomerForm("email", event.target.value)} placeholder="administracion@cliente.es" /></label>
                   </div>
                   <button className="primary">Guardar cliente</button>
                 </form>
@@ -2440,6 +2510,10 @@ export default function App() {
               <DataList title="Series" empty="Sin series configuradas" rows={seriesConfigs.map((item) => `${item.label} - ${item.preview} - siguiente ${item.next_number}`)} />
             </section>
           ) : null}
+
+          {view === "qr" ? <QrSettingsView settings={appSettings} onSaved={(saved) => setAppSettings(saved)} run={run} /> : null}
+
+          {view === "email" ? <EmailSettingsView run={run} /> : null}
 
           {view === "copias" ? (
             <section className="panel exportPanel">

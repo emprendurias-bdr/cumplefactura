@@ -1,0 +1,33 @@
+✔ a draft confirms none of the four fiscal steps (1.997386ms)
+✔ an issued invoice with its actual alta confirms only the first two steps (0.362938ms)
+✔ foreign or mismatched records cannot confirm the alta (0.292271ms)
+✔ preflight-like replies and foreign invoice replies never confirm sending or acceptance (0.275897ms)
+✔ even an actual external call is not acceptance when no AEAT response exists (0.242286ms)
+✔ a confirmed matching response carries its CSV and text (0.275205ms)
+✔ a rejection is shown with text and never labelled accepted (0.406844ms)
+✔ a stale export or XML digest cannot promote fiscal steps (0.284679ms)
+✔ a response cannot be reassigned to an annulled or rectified business state without record-specific evidence (0.250398ms)
+✔ uses the native civil issue date without reinterpreting it in the host timezone (1.545082ms)
+✔ never invents a date for a draft or malformed native value (0.359363ms)
+✔ formats native integer cents with the shared Spanish grouping and decimals (1.149636ms)
+✔ does not round away a cent when formatting a large safe integer (0.228404ms)
+✔ marks unsafe or nonfinite amounts instead of displaying a rounded fiscal value (0.184879ms)
+✔ keeps real zero distinct from a missing value (0.248756ms)
+✔ shows the native preview in the same format used by XML: series-number (1.036065ms)
+✔ does not reuse a preview from a previous company, series or fiscal year (0.1856ms)
+✔ does not invent a sequence number before a safe native preview exists (0.220823ms)
+✔ in-page skip link preserves the selected application route (0.700708ms)
+✔ waits for an actual ready WebDriver status instead of a fixed startup delay (106.832388ms)
+✔ fails when the WebDriver never becomes ready (104.577132ms)
+✔ reports a driver process that exits before readiness (31.028927ms)
+✔ reads only an unambiguous four-part runtime version (1.278881ms)
+✔ matches the WebView2 build rather than the separate Edge browser major version (0.161013ms)
+✔ prefers the version-specific driver over an incompatible binary in PATH (0.73529ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 475.893899

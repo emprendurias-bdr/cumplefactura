@@ -29,7 +29,7 @@ export function Pager({
   onNext: () => void;
 }) {
   return (
-    <div className="pager" aria-label={regionLabel}>
+    <div className="pager" role="group" aria-label={regionLabel}>
       <button type="button" onClick={onPrev} disabled={page === 0}>{prevLabel}</button>
       <span>Pagina {page + 1}</span>
       <button type="button" onClick={onNext} disabled={!hasNext}>{nextLabel}</button>

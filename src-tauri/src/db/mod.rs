@@ -670,6 +670,8 @@ pub struct InvoiceSummary {
     pub rectifies_invoice_id: Option<String>,
     pub rectification_reason_code: Option<String>,
     pub rectification_method: Option<String>,
+    #[serde(skip_serializing)]
+    pub taxable_base_cents: i64,
     pub total_cents: i64,
     pub fiscal_hash: Option<String>,
     pub created_at: String,
@@ -920,7 +922,7 @@ pub fn list_invoices_filtered_paginated(
         .prepare(
             "SELECT i.id, i.company_id, i.customer_id, i.fiscal_year, i.series, i.number, i.kind, i.status,
                     i.rectifies_invoice_id, i.rectification_reason_code, i.rectification_method,
-                    i.total_cents, i.fiscal_hash, i.created_at, i.issued_at
+                    i.total_cents, i.fiscal_hash, i.created_at, i.issued_at, i.taxable_base_cents
              FROM invoices i
              JOIN companies c ON c.id = i.company_id
              JOIN customers cu ON cu.id = i.customer_id
@@ -976,6 +978,7 @@ pub fn list_invoices_filtered_paginated(
                     fiscal_hash: row.get(12)?,
                     created_at: row.get(13)?,
                     issued_at: row.get(14)?,
+                    taxable_base_cents: row.get(15)?,
                 })
             },
         )
@@ -1696,6 +1699,19 @@ mod tests {
         assert_eq!(list_companies(&conn).expect("companies").len(), 1);
         assert_eq!(list_customers(&conn).expect("customers").len(), 1);
         assert_eq!(list_invoices(&conn).expect("invoices").len(), 1);
+        let summaries = list_invoices(&conn).expect("summaries");
+        let audit_json = serde_json::to_value(&summaries).expect("original summary serialization");
+        assert!(
+            audit_json[0].get("taxable_base_cents").is_none(),
+            "audit summary format remains unchanged"
+        );
+        let ui_json = serde_json::to_value(crate::commands::invoices::presentation_rows(summaries))
+            .expect("UI presentation");
+        assert_eq!(
+            ui_json[0]["taxable_base_cents"],
+            invoice.totals.taxable_base_cents
+        );
+        assert!(ui_json[0]["issued_at"].is_null(), "draft has no issue date");
     }
 
     #[test]

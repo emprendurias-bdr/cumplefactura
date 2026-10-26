@@ -105,6 +105,7 @@ async function waitFor(port, sessionId, label, script, timeoutMs = 20_000, args 
 }
 
 async function clickButton(port, sessionId, text) {
+  await waitFor(port, sessionId, `enabled button ${text}`, "return [...document.querySelectorAll('button')].some(button => button.textContent.trim() === arguments[0] && !button.disabled && button.getClientRects().length);", 30000, [text]);
   const escaped = text.replace(/'/g, "\\'");
   const elementId = await findElement(port, sessionId, "xpath", `//button[normalize-space(.)='${escaped}' and not(@disabled)]`);
   await webdriver(port, sessionId, "POST", `/element/${elementId}/click`, {});
@@ -150,26 +151,44 @@ async function realDesktopSmoke(tauriDriverPath, nativeDriverPath) {
     );
 
     const completedSteps = [];
-    for (const button of ["Nueva empresa", "Nuevo cliente", "Rellenar demo", "Guardar emisor", "Guardar cliente", "Crear borrador", "Emitir factura", "Exportar XML", "Preparar"]) {
-      const clicked = await clickButton(port, sessionId, button);
-      if (!clicked) {
-        throw new Error(`Could not click enabled button: ${button}`);
-      }
-      if (["Nueva empresa", "Nuevo cliente", "Rellenar demo"].includes(button)) {
-        await wait(500);
-      } else {
-        const expected =
-          button === "Exportar XML" ? ["XML VERI*FACTU: OK"] :
-          button === "Preparar" ? ["Preparar firma/envio: OK"] :
-          button === "Guardar emisor" ? ["Emisor creado", "Refrescar: OK"] :
-          button === "Guardar cliente" ? ["Cliente creado", "Refrescar: OK"] :
-          button === "Crear borrador" ? ["Borrador persistido", "Refrescar: OK"] :
-          button === "Emitir factura" ? ["Factura emitida", "Refrescar: OK"] :
-          [`${button}: OK`];
-        await waitFor(port, sessionId, expected.join(" or "), `return arguments[0].some((text) => document.body?.innerText.includes(text));`, 30_000, [expected]);
-        completedSteps.push(button);
-      }
+    async function navigate(route, text) {
+      await execute(port, sessionId, "location.hash = '/' + arguments[0];", [route]);
+      await waitFor(port, sessionId, `route ${route}`, "return document.body.innerText.includes(arguments[0]);", 20000, [text]);
     }
+    async function localTools() {
+      await execute(port, sessionId, `const summary = [...document.querySelectorAll('summary')].find(s => s.textContent.trim() === 'Herramientas locales y exportaciones'); if (!summary) throw new Error('Local tools missing'); if (!summary.parentElement.open) summary.click();`);
+      await waitFor(port, sessionId, "local export tools", "return [...document.querySelectorAll('button')].some(b => b.textContent.trim() === 'Exportar XML' && b.getClientRects().length);");
+    }
+    async function action(button, expected) {
+      await clickButton(port, sessionId, button);
+      if (expected) await waitFor(port, sessionId, expected.join(" or "), "return arguments[0].some(text => document.body.innerText.includes(text));", 30000, [expected]);
+      completedSteps.push(button);
+    }
+    await navigate("clientes", "Empresa emisora");
+    await action("Nueva empresa");
+    await action("Nuevo cliente");
+    await navigate("ajustes", "Prepara tu primera factura");
+    await localTools();
+    await action("Rellenar demo", ["Datos demo cargados"]);
+    await navigate("clientes", "Empresa emisora");
+    await action("Guardar emisor", ["Refrescar: OK"]);
+    await action("Guardar cliente", ["Refrescar: OK"]);
+    await navigate("facturas/nueva", "Editor de factura");
+    await action("Crear borrador", ["Borrador persistido"]);
+    await waitFor(port, sessionId, "read-only native PDF", "return document.querySelector('iframe[title=\"PDF de la factura guardada\"]')?.src.startsWith('blob:');");
+    completedSteps.push("Vista previa PDF nativa");
+    await clickButton(port, sessionId, "Emitir factura");
+    await waitFor(port, sessionId, "issue confirmation", "return Boolean(document.querySelector('dialog[open] input[type=checkbox]'));");
+    const checkbox = await findElement(port, sessionId, "css selector", "dialog[open] input[type=checkbox]");
+    await webdriver(port, sessionId, "POST", `/element/${checkbox}/click`, {});
+    const confirmButton = await findElement(port, sessionId, "css selector", "dialog[open] .bdr-actions button:last-child:not([disabled])");
+    await webdriver(port, sessionId, "POST", `/element/${confirmButton}/click`, {});
+    await waitFor(port, sessionId, "native invoice issued", "return !document.querySelector('dialog[open]') && document.body.innerText.includes('Factura emitida');", 30000);
+    completedSteps.push("Emitir factura");
+    await navigate("ajustes", "Prepara tu primera factura");
+    await localTools();
+    await action("Exportar XML", ["XML VERI*FACTU: OK"]);
+    await action("Preparar", ["Preparar firma/envio: OK"]);
 
     const screenshot = await webdriver(port, sessionId, "GET", "/screenshot");
     const screenshotPath = resolve(evidenceDir, "latest-tauri-desktop-e2e.png");
@@ -185,6 +204,8 @@ async function realDesktopSmoke(tauriDriverPath, nativeDriverPath) {
         webdriver_session_created: true,
         ui_text_detected: true,
         real_rust_commands_executed: true,
+        native_pdf_preview_visible: completedSteps.includes("Vista previa PDF nativa"),
+        irreversible_confirmation_understood: completedSteps.includes("Emitir factura"),
         verifactu_xml_exported: completedSteps.includes("Exportar XML"),
         submission_prepared: completedSteps.includes("Preparar"),
       },

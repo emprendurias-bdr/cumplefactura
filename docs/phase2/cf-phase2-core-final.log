@@ -1,0 +1,27 @@
+
+> cumplefactura@0.1.0 validate:core-e2e
+> powershell -NoProfile -ExecutionPolicy Bypass -File tools/verify-core-e2e.ps1
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
+     Running unittests src/lib.rs (target/debug/deps/cumplefactura_lib-2ab6fd345b31dcb6)
+
+running 1 test
+test core_e2e::real_sqlite_verifactu_core_workflow_generates_evidence ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 67 filtered out; finished in 0.42s
+
+     Running unittests src/main.rs (target/debug/deps/cumplefactura-98e71c9f27ae7cfc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+CumpleFactura core E2E OK
+/workspace/cumplefactura/tests/regulatory/evidence/latest-core-e2e.json
+/workspace/cumplefactura/tests/regulatory/evidence/latest-core-e2e-verifactu.xml
+/workspace/cumplefactura/tests/regulatory/evidence/latest-core-e2e-invoice.pdf
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

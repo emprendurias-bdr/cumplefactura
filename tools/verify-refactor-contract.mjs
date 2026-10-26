@@ -1,4 +1,67 @@
-import ts from 'typescript';import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';
-const sourceDir=path.resolve('src');const files=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?files(path.join(dir,e.name)):/\.tsx?$/.test(e.name)?[path.join(dir,e.name)]:[]);
-function calls(source,file){const ast=ts.createSourceFile(file,source,99,true,file.endsWith('.tsx')?4:3);const out=[];function visit(node){if(ts.isCallExpression(node)&&ts.isIdentifier(node.expression)&&node.expression.text==='invoke'&&ts.isStringLiteralLike(node.arguments[0])){const command=node.arguments[0].text;if(!command.startsWith('ui_preferences_'))out.push(crypto.createHash('sha256').update(node.getText(ast).replace(/\s/g,'')).digest('hex'));}ts.forEachChild(node,visit);}visit(ast);return out;}
-if(process.argv[2]==='--baseline'){const text=fs.readFileSync(process.argv[3],'utf8');fs.writeFileSync('tests/ui/native-call-baseline.json',JSON.stringify(calls(text,'App.tsx').sort(),null,2)+'\n');}else{const actual=files(sourceDir).flatMap(file=>calls(fs.readFileSync(file,'utf8'),file)).sort();const expected=JSON.parse(fs.readFileSync('tests/ui/native-call-baseline.json','utf8'));if(JSON.stringify(actual)!==JSON.stringify(expected))throw new Error('Native command arguments changed during visual refactor');console.log(`${actual.length} original native calls and argument shapes preserved.`);}
+import ts from "typescript";
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+const sourceDir = path.resolve("src");
+const files = (dir) =>
+  fs
+    .readdirSync(dir, { withFileTypes: true })
+    .flatMap((e) =>
+      e.isDirectory()
+        ? files(path.join(dir, e.name))
+        : /\.tsx?$/.test(e.name)
+          ? [path.join(dir, e.name)]
+          : [],
+    );
+function calls(source, file) {
+  const ast = ts.createSourceFile(
+    file,
+    source,
+    99,
+    true,
+    file.endsWith(".tsx") ? 4 : 3,
+  );
+  const out = [];
+  function visit(node) {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "invoke" &&
+      ts.isStringLiteralLike(node.arguments[0])
+    ) {
+      const command = node.arguments[0].text;
+      if (
+        !command.startsWith("ui_preferences_") &&
+        command !== "invoice_pdf_preview"
+      )
+        out.push(
+          crypto
+            .createHash("sha256")
+            .update(node.getText(ast).replace(/\s/g, ""))
+            .digest("hex"),
+        );
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  return out;
+}
+if (process.argv[2] === "--baseline") {
+  const text = fs.readFileSync(process.argv[3], "utf8");
+  fs.writeFileSync(
+    "tests/ui/native-call-baseline.json",
+    JSON.stringify(calls(text, "App.tsx").sort(), null, 2) + "\n",
+  );
+} else {
+  const actual = files(sourceDir)
+    .flatMap((file) => calls(fs.readFileSync(file, "utf8"), file))
+    .sort();
+  const expected = JSON.parse(
+    fs.readFileSync("tests/ui/native-call-baseline.json", "utf8"),
+  );
+  if (JSON.stringify(actual) !== JSON.stringify(expected))
+    throw new Error("Native command arguments changed during visual refactor");
+  console.log(
+    `${actual.length} original native calls and argument shapes preserved.`,
+  );
+}

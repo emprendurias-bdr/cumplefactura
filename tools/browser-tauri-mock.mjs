@@ -1,7 +1,17 @@
-export function installTauriMock(page) {
-  return page.addInitScript(() => {
+import { readFileSync } from "node:fs";
+const previewPdfBytes = Array.from(
+  readFileSync(
+    new URL(
+      "../docs/phase1/native-core/latest-core-e2e-invoice.pdf",
+      import.meta.url,
+    ),
+  ),
+);
+export function installTauriMock(page, initialData = {}) {
+  initialData = { previewPdfBytes, ...initialData };
+  return page.addInitScript((initialData) => {
     const state = {
-      uiPreferences: {theme: "system", density: "comfortable"},
+      uiPreferences: { theme: "system", density: "comfortable" },
       companies: [],
       customers: [],
       products: [],
@@ -11,6 +21,7 @@ export function installTauriMock(page) {
       fiscalRecords: [],
       nextId: 1,
       nextInvoiceNumber: 1,
+      issueCalls: 0,
       exportDir: "C:\\CumpleFactura\\Evidence",
       settings: {
         export_dir: null,
@@ -18,8 +29,10 @@ export function installTauriMock(page) {
         onboarding_completed: false,
         updated_at: new Date().toISOString(),
       },
-      lastXmlPath: "C:\\CumpleFactura\\Evidence\\cumplefactura-verifactu-e2e.xml",
+      lastXmlPath:
+        "C:\\CumpleFactura\\Evidence\\cumplefactura-verifactu-e2e.xml",
     };
+    Object.assign(state, initialData);
 
     function id(prefix) {
       state.nextId += 1;
@@ -32,36 +45,55 @@ export function installTauriMock(page) {
         valid: true,
         total_records: state.fiscalRecords.length,
         issue_count: 0,
-        last_hash_by_company: head ? [{ company_id: head.company_id, last_hash: head.fiscal_hash }] : [],
+        last_hash_by_company: head
+          ? [{ company_id: head.company_id, last_hash: head.fiscal_hash }]
+          : [],
         issues: [],
       };
     }
 
     function invoiceTotals(lines) {
-      return lines.reduce((totals, line) => {
-        const quantity = Number(line.quantity);
-        const unit = Number(line.unit_price_cents);
-        const discount = Number(line.discount_rate_basis_points ?? 0);
-        const taxRate = Number(line.tax_rate_basis_points);
-        const withholdingRate = Number(line.withholding_rate_basis_points ?? 0);
-        const base = Math.trunc((quantity * unit * (10000 - discount)) / 10000);
-        const tax = Math.trunc((base * taxRate) / 10000);
-        const withholding = Math.trunc((base * withholdingRate) / 10000);
-        return {
-          taxable_base_cents: totals.taxable_base_cents + base,
-          tax_cents: totals.tax_cents + tax,
-          withholding_cents: totals.withholding_cents + withholding,
-          total_cents: totals.total_cents + base + tax - withholding,
-        };
-      }, { taxable_base_cents: 0, tax_cents: 0, withholding_cents: 0, total_cents: 0 });
+      return lines.reduce(
+        (totals, line) => {
+          const quantity = Number(line.quantity);
+          const unit = Number(line.unit_price_cents);
+          const discount = Number(line.discount_rate_basis_points ?? 0);
+          const taxRate = Number(line.tax_rate_basis_points);
+          const withholdingRate = Number(
+            line.withholding_rate_basis_points ?? 0,
+          );
+          const base = Math.trunc(
+            (quantity * unit * (10000 - discount)) / 10000,
+          );
+          const tax = Math.trunc((base * taxRate) / 10000);
+          const withholding = Math.trunc((base * withholdingRate) / 10000);
+          return {
+            taxable_base_cents: totals.taxable_base_cents + base,
+            tax_cents: totals.tax_cents + tax,
+            withholding_cents: totals.withholding_cents + withholding,
+            total_cents: totals.total_cents + base + tax - withholding,
+          };
+        },
+        {
+          taxable_base_cents: 0,
+          tax_cents: 0,
+          withholding_cents: 0,
+          total_cents: 0,
+        },
+      );
     }
 
     async function invoke(cmd, args = {}) {
       if (cmd === "plugin:dialog|open") {
-        return args.options?.directory ? state.exportDir : `${state.exportDir}\\cumplefactura-restore.sqlite3`;
+        return args.options?.directory
+          ? state.exportDir
+          : `${state.exportDir}\\cumplefactura-restore.sqlite3`;
       }
       if (cmd === "plugin:dialog|save") {
-        return args.options?.defaultPath || `${state.exportDir}\\cumplefactura-selected.json`;
+        return (
+          args.options?.defaultPath ||
+          `${state.exportDir}\\cumplefactura-selected.json`
+        );
       }
       if (cmd === "app_defaults_get") {
         return {
@@ -78,8 +110,16 @@ export function installTauriMock(page) {
           notes: ["browser smoke mock"],
         };
       }
-      if (cmd === "ui_preferences_get") return {...state.uiPreferences};
-      if (cmd === "ui_preferences_update") {state.uiPreferences = {...args.input}; return {...state.uiPreferences};}
+      if (cmd === "invoice_pdf_preview") {
+        if (!state.invoices.some((invoice) => invoice.id === args.invoiceId))
+          throw new Error("Invoice not found");
+        return initialData.previewPdfBytes;
+      }
+      if (cmd === "ui_preferences_get") return { ...state.uiPreferences };
+      if (cmd === "ui_preferences_update") {
+        state.uiPreferences = { ...args.input };
+        return { ...state.uiPreferences };
+      }
       if (cmd === "app_settings_get") {
         return state.settings;
       }
@@ -94,10 +134,46 @@ export function installTauriMock(page) {
           external_call_performed_by_importer: false,
           notes: ["browser smoke mock"],
           channels: [
-            { channel: "verifactu", status: "ready", source: "mock", blockers: [], mvp_importable: true, acceptance_status: "accepted", acceptance_validation_status: "passed", notes: [] },
-            { channel: "sii", status: "ready", source: "mock", blockers: [], mvp_importable: true, acceptance_status: "accepted", acceptance_validation_status: "passed", notes: [] },
-            { channel: "face", status: "blocked", source: "mock", blockers: ["face_acceptance_manifest_validated"], mvp_importable: false, deferred_reason: "blocked_by_external_sp_certificate_registration", notes: [] },
-            { channel: "ticketbai", status: "blocked", source: "mock", blockers: ["ticketbai_acceptance_manifest_validated"], mvp_importable: false, deferred_reason: "blocked_by_foral_signature_policy_software_registration_and_acceptance", notes: [] },
+            {
+              channel: "verifactu",
+              status: "ready",
+              source: "mock",
+              blockers: [],
+              mvp_importable: true,
+              acceptance_status: "accepted",
+              acceptance_validation_status: "passed",
+              notes: [],
+            },
+            {
+              channel: "sii",
+              status: "ready",
+              source: "mock",
+              blockers: [],
+              mvp_importable: true,
+              acceptance_status: "accepted",
+              acceptance_validation_status: "passed",
+              notes: [],
+            },
+            {
+              channel: "face",
+              status: "blocked",
+              source: "mock",
+              blockers: ["face_acceptance_manifest_validated"],
+              mvp_importable: false,
+              deferred_reason:
+                "blocked_by_external_sp_certificate_registration",
+              notes: [],
+            },
+            {
+              channel: "ticketbai",
+              status: "blocked",
+              source: "mock",
+              blockers: ["ticketbai_acceptance_manifest_validated"],
+              mvp_importable: false,
+              deferred_reason:
+                "blocked_by_foral_signature_policy_software_registration_and_acceptance",
+              notes: [],
+            },
           ],
         };
       }
@@ -115,7 +191,9 @@ export function installTauriMock(page) {
           certificate_loaded: false,
           sidecar_call_performed: false,
           external_call_performed: false,
-          blockers: ["CUMPLEFACTURA_ENABLE_SII_SUBMIT_SIDECAR_PREFLIGHT_not_enabled"],
+          blockers: [
+            "CUMPLEFACTURA_ENABLE_SII_SUBMIT_SIDECAR_PREFLIGHT_not_enabled",
+          ],
           warnings: [],
         };
       }
@@ -134,27 +212,41 @@ export function installTauriMock(page) {
           certificate_loaded: false,
           sidecar_call_performed: false,
           external_call_performed: false,
-          blockers: ["CUMPLEFACTURA_ENABLE_TICKETBAI_SUBMIT_SIDECAR_PREFLIGHT_not_enabled"],
+          blockers: [
+            "CUMPLEFACTURA_ENABLE_TICKETBAI_SUBMIT_SIDECAR_PREFLIGHT_not_enabled",
+          ],
           warnings: [],
         };
       }
       if (cmd === "app_settings_update") {
-        state.settings = { ...args.input, updated_at: new Date().toISOString() };
+        state.settings = {
+          ...args.input,
+          updated_at: new Date().toISOString(),
+        };
         state.exportDir = args.input.export_dir || state.exportDir;
         return state.settings;
       }
       if (cmd === "company_create") {
-        const company = { id: id("company"), created_at: new Date().toISOString(), ...args.input };
+        const company = {
+          id: id("company"),
+          created_at: new Date().toISOString(),
+          ...args.input,
+        };
         state.companies = [company];
         return company;
       }
       if (cmd === "company_update") {
         const company = { created_at: new Date().toISOString(), ...args.input };
-        state.companies = [company, ...state.companies.filter((item) => item.id !== company.id)];
+        state.companies = [
+          company,
+          ...state.companies.filter((item) => item.id !== company.id),
+        ];
         return company;
       }
       if (cmd === "product_list") {
-        return state.products.filter((item) => item.company_id === args.companyId);
+        return state.products.filter(
+          (item) => item.company_id === args.companyId,
+        );
       }
       if (cmd === "product_upsert") {
         const product = {
@@ -163,16 +255,25 @@ export function installTauriMock(page) {
           ...args.input,
           sku: String(args.input.sku).trim().toUpperCase(),
         };
-        state.products = [product, ...state.products.filter((item) => item.id !== product.id)];
+        state.products = [
+          product,
+          ...state.products.filter((item) => item.id !== product.id),
+        ];
         return product;
       }
       if (cmd === "company_series_list") {
-        return state.seriesConfigs.filter((item) => item.company_id === args.companyId && item.fiscal_year === args.fiscalYear);
+        return state.seriesConfigs.filter(
+          (item) =>
+            item.company_id === args.companyId &&
+            item.fiscal_year === args.fiscalYear,
+        );
       }
       if (cmd === "company_series_configure") {
         const input = args.input;
         const code = String(input.series_code).trim().toUpperCase();
-        const resolved = input.include_year ? `${code}${input.fiscal_year}` : code;
+        const resolved = input.include_year
+          ? `${code}${input.fiscal_year}`
+          : code;
         const preview = `${resolved}${input.separator}${String(input.next_number).padStart(input.padding, "0")}`;
         const config = {
           id: id("series"),
@@ -190,9 +291,16 @@ export function installTauriMock(page) {
           preview,
           created_at: new Date().toISOString(),
         };
-        state.seriesConfigs = [config, ...state.seriesConfigs.filter((item) => item.series_code !== code)];
+        state.seriesConfigs = [
+          config,
+          ...state.seriesConfigs.filter((item) => item.series_code !== code),
+        ];
         state.nextInvoiceNumber = input.next_number;
-        state.companies = state.companies.map((company) => company.id === input.company_id ? { ...company, default_series: resolved } : company);
+        state.companies = state.companies.map((company) =>
+          company.id === input.company_id
+            ? { ...company, default_series: resolved }
+            : company,
+        );
         return config;
       }
       if (cmd === "invoice_next_number_preview") {
@@ -205,14 +313,53 @@ export function installTauriMock(page) {
         };
       }
       if (cmd === "customer_upsert") {
-        const customer = { ...args.input, id: args.input.id || id("customer"), updated_at: new Date().toISOString() };
-        state.customers = [customer, ...state.customers.filter((item) => item.id !== customer.id)];
+        const customer = {
+          ...args.input,
+          id: args.input.id || id("customer"),
+          updated_at: new Date().toISOString(),
+        };
+        state.customers = [
+          customer,
+          ...state.customers.filter((item) => item.id !== customer.id),
+        ];
         return customer;
       }
+      if (cmd === "rectification_advice")
+        return {
+          reason_code: "R4",
+          method: "I",
+          confidence: "test-fixture",
+          source_refs: ["Respuesta sintética de prueba; no es asesoramiento"],
+          notes: [],
+          warnings: ["La causa jurídica la decides tú."],
+        };
       if (cmd === "invoice_draft_create") {
-        return { id: id("draft"), series: args.input.series, number: null, totals: invoiceTotals(args.input.lines) };
+        const draft = {
+          id: id("draft"),
+          series: args.input.series,
+          number: null,
+          totals: invoiceTotals(args.input.lines),
+        };
+        state.invoices = [
+          {
+            ...args.input,
+            id: draft.id,
+            number: null,
+            status: "Draft",
+            total_cents: draft.totals.total_cents,
+            taxable_base_cents: draft.totals.taxable_base_cents,
+            created_at: new Date().toISOString(),
+            issued_at: null,
+            fiscal_hash: null,
+          },
+          ...state.invoices,
+        ];
+        if (initialData.draftDelayMs)
+          await new Promise((r) => setTimeout(r, initialData.draftDelayMs));
+        return draft;
       }
       if (cmd === "invoice_issue") {
+        state.issueCalls += 1;
         const totals = invoiceTotals(args.input.draft.lines);
         const invoice = {
           id: id("invoice"),
@@ -224,23 +371,55 @@ export function installTauriMock(page) {
           kind: args.input.draft.kind,
           status: "Issued",
           total_cents: totals.total_cents,
-          fiscal_hash: "ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890",
+          taxable_base_cents: totals.taxable_base_cents,
+          created_at: new Date().toISOString(),
+          issued_at: args.input.issued_at,
+          fiscal_hash:
+            "ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890",
         };
         state.nextInvoiceNumber += 1;
         state.invoices = [invoice, ...state.invoices];
-        state.audit = [{ id: id("audit"), action: "invoice_issue", actor: "local-user", hash: invoice.fiscal_hash, occurred_at: new Date().toISOString() }, ...state.audit];
-        state.fiscalRecords = [{
-          id: id("fiscal"),
-          company_id: invoice.company_id,
-          invoice_id: invoice.id,
-          record_type: "Alta",
-          generated_at: new Date().toISOString(),
+        state.audit = [
+          {
+            id: id("audit"),
+            action: "invoice_issue",
+            actor: "local-user",
+            hash: invoice.fiscal_hash,
+            occurred_at: new Date().toISOString(),
+          },
+          ...state.audit,
+        ];
+        state.fiscalRecords = [
+          {
+            id: id("fiscal"),
+            company_id: invoice.company_id,
+            invoice_id: invoice.id,
+            record_type: "Alta",
+            generated_at: new Date().toISOString(),
+            fiscal_hash: invoice.fiscal_hash,
+            previous_fiscal_hash: null,
+            xml_path: null,
+            status: "issued",
+          },
+          ...state.fiscalRecords,
+        ];
+        if (
+          initialData.failIssueAfterCommitOnce ||
+          initialData.failOnIssueNumber === state.issueCalls
+        ) {
+          initialData.failIssueAfterCommitOnce = false;
+          throw new Error("Synthetic transport loss after local commit");
+        }
+        return {
+          invoice: {
+            id: invoice.id,
+            series: invoice.series,
+            number: invoice.number,
+            totals: { total_cents: invoice.total_cents },
+          },
           fiscal_hash: invoice.fiscal_hash,
-          previous_fiscal_hash: null,
-          xml_path: null,
-          status: "issued",
-        }, ...state.fiscalRecords];
-        return { invoice: { id: invoice.id, series: invoice.series, number: invoice.number, totals: { total_cents: invoice.total_cents } }, fiscal_hash: invoice.fiscal_hash, audit_hash: invoice.fiscal_hash };
+          audit_hash: invoice.fiscal_hash,
+        };
       }
       if (cmd === "company_list") return state.companies;
       if (cmd === "customer_list") return state.customers;
@@ -248,45 +427,124 @@ export function installTauriMock(page) {
         const filters = args.filters || {};
         const pagination = args.pagination || { limit: 5, offset: 0 };
         const search = String(filters.search || "").toLowerCase();
-        return state.invoices.filter((invoice) => {
-          if (filters.company_id && invoice.company_id !== filters.company_id) return false;
-          if (filters.customer_id && invoice.customer_id !== filters.customer_id) return false;
-          if (filters.fiscal_year && invoice.fiscal_year !== filters.fiscal_year) return false;
-          if (filters.series && invoice.series !== filters.series) return false;
-          if (filters.status && invoice.status !== filters.status) return false;
-          if (filters.kind && invoice.kind !== filters.kind) return false;
-          if (!search) return true;
-          return [invoice.series, invoice.number, invoice.kind, invoice.status, invoice.fiscal_hash]
-            .some((value) => String(value || "").toLowerCase().includes(search));
-        }).slice(pagination.offset || 0, (pagination.offset || 0) + (pagination.limit || 5));
+        return state.invoices
+          .filter((invoice) => {
+            if (filters.company_id && invoice.company_id !== filters.company_id)
+              return false;
+            if (
+              filters.customer_id &&
+              invoice.customer_id !== filters.customer_id
+            )
+              return false;
+            if (
+              filters.fiscal_year &&
+              invoice.fiscal_year !== filters.fiscal_year
+            )
+              return false;
+            if (filters.series && invoice.series !== filters.series)
+              return false;
+            if (filters.status && invoice.status !== filters.status)
+              return false;
+            if (filters.kind && invoice.kind !== filters.kind) return false;
+            if (!search) return true;
+            return [
+              invoice.series,
+              invoice.number,
+              invoice.kind,
+              invoice.status,
+              invoice.fiscal_hash,
+            ].some((value) =>
+              String(value || "")
+                .toLowerCase()
+                .includes(search),
+            );
+          })
+          .slice(
+            pagination.offset || 0,
+            (pagination.offset || 0) + (pagination.limit || 5),
+          );
       }
       if (cmd === "audit_list") {
         const pagination = args.pagination || { limit: 5, offset: 0 };
-        return state.audit.slice(pagination.offset || 0, (pagination.offset || 0) + (pagination.limit || 5));
+        return state.audit.slice(
+          pagination.offset || 0,
+          (pagination.offset || 0) + (pagination.limit || 5),
+        );
       }
       if (cmd === "fiscal_record_list") {
         const pagination = args.pagination || { limit: 5, offset: 0 };
-        return state.fiscalRecords.slice(pagination.offset || 0, (pagination.offset || 0) + (pagination.limit || 5));
+        return state.fiscalRecords.slice(
+          pagination.offset || 0,
+          (pagination.offset || 0) + (pagination.limit || 5),
+        );
       }
       if (cmd === "fiscal_chain_verify") return fiscalChain();
-      if (cmd === "backup_export") return { target_path: args.targetPath, status: "created", notes: ["browser smoke mock"] };
-      if (cmd === "backup_restore") return { source_path: args.sourcePath, status: "validated-only", destructive_restore_performed: false, notes: ["browser smoke mock"] };
+      if (cmd === "backup_export")
+        return {
+          target_path: args.targetPath,
+          status: "created",
+          notes: ["browser smoke mock"],
+        };
+      if (cmd === "backup_restore")
+        return {
+          source_path: args.sourcePath,
+          status: "validated-only",
+          destructive_restore_performed: false,
+          notes: ["browser smoke mock"],
+        };
       if (cmd === "invoice_export_pdf") return args.targetPath;
-      if (cmd === "invoice_export_json") return { target_path: args.targetPath, status: "created", notes: ["browser smoke mock"] };
-      if (cmd === "invoice_export_csv") return { target_path: args.targetPath, status: "created", notes: ["browser smoke mock"] };
-      if (cmd === "fiscal_audit_export") return { target_path: args.targetPath, status: "created", notes: ["browser smoke mock"] };
+      if (cmd === "invoice_export_json")
+        return {
+          target_path: args.targetPath,
+          status: "created",
+          notes: ["browser smoke mock"],
+        };
+      if (cmd === "invoice_export_csv")
+        return {
+          target_path: args.targetPath,
+          status: "created",
+          notes: ["browser smoke mock"],
+        };
+      if (cmd === "fiscal_audit_export")
+        return {
+          target_path: args.targetPath,
+          status: "created",
+          notes: ["browser smoke mock"],
+        };
       if (cmd === "verifactu_xml_draft_export") {
         state.lastXmlPath = args.targetPath;
-        return { target_path: args.targetPath, status: "draft_xml_exported", xsd_validated: true, notes: ["browser smoke mock"] };
+        return {
+          target_path: args.targetPath,
+          status: "draft_xml_exported",
+          xsd_validated: true,
+          notes: ["browser smoke mock"],
+        };
+      }
+      if (cmd === "verifactu_submit_sidecar_preflight") {
+        if (initialData.preflightDelayMs)
+          await new Promise((r) => setTimeout(r, initialData.preflightDelayMs));
+        return {
+          ready: false,
+          status: "fixture-certificate-checked-transport-blocked",
+          sidecar_endpoint: args.input.sidecar_url,
+          sidecar_url: args.input.sidecar_url,
+          endpoint_name: args.input.endpoint_name,
+          certificate_loaded: true,
+          certificate_days_remaining: 90,
+          sidecar_call_performed: true,
+          external_call_performed: false,
+          blockers: ["Synthetic fixture; no external transport"],
+        };
       }
       if (cmd === "verifactu_submission_prepare") {
         return {
           invoice_id: args.invoiceId,
           export_id: id("export"),
           xml_path: args.xmlPath,
-          xml_sha256: "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF",
+          xml_sha256:
+            "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF",
           xml_bytes: 2048,
-          signature_status: "unsigned",
+          signature_status: initialData.preparedSignatureStatus ?? "unsigned",
           transmission_status: "prepared_for_signature",
         };
       }
@@ -299,5 +557,5 @@ export function installTauriMock(page) {
       unregisterCallback: () => undefined,
       convertFileSrc: (path) => path,
     };
-  });
+  }, initialData);
 }

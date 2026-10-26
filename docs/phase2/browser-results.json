@@ -1,0 +1,1756 @@
+{
+  "status": "passed",
+  "expectedCases": 76,
+  "generatedAt": "2026-10-26T14:52:47.561Z",
+  "results": [
+    {
+      "name": "facturas-comfortable",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/facturas-comfortable-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "facturas-compact",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/facturas-compact-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "editor-provisional",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/editor-provisional-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "editor-pdf",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/editor-pdf-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "confirmar-emision",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/confirmar-emision-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        },
+        {
+          "id": "color-contrast",
+          "nodes": [
+            {
+              "target": [
+                "li:nth-child(2)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "rectificativa-propuesta",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/rectificativa-propuesta-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "rectificativa-revision",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/rectificativa-revision-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "confirmar-rectificativa",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/confirmar-rectificativa-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        },
+        {
+          "id": "color-contrast",
+          "nodes": [
+            {
+              "target": [
+                "ul > li:nth-child(1)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            },
+            {
+              "target": [
+                "ul > li:nth-child(3)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "verifactu",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/verifactu-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "clientes",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/clientes-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "productos",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/productos-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "presupuestos",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/presupuestos-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "proformas",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/proformas-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "albaranes",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/albaranes-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "recurrentes",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/recurrentes-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "configuracion-1",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/configuracion-1-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "configuracion-2",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/configuracion-2-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "configuracion-3",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/configuracion-3-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "configuracion-4",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/configuracion-4-1024-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "facturas-comfortable",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/facturas-comfortable-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "facturas-compact",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/facturas-compact-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "editor-provisional",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/editor-provisional-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "editor-pdf",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/editor-pdf-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "confirmar-emision",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/confirmar-emision-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        },
+        {
+          "id": "color-contrast",
+          "nodes": [
+            {
+              "target": [
+                "li:nth-child(2)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "rectificativa-propuesta",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/rectificativa-propuesta-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "rectificativa-revision",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/rectificativa-revision-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "confirmar-rectificativa",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/confirmar-rectificativa-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        },
+        {
+          "id": "color-contrast",
+          "nodes": [
+            {
+              "target": [
+                "ul > li:nth-child(1)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            },
+            {
+              "target": [
+                "ul > li:nth-child(3)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "verifactu",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/verifactu-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "clientes",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/clientes-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "productos",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/productos-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "presupuestos",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/presupuestos-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "proformas",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/proformas-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "albaranes",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/albaranes-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "recurrentes",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/recurrentes-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "configuracion-1",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/configuracion-1-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "configuracion-2",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/configuracion-2-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "configuracion-3",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/configuracion-3-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "configuracion-4",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/configuracion-4-1024-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "facturas-comfortable",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/facturas-comfortable-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "facturas-compact",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/facturas-compact-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "editor-provisional",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/editor-provisional-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "editor-pdf",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/editor-pdf-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "confirmar-emision",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/confirmar-emision-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        },
+        {
+          "id": "color-contrast",
+          "nodes": [
+            {
+              "target": [
+                "li:nth-child(1)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            },
+            {
+              "target": [
+                "li:nth-child(2)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            },
+            {
+              "target": [
+                "li:nth-child(3)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            },
+            {
+              "target": [
+                "li:nth-child(4)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "rectificativa-propuesta",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/rectificativa-propuesta-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "rectificativa-revision",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/rectificativa-revision-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "confirmar-rectificativa",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/confirmar-rectificativa-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        },
+        {
+          "id": "color-contrast",
+          "nodes": [
+            {
+              "target": [
+                "ul > li:nth-child(3)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            },
+            {
+              "target": [
+                "li:nth-child(4)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "verifactu",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/verifactu-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "clientes",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/clientes-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "productos",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/productos-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "presupuestos",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/presupuestos-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "proformas",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/proformas-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "albaranes",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/albaranes-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "recurrentes",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/recurrentes-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "configuracion-1",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/configuracion-1-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "configuracion-2",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/configuracion-2-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "configuracion-3",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/configuracion-3-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "configuracion-4",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase2/screenshots/configuracion-4-1440-light.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "facturas-comfortable",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/facturas-comfortable-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "facturas-compact",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/facturas-compact-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "editor-provisional",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/editor-provisional-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "editor-pdf",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/editor-pdf-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "confirmar-emision",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/confirmar-emision-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        },
+        {
+          "id": "color-contrast",
+          "nodes": [
+            {
+              "target": [
+                "li:nth-child(1)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            },
+            {
+              "target": [
+                "li:nth-child(2)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            },
+            {
+              "target": [
+                "li:nth-child(3)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            },
+            {
+              "target": [
+                "li:nth-child(4)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "rectificativa-propuesta",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/rectificativa-propuesta-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "rectificativa-revision",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/rectificativa-revision-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "confirmar-rectificativa",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/confirmar-rectificativa-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        },
+        {
+          "id": "color-contrast",
+          "nodes": [
+            {
+              "target": [
+                "ul > li:nth-child(3)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            },
+            {
+              "target": [
+                "li:nth-child(4)"
+              ],
+              "summary": "Fix any of the following:\n  Element's background color could not be determined because it partially overlaps other elements"
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "verifactu",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/verifactu-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "clientes",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/clientes-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "productos",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/productos-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "presupuestos",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/presupuestos-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "proformas",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/proformas-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "albaranes",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/albaranes-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "recurrentes",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/recurrentes-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "configuracion-1",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/configuracion-1-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "configuracion-2",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/configuracion-2-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "configuracion-3",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/configuracion-3-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "configuracion-4",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase2/screenshots/configuracion-4-1440-dark.png",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "aria-prohibited-attr",
+          "nodes": [
+            {
+              "target": [
+                ".bdr-logo"
+              ],
+              "summary": "Fix all of the following:\n  aria-label attribute is not well supported on a span with no valid role attribute."
+            }
+          ]
+        }
+      ],
+      "errors": []
+    }
+  ],
+  "violations": 0,
+  "limits": [
+    "Synthetic Tauri fixtures; no AEAT transmission or certificates.",
+    "PDF browser viewer internals are not application DOM; incomplete axe checks remain recorded."
+  ]
+}

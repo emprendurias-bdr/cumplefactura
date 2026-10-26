@@ -43,7 +43,7 @@ export function InvoiceEditor() {
           </select>
         </label>
       </div>
-      <div className="lineTable" aria-label="Lineas de factura">
+      <div className="lineTable" role="group" aria-label="Lineas de factura">
         <div className="lineHeader">
           <span>Descripcion</span>
           <span>Cant.</span>

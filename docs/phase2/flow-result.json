@@ -1,0 +1,21 @@
+{
+  "status": "passed",
+  "checks": [
+    "table",
+    "editor",
+    "draft",
+    "confirmation-understood",
+    "single-issue-after-double-click-and-lost-ack",
+    "abono-lost-ack-disables-retry",
+    "stale-pdf-invalidated-after-edit",
+    "unsafe-cents-blocked",
+    "four-setup-steps",
+    "single-draft-after-double-click",
+    "company-change-discards-late-draft",
+    "certificate-change-invalidates-check",
+    "late-certificate-response-cannot-restore-check",
+    "fiscal-progress",
+    "no-false-acceptance"
+  ],
+  "native": false
+}

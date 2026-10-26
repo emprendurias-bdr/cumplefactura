@@ -139,12 +139,28 @@ pub fn invoice_next_number_preview(
     })
 }
 
+#[derive(Debug, serde::Serialize)]
+pub struct InvoiceListItem {
+    #[serde(flatten)]
+    invoice: InvoiceSummary,
+    taxable_base_cents: i64,
+}
+
+pub(crate) fn presentation_rows(rows: Vec<InvoiceSummary>) -> Vec<InvoiceListItem> {
+    rows.into_iter()
+        .map(|invoice| InvoiceListItem {
+            taxable_base_cents: invoice.taxable_base_cents,
+            invoice,
+        })
+        .collect()
+}
+
 #[tauri::command]
 pub fn invoice_list(
     state: State<'_, AppState>,
     filters: Option<InvoiceListFilters>,
     pagination: Option<ListPagination>,
-) -> Result<Vec<InvoiceSummary>, String> {
+) -> Result<Vec<InvoiceListItem>, String> {
     let conn = state
         .conn
         .lock()
@@ -154,6 +170,7 @@ pub fn invoice_list(
         filters.unwrap_or_default(),
         pagination.unwrap_or_default(),
     )
+    .map(presentation_rows)
 }
 #[tauri::command]
 pub fn invoice_export_pdf(

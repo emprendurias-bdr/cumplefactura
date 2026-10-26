@@ -1,0 +1,80 @@
+{
+  "generated_at": "2026-10-26T14:42:47.332626934+00:00",
+  "invoices": [
+    {
+      "id": "24ee8a4c-8283-4027-9092-5608e11f213e",
+      "company_id": "fd962fd5-7f62-41d2-a36c-97c68b8ca977",
+      "customer_id": "68e93b6b-8b21-405e-9119-dc0392dcc96f",
+      "fiscal_year": 2026,
+      "series": "VENDI2026",
+      "number": 7,
+      "kind": "Complete",
+      "status": "Issued",
+      "rectifies_invoice_id": null,
+      "rectification_reason_code": null,
+      "rectification_method": null,
+      "total_cents": 12100,
+      "fiscal_hash": "BD0EFD5006EFE8DCBDDF5041AB764C3BB967C7C3E95D2A07450DBD2856EC43A9",
+      "created_at": "2026-10-26T14:42:46.919490800+00:00",
+      "issued_at": "2026-05-31T10:00:00+02:00"
+    },
+    {
+      "id": "20141ccb-807e-4f23-8495-51f60fe6f8b3",
+      "company_id": "fd962fd5-7f62-41d2-a36c-97c68b8ca977",
+      "customer_id": "68e93b6b-8b21-405e-9119-dc0392dcc96f",
+      "fiscal_year": 2026,
+      "series": "VENDI2026",
+      "number": null,
+      "kind": "Complete",
+      "status": "Draft",
+      "rectifies_invoice_id": null,
+      "rectification_reason_code": null,
+      "rectification_method": null,
+      "total_cents": 12100,
+      "fiscal_hash": null,
+      "created_at": "2026-10-26T14:42:46.919262876+00:00",
+      "issued_at": null
+    }
+  ],
+  "audit_events": [
+    {
+      "id": "f2ef2a5f-b5ae-48c6-957c-ee2cc2378c17",
+      "entity_id": "24ee8a4c-8283-4027-9092-5608e11f213e",
+      "action": "invoice_issued",
+      "actor": "core-e2e",
+      "occurred_at": "2026-10-26T14:42:46.919669219+00:00",
+      "payload_hash": "BD0EFD5006EFE8DCBDDF5041AB764C3BB967C7C3E95D2A07450DBD2856EC43A9",
+      "previous_hash": null,
+      "hash": "dd8d8ee2f7ee905b0f4431a38e2a9eb2d8d3445bc5b1df4493f75f52555506f1"
+    }
+  ],
+  "fiscal_records": [
+    {
+      "id": "8f9a5aa4-b0d7-4a60-8a8d-d3448a7e37d0",
+      "company_id": "fd962fd5-7f62-41d2-a36c-97c68b8ca977",
+      "invoice_id": "24ee8a4c-8283-4027-9092-5608e11f213e",
+      "record_type": "Alta",
+      "generated_at": "2026-05-31T10:00:00+02:00",
+      "fiscal_hash": "BD0EFD5006EFE8DCBDDF5041AB764C3BB967C7C3E95D2A07450DBD2856EC43A9",
+      "previous_fiscal_hash": null,
+      "xml_path": null,
+      "status": "created"
+    }
+  ],
+  "chain_verification": {
+    "valid": true,
+    "total_records": 1,
+    "issue_count": 0,
+    "last_hash_by_company": [
+      {
+        "company_id": "fd962fd5-7f62-41d2-a36c-97c68b8ca977",
+        "last_hash": "BD0EFD5006EFE8DCBDDF5041AB764C3BB967C7C3E95D2A07450DBD2856EC43A9"
+      }
+    ],
+    "issues": []
+  },
+  "limits": [
+    "Local audit export only; not legal certification.",
+    "No external AEAT/FACe/SII/foral call is performed."
+  ]
+}

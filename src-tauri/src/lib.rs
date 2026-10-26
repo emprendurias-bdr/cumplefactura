@@ -36,6 +36,7 @@ pub fn run() {
             commands::invoices::invoice_next_number_preview,
             commands::invoices::invoice_list,
             commands::invoices::invoice_export_pdf,
+            commands::preview::invoice_pdf_preview,
             commands::fiscal::fiscal_prepare_verifactu,
             commands::fiscal::fiscal_sidecar_capabilities_get,
             commands::fiscal::sii_submit_sidecar_preflight,

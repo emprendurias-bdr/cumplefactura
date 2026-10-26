@@ -11,6 +11,11 @@ pub fn write_invoice_pdf(target_path: &str, invoice: &InvoicePdfData) -> Result<
         fs::create_dir_all(parent).map_err(|err| format!("PDF directory error: {err}"))?;
     }
 
+    fs::write(path, render_invoice_pdf(invoice)).map_err(|err| format!("PDF write error: {err}"))
+}
+
+/// Exact same local document bytes as the existing export, without filesystem access.
+pub fn render_invoice_pdf(invoice: &InvoicePdfData) -> Vec<u8> {
     let mut content = String::new();
     content.push_str("BT\n/F1 16 Tf\n50 790 Td\n");
     content.push_str(&format!("({}) Tj\n", escape(&invoice.title())));
@@ -64,8 +69,7 @@ pub fn write_invoice_pdf(target_path: &str, invoice: &InvoicePdfData) -> Result<
     ));
     content.push_str("ET\n");
 
-    let pdf = build_pdf(&content);
-    fs::write(path, pdf).map_err(|err| format!("PDF write error: {err}"))
+    build_pdf(&content)
 }
 
 fn build_pdf(content: &str) -> Vec<u8> {
@@ -157,6 +161,13 @@ mod tests {
         write_invoice_pdf(&target_str, &invoice).expect("pdf");
         let bytes = std::fs::read(&target).expect("read pdf");
         assert!(bytes.starts_with(b"%PDF-1.4"));
+        assert_eq!(bytes, render_invoice_pdf(&invoice));
+        use sha2::Digest;
+        assert_eq!(
+            hex::encode(sha2::Sha256::digest(render_invoice_pdf(&invoice))),
+            "981c79acf60784a164a30ee8633d0a8d73b6f0a0f8b04b80210c71e597daeb06",
+            "preview must preserve the existing PDF bytes"
+        );
         std::fs::remove_file(target).expect("cleanup");
     }
 }

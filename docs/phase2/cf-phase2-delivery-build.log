@@ -1,0 +1,25 @@
+
+> cumplefactura@0.1.0 build
+> tsc --noEmit && vite build
+
+vite v7.3.3 building client environment for production...
+transforming...
+✓ 1616 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                             0.40 kB │ gzip:  0.28 kB
+dist/assets/geist-mono-latin-400-normal-DTRLJnHl.woff2      9.86 kB
+dist/assets/geist-mono-latin-500-normal-YINYabwD.woff2     10.12 kB
+dist/assets/host-grotesk-latin-800-normal-BJv2eFqJ.woff2   13.61 kB
+dist/assets/host-grotesk-latin-400-normal-qDxuE_yq.woff2   13.68 kB
+dist/assets/host-grotesk-latin-600-normal-D4yVz22u.woff2   13.73 kB
+dist/assets/host-grotesk-latin-500-normal-B7155YqD.woff2   13.79 kB
+dist/assets/host-grotesk-latin-700-normal-C2wxdkf9.woff2   13.94 kB
+dist/assets/index-KfzoSfJR.css                             29.61 kB │ gzip:  6.37 kB
+dist/assets/index-B9ypoLJM.js                             299.44 kB │ gzip: 89.59 kB
+✓ built in 1.90s
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

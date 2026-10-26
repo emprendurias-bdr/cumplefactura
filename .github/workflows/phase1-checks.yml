@@ -2,14 +2,14 @@ name: CumpleFactura - UI y núcleo nativo
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, ux/cumplefactura-fase-1]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: phase1-${{ github.ref }}
+  group: ux-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -35,15 +35,17 @@ jobs:
       - run: node tools/verify-refactor-contract.mjs
       - run: node --experimental-strip-types --test tests/ui/*.test.mjs
       - run: npm run validate:browser-smoke
-      - name: Revisar las nueve áreas en claro y oscuro
-        run: node tools/verify-phase1-browser.mjs
+      - name: Revisar 76 estados, ambos temas, tamaños y densidades
+        run: node tools/verify-phase2-browser.mjs
+      - run: node tools/verify-phase2-visual.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: phase1-browser-evidence
+          name: phase2-browser-evidence
           path: |
-            docs/phase1/browser-results.json
-            docs/phase1/screenshots/
+            docs/phase2/browser-results.json
+            docs/phase2/flow-result.json
+            docs/phase2/screenshots/
             tests/regulatory/evidence/latest-browser-smoke.*
 
   native-windows:
@@ -90,7 +92,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: phase1-native-core-evidence
+          name: phase2-native-core-evidence
           path: |
             tests/regulatory/evidence/latest-core-e2e*
             tests/regulatory/evidence/latest-tauri-desktop-e2e*

@@ -145,6 +145,7 @@ mod tests {
             rectifies_invoice_id: None,
             rectification_reason_code: None,
             rectification_method: None,
+            taxable_base_cents: 10000,
             total_cents: 12100,
             fiscal_hash: Some("A".repeat(64)),
             created_at: "2026-06-02T00:00:00Z".to_string(),

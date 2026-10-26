@@ -1,0 +1,44 @@
+ExpectError: expect(locator).toBeDisabled() failed
+
+Locator:  getByRole('button', { name: 'Crear borrador', exact: true })
+Expected: disabled
+Received: enabled
+Timeout:  5000ms
+
+Call log:
+  - Expect "to.be.disabled" with timeout 5000ms
+  - waiting for getByRole('button', { name: 'Crear borrador', exact: true })
+    14 × locator resolved to <button type="submit" class="bdr-button bdr-button--secondary">Crear borrador</button>
+       - unexpected value "enabled"
+
+    at captureRawStack (/workspace/cumplefactura/node_modules/playwright-core/lib/coreBundle.js:3130:17)
+    at callMatcherAsStep (/workspace/cumplefactura/node_modules/playwright/lib/matchers/expect.js:12873:57)
+    at Object.toBeDisabled (/workspace/cumplefactura/node_modules/playwright/lib/matchers/expect.js:12863:23)
+    at /workspace/cumplefactura/tools/verify-phase2-browser.mjs:120:83 {
+  matcherResult: {
+    message: 'expect(locator).toBeDisabled() failed\n' +
+      '\n' +
+      "Locator:  getByRole('button', { name: 'Crear borrador', exact: true })\n" +
+      'Expected: disabled\n' +
+      'Received: enabled\n' +
+      'Timeout:  5000ms\n' +
+      '\n' +
+      'Call log:\n' +
+      '  - Expect "to.be.disabled" with timeout 5000ms\n' +
+      "  - waiting for getByRole('button', { name: 'Crear borrador', exact: true })\n" +
+      '    14 × locator resolved to <button type="submit" class="bdr-button bdr-button--secondary">Crear borrador</button>\n' +
+      '       - unexpected value "enabled"\n',
+    pass: false,
+    actual: 'enabled',
+    name: 'toBeDisabled',
+    expected: 'disabled',
+    log: [
+      '  - Expect "to.be.disabled" with timeout 5000ms',
+      "  - waiting for getByRole('button', { name: 'Crear borrador', exact: true })",
+      '    14 × locator resolved to <button type="submit" class="bdr-button bdr-button--secondary">Crear borrador</button>',
+      '       - unexpected value "enabled"'
+    ],
+    timeout: 5000,
+    ariaSnapshot: '- button "Crear borrador"'
+  }
+}

@@ -1,4 +1,4 @@
-import {installTauriMock} from './browser-tauri-mock.mjs';
+import { installTauriMock } from "./browser-tauri-mock.mjs";
 import { spawn } from "node:child_process";
 import { createWriteStream, existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -45,12 +45,16 @@ async function withServer(action) {
 
   const logPath = resolve(evidenceDir, `browser-smoke-vite-${timestamp}.log`);
   const log = createWriteStream(logPath, { flags: "a" });
-  const child = spawn(process.execPath, [vite, "--host", host, "--port", String(port), "--strictPort"], {
-    cwd: root,
-    env: { ...process.env, BROWSER: "none" },
-    shell: false,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const child = spawn(
+    process.execPath,
+    [vite, "--host", host, "--port", String(port), "--strictPort"],
+    {
+      cwd: root,
+      env: { ...process.env, BROWSER: "none" },
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
   child.stdout.pipe(log);
   child.stderr.pipe(log);
 
@@ -63,12 +67,17 @@ async function withServer(action) {
   }
 }
 
-
-
 async function clickByRole(page, name) {
   const locator = page.getByRole("button", { name, exact: true });
   await expect(locator).toHaveCount(1);
   await locator.click();
+}
+
+async function go(page, route, details) {
+  await page.evaluate((route) => {
+    location.hash = "/" + route;
+  }, route);
+  if (details) await page.getByText(details, { exact: true }).click();
 }
 
 async function expectTextVisible(page, text) {
@@ -79,7 +88,9 @@ await mkdir(evidenceDir, { recursive: true });
 
 const result = await withServer(async (serverLogPath) => {
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
+  const page = await browser.newPage({
+    viewport: { width: 1366, height: 900 },
+  });
   const consoleEntries = [];
   page.on("console", (msg) => {
     if (["error", "warning"].includes(msg.type())) {
@@ -94,47 +105,91 @@ const result = await withServer(async (serverLogPath) => {
   await page.goto(url, { waitUntil: "networkidle" });
 
   await expect(page).toHaveTitle(/CumpleFactura/);
-  await expectTextVisible(page, "Facturacion local-first");
-  await expectTextVisible(page, "Borrador tecnico: XSD local, sin firma ni envio.");
-  await expectTextVisible(page, "Frontera final: solo sidecar local con HMAC puede invocar AEAT");
+  await expectTextVisible(page, "Tus facturas");
+  await go(page, "ajustes", "Herramientas locales y exportaciones");
+  await expectTextVisible(
+    page,
+    "Borrador tecnico: XSD local, sin firma ni envio.",
+  );
+  await expectTextVisible(
+    page,
+    "Frontera final: solo sidecar local con HMAC puede invocar AEAT",
+  );
+  const initialSettingsLimits = await page.locator("body").evaluate((body) => ({
+    noSignatureOrSend:
+      body.textContent?.includes("sin firma ni envio") ?? false,
+    fakeSidecar: body.textContent?.includes("gate usa sidecar falso") ?? false,
+    externalBlocked: body.textContent?.includes("external_blocked") ?? false,
+  }));
+  await go(page, "verifactu", "Auditoría y herramientas técnicas");
   await expectTextVisible(page, "Canales ContaPro sidecar");
   await expectTextVisible(page, "Importado de ContaPro");
   await clickByRole(page, "Preflight SII sidecar");
   await expectTextVisible(page, "/sii/submit-preflight");
-  await expect(page.getByRole("button", { name: "Preflight TicketBAI sidecar", exact: true })).toBeDisabled();
+  await expect(
+    page.getByRole("button", {
+      name: "Preflight TicketBAI sidecar",
+      exact: true,
+    }),
+  ).toBeDisabled();
   await expectTextVisible(page, "homologacion foral sigue bloqueada");
-  const initialVisibleLimits = await page.locator("body").evaluate((body) => ({
-    noSignatureOrSend: body.textContent?.includes("sin firma ni envio") ?? false,
-    fakeSidecar: body.textContent?.includes("gate usa sidecar falso") ?? false,
-    externalBlocked: body.textContent?.includes("external_blocked") ?? false,
-    contaproImport: body.textContent?.includes("Importado de ContaPro") ?? false,
-  }));
+  const initialVisibleLimits = {
+    ...initialSettingsLimits,
+    ...(await page.locator("body").evaluate((body) => ({
+      contaproImport:
+        body.textContent?.includes("Importado de ContaPro") ?? false,
+    }))),
+  };
 
+  await go(page, "ajustes", "Herramientas locales y exportaciones");
   await clickByRole(page, "Rellenar demo");
   await expectTextVisible(page, "Datos demo cargados");
+  await page
+    .getByRole("button", { name: "Paso 4: Certificado y carpeta", exact: true })
+    .click();
   await clickByRole(page, "Elegir carpeta");
-  await expect(page.getByLabel("Carpeta export")).toHaveValue("C:\\CumpleFactura\\Evidence");
+  await expect(page.getByLabel("Carpeta export")).toHaveValue(
+    "C:\\CumpleFactura\\Evidence",
+  );
 
+  await go(page, "clientes");
   await clickByRole(page, "Guardar emisor");
-  await expect(page.getByLabel("Nombre legal empresa")).toHaveValue("Demo CumpleFactura SL");
+  await expect(page.getByLabel("Nombre legal empresa")).toHaveValue(
+    "Demo CumpleFactura SL",
+  );
 
+  await go(page, "productos");
   await clickByRole(page, "Guardar producto");
-  await expect(page.locator(".productRow").getByText("SVC-DEMO - Servicio mensual")).toBeVisible();
+  await expect(
+    page.locator(".productRow").getByText("SVC-DEMO - Servicio mensual"),
+  ).toBeVisible();
   await clickByRole(page, "Usar en linea");
+  await go(page, "facturas/nueva");
   await expect(page.getByLabel("Precio EUR linea 1")).toHaveValue("250");
   await expect(page.getByLabel("Descuento linea 1")).toHaveValue("10");
   await expect(page.getByLabel("IRPF linea 1")).toHaveValue("15");
 
+  await go(page, "ajustes");
+  await page
+    .getByRole("button", { name: "Paso 3: Primera serie", exact: true })
+    .click();
   await clickByRole(page, "Guardar serie");
   await expectTextVisible(page, "General - A-001");
 
-  await clickByRole(page, "Guardar onboarding");
-  await expectTextVisible(page, "Completado");
+  await page
+    .getByRole("button", { name: "Paso 4: Certificado y carpeta", exact: true })
+    .click();
+  await clickByRole(page, "Guardar configuración básica");
+  await expectTextVisible(page, "Configuración básica guardada");
 
+  await go(page, "clientes");
   await clickByRole(page, "Guardar cliente");
   await expect(page.getByLabel("Nombre cliente")).toHaveValue("Cliente Demo");
 
-  await page.getByLabel("Descripcion linea 1").fill("Servicio editable con descuento");
+  await go(page, "facturas/nueva");
+  await page
+    .getByLabel("Descripcion linea 1")
+    .fill("Servicio editable con descuento");
   await expect(page.getByLabel("Serie de esta factura")).toHaveValue(/series-/);
   await expectTextVisible(page, "238,50");
 
@@ -143,7 +198,16 @@ const result = await withServer(async (serverLogPath) => {
   await expectTextVisible(page, "238,50");
 
   await clickByRole(page, "Emitir factura");
+  await page
+    .getByRole("dialog")
+    .getByRole("checkbox", { name: "Lo entiendo" })
+    .check();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /Emitir factura/ })
+    .click();
   await expectTextVisible(page, "Factura emitida");
+  await go(page, "verifactu", "Auditoría y herramientas técnicas");
   await expectTextVisible(page, "Cadena fiscal OK");
   await expectTextVisible(page, "Auditoria fiscal local");
   await clickByRole(page, "Verificar cadena");
@@ -153,11 +217,13 @@ const result = await withServer(async (serverLogPath) => {
   await clickByRole(page, "Exportar auditoria");
   await expectTextVisible(page, "created -");
 
+  await go(page, "facturas");
   await page.getByLabel("Buscar texto factura").fill("A");
   await page.getByLabel("Filtro estado factura").selectOption("Issued");
   await clickByRole(page, "Buscar facturas");
-  await expectTextVisible(page, "1 resultado(s) con filtros actuales.");
+  await expectTextVisible(page, "1 resultado(s) en la página cargada.");
 
+  await go(page, "ajustes", "Herramientas locales y exportaciones");
   await clickByRole(page, "Exportar XML");
   await expectTextVisible(page, "XSD OK");
 
@@ -168,22 +234,36 @@ const result = await withServer(async (serverLogPath) => {
   await page.screenshot({ path: latestScreenshotPath, fullPage: true });
 
   const finalVisibleLimits = await page.locator("body").evaluate((body) => ({
-    noAeatCsv: body.textContent?.includes("sin llamada AEAT real ni CSV") ?? false,
+    noAeatCsv:
+      body.textContent?.includes("sin llamada AEAT real ni CSV") ?? false,
     fakeSidecar: body.textContent?.includes("gate usa sidecar falso") ?? false,
   }));
 
-  if (!initialVisibleLimits.noSignatureOrSend || !initialVisibleLimits.fakeSidecar || !initialVisibleLimits.externalBlocked || !initialVisibleLimits.contaproImport) {
-    throw new Error(`Initial visible limits missing: ${JSON.stringify(initialVisibleLimits)}`);
+  if (
+    !initialVisibleLimits.noSignatureOrSend ||
+    !initialVisibleLimits.fakeSidecar ||
+    !initialVisibleLimits.externalBlocked ||
+    !initialVisibleLimits.contaproImport
+  ) {
+    throw new Error(
+      `Initial visible limits missing: ${JSON.stringify(initialVisibleLimits)}`,
+    );
   }
   if (!finalVisibleLimits.noAeatCsv || !finalVisibleLimits.fakeSidecar) {
-    throw new Error(`Final visible limits missing: ${JSON.stringify(finalVisibleLimits)}`);
+    throw new Error(
+      `Final visible limits missing: ${JSON.stringify(finalVisibleLimits)}`,
+    );
   }
 
   await browser.close();
 
-  const relevantConsole = consoleEntries.filter((entry) => !entry.text.includes("Download the React DevTools"));
+  const relevantConsole = consoleEntries.filter(
+    (entry) => !entry.text.includes("Download the React DevTools"),
+  );
   if (relevantConsole.length > 0) {
-    throw new Error(`Browser console has errors/warnings: ${JSON.stringify(relevantConsole)}`);
+    throw new Error(
+      `Browser console has errors/warnings: ${JSON.stringify(relevantConsole)}`,
+    );
   }
 
   return {
@@ -193,7 +273,8 @@ const result = await withServer(async (serverLogPath) => {
     url,
     viewport: "1366x900",
     browser: "Playwright Chromium headless",
-    browser_plugin_note: "Repeatable npm gate uses Playwright because MCP Browser cannot be invoked from npm scripts.",
+    browser_plugin_note:
+      "Repeatable npm gate uses Playwright because MCP Browser cannot be invoked from npm scripts.",
     flow: "app loads -> create company/customer/series -> edit invoice line with discount/IRPF -> draft -> issue -> export VERI*FACTU XML -> prepare signature/submission package",
     checks: {
       page_identity: true,

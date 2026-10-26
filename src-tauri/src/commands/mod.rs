@@ -7,3 +7,5 @@ pub mod products;
 pub mod settings;
 
 pub mod preferences;
+
+pub mod preview;

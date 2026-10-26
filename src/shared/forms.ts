@@ -1,8 +1,9 @@
+import { formatCents } from "./moneyFormat";
 import { FileCheck2,Hash,LockKeyhole,ShieldCheck } from "lucide-react";
 import type { Company,CompanyForm,Customer,CustomerForm,InvoiceLineForm,InvoiceLineInput,Product,ProductForm } from './types';
 export const PAGE_SIZE = 5;
 export function cents(value: number) {
-  return new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(value / 100);
+  return formatCents(value);
 }
 export function short(value?: string | null) {
   return value ? `${value.slice(0, 12)}...` : "-";

@@ -1,0 +1,2 @@
+# PDFs contain byte offsets; preserve exact bytes on every platform.
+*.pdf binary

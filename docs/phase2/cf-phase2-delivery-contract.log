@@ -1,0 +1,868 @@
+
+> cumplefactura@0.1.0 validate:ui-contract
+> node tools/verify-ui-contract.mjs
+
+{
+  "app": "CumpleFactura",
+  "status": "passed",
+  "source": "/workspace/cumplefactura/src/App.tsx",
+  "invoked_commands": [
+    "app_defaults_get",
+    "app_settings_get",
+    "app_settings_update",
+    "audit_list",
+    "backup_export",
+    "backup_restore",
+    "company_create",
+    "company_list",
+    "company_series_configure",
+    "company_series_list",
+    "company_update",
+    "customer_list",
+    "customer_upsert",
+    "fiscal_audit_export",
+    "fiscal_chain_verify",
+    "fiscal_record_list",
+    "fiscal_sidecar_capabilities_get",
+    "invoice_draft_create",
+    "invoice_export_csv",
+    "invoice_export_json",
+    "invoice_export_pdf",
+    "invoice_issue",
+    "invoice_list",
+    "invoice_next_number_preview",
+    "invoice_pdf_preview",
+    "product_list",
+    "product_upsert",
+    "rectification_advice",
+    "sii_submit_sidecar_preflight",
+    "ticketbai_submit_sidecar_preflight",
+    "ui_preferences_get",
+    "ui_preferences_update",
+    "verifactu_submission_prepare",
+    "verifactu_submit_sidecar_invoke",
+    "verifactu_submit_sidecar_preflight",
+    "verifactu_transport_preflight",
+    "verifactu_xades_sidecar_preflight",
+    "verifactu_xades_sidecar_sign",
+    "verifactu_xml_anulacion_draft_export",
+    "verifactu_xml_draft_export"
+  ],
+  "checks": [
+    {
+      "id": "invoke:company_create",
+      "ok": true,
+      "detail": "Tauri command company_create is wired from the UI."
+    },
+    {
+      "id": "invoke:company_update",
+      "ok": true,
+      "detail": "Tauri command company_update is wired from the UI."
+    },
+    {
+      "id": "invoke:app_defaults_get",
+      "ok": true,
+      "detail": "Tauri command app_defaults_get is wired from the UI."
+    },
+    {
+      "id": "invoke:app_settings_get",
+      "ok": true,
+      "detail": "Tauri command app_settings_get is wired from the UI."
+    },
+    {
+      "id": "invoke:app_settings_update",
+      "ok": true,
+      "detail": "Tauri command app_settings_update is wired from the UI."
+    },
+    {
+      "id": "invoke:company_series_configure",
+      "ok": true,
+      "detail": "Tauri command company_series_configure is wired from the UI."
+    },
+    {
+      "id": "invoke:company_series_list",
+      "ok": true,
+      "detail": "Tauri command company_series_list is wired from the UI."
+    },
+    {
+      "id": "invoke:product_upsert",
+      "ok": true,
+      "detail": "Tauri command product_upsert is wired from the UI."
+    },
+    {
+      "id": "invoke:product_list",
+      "ok": true,
+      "detail": "Tauri command product_list is wired from the UI."
+    },
+    {
+      "id": "invoke:customer_upsert",
+      "ok": true,
+      "detail": "Tauri command customer_upsert is wired from the UI."
+    },
+    {
+      "id": "invoke:invoice_draft_create",
+      "ok": true,
+      "detail": "Tauri command invoice_draft_create is wired from the UI."
+    },
+    {
+      "id": "invoke:invoice_issue",
+      "ok": true,
+      "detail": "Tauri command invoice_issue is wired from the UI."
+    },
+    {
+      "id": "invoke:invoice_next_number_preview",
+      "ok": true,
+      "detail": "Tauri command invoice_next_number_preview is wired from the UI."
+    },
+    {
+      "id": "invoke:invoice_list",
+      "ok": true,
+      "detail": "Tauri command invoice_list is wired from the UI."
+    },
+    {
+      "id": "invoke:invoice_export_pdf",
+      "ok": true,
+      "detail": "Tauri command invoice_export_pdf is wired from the UI."
+    },
+    {
+      "id": "invoke:invoice_export_json",
+      "ok": true,
+      "detail": "Tauri command invoice_export_json is wired from the UI."
+    },
+    {
+      "id": "invoke:invoice_export_csv",
+      "ok": true,
+      "detail": "Tauri command invoice_export_csv is wired from the UI."
+    },
+    {
+      "id": "invoke:fiscal_audit_export",
+      "ok": true,
+      "detail": "Tauri command fiscal_audit_export is wired from the UI."
+    },
+    {
+      "id": "invoke:fiscal_sidecar_capabilities_get",
+      "ok": true,
+      "detail": "Tauri command fiscal_sidecar_capabilities_get is wired from the UI."
+    },
+    {
+      "id": "invoke:sii_submit_sidecar_preflight",
+      "ok": true,
+      "detail": "Tauri command sii_submit_sidecar_preflight is wired from the UI."
+    },
+    {
+      "id": "invoke:ticketbai_submit_sidecar_preflight",
+      "ok": true,
+      "detail": "Tauri command ticketbai_submit_sidecar_preflight is wired from the UI."
+    },
+    {
+      "id": "invoke:audit_list",
+      "ok": true,
+      "detail": "Tauri command audit_list is wired from the UI."
+    },
+    {
+      "id": "invoke:fiscal_record_list",
+      "ok": true,
+      "detail": "Tauri command fiscal_record_list is wired from the UI."
+    },
+    {
+      "id": "invoke:fiscal_chain_verify",
+      "ok": true,
+      "detail": "Tauri command fiscal_chain_verify is wired from the UI."
+    },
+    {
+      "id": "invoke:backup_export",
+      "ok": true,
+      "detail": "Tauri command backup_export is wired from the UI."
+    },
+    {
+      "id": "invoke:backup_restore",
+      "ok": true,
+      "detail": "Tauri command backup_restore is wired from the UI."
+    },
+    {
+      "id": "invoke:verifactu_xml_draft_export",
+      "ok": true,
+      "detail": "Tauri command verifactu_xml_draft_export is wired from the UI."
+    },
+    {
+      "id": "invoke:verifactu_xml_anulacion_draft_export",
+      "ok": true,
+      "detail": "Tauri command verifactu_xml_anulacion_draft_export is wired from the UI."
+    },
+    {
+      "id": "invoke:verifactu_submission_prepare",
+      "ok": true,
+      "detail": "Tauri command verifactu_submission_prepare is wired from the UI."
+    },
+    {
+      "id": "invoke:verifactu_xades_sidecar_preflight",
+      "ok": true,
+      "detail": "Tauri command verifactu_xades_sidecar_preflight is wired from the UI."
+    },
+    {
+      "id": "invoke:verifactu_xades_sidecar_sign",
+      "ok": true,
+      "detail": "Tauri command verifactu_xades_sidecar_sign is wired from the UI."
+    },
+    {
+      "id": "invoke:verifactu_transport_preflight",
+      "ok": true,
+      "detail": "Tauri command verifactu_transport_preflight is wired from the UI."
+    },
+    {
+      "id": "invoke:verifactu_submit_sidecar_preflight",
+      "ok": true,
+      "detail": "Tauri command verifactu_submit_sidecar_preflight is wired from the UI."
+    },
+    {
+      "id": "invoke:verifactu_submit_sidecar_invoke",
+      "ok": true,
+      "detail": "Tauri command verifactu_submit_sidecar_invoke is wired from the UI."
+    },
+    {
+      "id": "invoke:rectification_advice",
+      "ok": true,
+      "detail": "Tauri command rectification_advice is wired from the UI."
+    },
+    {
+      "id": "label:Rellenar demo",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Rellenar demo' exists."
+    },
+    {
+      "id": "label:Onboarding inicial",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Onboarding inicial' exists."
+    },
+    {
+      "id": "label:Carpeta export",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Carpeta export' exists."
+    },
+    {
+      "id": "label:Fiscalidad local",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Fiscalidad local' exists."
+    },
+    {
+      "id": "label:Guardar configuración básica",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Guardar configuración básica' exists."
+    },
+    {
+      "id": "label:Elegir carpeta",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Elegir carpeta' exists."
+    },
+    {
+      "id": "label:Empresa emisora",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Empresa emisora' exists."
+    },
+    {
+      "id": "label:Empresa activa",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Empresa activa' exists."
+    },
+    {
+      "id": "label:Nueva empresa",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Nueva empresa' exists."
+    },
+    {
+      "id": "label:Guardar emisor",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Guardar emisor' exists."
+    },
+    {
+      "id": "label:Cliente activo",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Cliente activo' exists."
+    },
+    {
+      "id": "label:Nuevo cliente",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Nuevo cliente' exists."
+    },
+    {
+      "id": "label:Guardar cliente",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Guardar cliente' exists."
+    },
+    {
+      "id": "label:Catalogo productos/servicios",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Catalogo productos/servicios' exists."
+    },
+    {
+      "id": "label:Producto activo",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Producto activo' exists."
+    },
+    {
+      "id": "label:Nuevo producto",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Nuevo producto' exists."
+    },
+    {
+      "id": "label:SKU producto",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'SKU producto' exists."
+    },
+    {
+      "id": "label:Nombre producto",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Nombre producto' exists."
+    },
+    {
+      "id": "label:Precio producto EUR",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Precio producto EUR' exists."
+    },
+    {
+      "id": "label:Guardar producto",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Guardar producto' exists."
+    },
+    {
+      "id": "label:Usar en linea",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Usar en linea' exists."
+    },
+    {
+      "id": "label:Series de facturacion",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Series de facturacion' exists."
+    },
+    {
+      "id": "label:Guardar serie",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Guardar serie' exists."
+    },
+    {
+      "id": "label:Usar VENDI2026XX",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Usar VENDI2026XX' exists."
+    },
+    {
+      "id": "label:Usar AL-XXX",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Usar AL-XXX' exists."
+    },
+    {
+      "id": "label:Usar C-XXX",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Usar C-XXX' exists."
+    },
+    {
+      "id": "label:Usar I-XXX",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Usar I-XXX' exists."
+    },
+    {
+      "id": "label:Editor de factura",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Editor de factura' exists."
+    },
+    {
+      "id": "label:Serie de esta factura",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Serie de esta factura' exists."
+    },
+    {
+      "id": "label:Añadir linea",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Añadir linea' exists."
+    },
+    {
+      "id": "label:Dto %",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Dto %' exists."
+    },
+    {
+      "id": "label:IRPF %",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'IRPF %' exists."
+    },
+    {
+      "id": "label:Crear borrador",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Crear borrador' exists."
+    },
+    {
+      "id": "label:Emitir factura",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Emitir factura' exists."
+    },
+    {
+      "id": "label:Sugerir",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Sugerir' exists."
+    },
+    {
+      "id": "label:Emitir rectificativa",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Emitir rectificativa' exists."
+    },
+    {
+      "id": "label:Buscar facturas",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Buscar facturas' exists."
+    },
+    {
+      "id": "label:Limpiar filtros",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Limpiar filtros' exists."
+    },
+    {
+      "id": "label:Buscar texto factura",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Buscar texto factura' exists."
+    },
+    {
+      "id": "label:Filtro empresa factura",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Filtro empresa factura' exists."
+    },
+    {
+      "id": "label:Filtro cliente factura",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Filtro cliente factura' exists."
+    },
+    {
+      "id": "label:Filtro estado factura",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Filtro estado factura' exists."
+    },
+    {
+      "id": "label:Filtro tipo factura",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Filtro tipo factura' exists."
+    },
+    {
+      "id": "label:Pagina facturas",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Pagina facturas' exists."
+    },
+    {
+      "id": "label:Anterior facturas",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Anterior facturas' exists."
+    },
+    {
+      "id": "label:Siguiente facturas",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Siguiente facturas' exists."
+    },
+    {
+      "id": "label:Pagina auditoria",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Pagina auditoria' exists."
+    },
+    {
+      "id": "label:Anterior auditoria",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Anterior auditoria' exists."
+    },
+    {
+      "id": "label:Siguiente auditoria",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Siguiente auditoria' exists."
+    },
+    {
+      "id": "label:Pagina fiscal",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Pagina fiscal' exists."
+    },
+    {
+      "id": "label:Anterior fiscal",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Anterior fiscal' exists."
+    },
+    {
+      "id": "label:Siguiente fiscal",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Siguiente fiscal' exists."
+    },
+    {
+      "id": "label:Auditoria fiscal local",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Auditoria fiscal local' exists."
+    },
+    {
+      "id": "label:Verificar cadena",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Verificar cadena' exists."
+    },
+    {
+      "id": "label:Resumen auditoria fiscal",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Resumen auditoria fiscal' exists."
+    },
+    {
+      "id": "label:Estado cadena",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Estado cadena' exists."
+    },
+    {
+      "id": "label:Registros fiscales verificados",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Registros fiscales verificados' exists."
+    },
+    {
+      "id": "label:Incidencias cadena",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Incidencias cadena' exists."
+    },
+    {
+      "id": "label:Ultimo hash por empresa",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Ultimo hash por empresa' exists."
+    },
+    {
+      "id": "label:Empresas con hash final",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Empresas con hash final' exists."
+    },
+    {
+      "id": "label:Ruta informe auditoria fiscal",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Ruta informe auditoria fiscal' exists."
+    },
+    {
+      "id": "label:Elegir auditoria",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Elegir auditoria' exists."
+    },
+    {
+      "id": "label:Ruta backup SQLite",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Ruta backup SQLite' exists."
+    },
+    {
+      "id": "label:Elegir backup",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Elegir backup' exists."
+    },
+    {
+      "id": "label:Ruta restore backup",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Ruta restore backup' exists."
+    },
+    {
+      "id": "label:Elegir restore",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Elegir restore' exists."
+    },
+    {
+      "id": "label:Ruta PDF factura",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Ruta PDF factura' exists."
+    },
+    {
+      "id": "label:Elegir PDF",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Elegir PDF' exists."
+    },
+    {
+      "id": "label:Ruta JSON factura",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Ruta JSON factura' exists."
+    },
+    {
+      "id": "label:Elegir JSON",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Elegir JSON' exists."
+    },
+    {
+      "id": "label:Ruta CSV facturas",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Ruta CSV facturas' exists."
+    },
+    {
+      "id": "label:Elegir CSV",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Elegir CSV' exists."
+    },
+    {
+      "id": "label:Ruta XML VERIFACTU",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Ruta XML VERIFACTU' exists."
+    },
+    {
+      "id": "label:Elegir XML",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Elegir XML' exists."
+    },
+    {
+      "id": "label:Ruta XML anulacion",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Ruta XML anulacion' exists."
+    },
+    {
+      "id": "label:Elegir anulacion",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Elegir anulacion' exists."
+    },
+    {
+      "id": "label:Ruta XML firmado",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Ruta XML firmado' exists."
+    },
+    {
+      "id": "label:Elegir firmado",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Elegir firmado' exists."
+    },
+    {
+      "id": "label:Exportar PDF",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Exportar PDF' exists."
+    },
+    {
+      "id": "label:Exportar JSON",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Exportar JSON' exists."
+    },
+    {
+      "id": "label:Exportar CSV",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Exportar CSV' exists."
+    },
+    {
+      "id": "label:Exportar auditoria",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Exportar auditoria' exists."
+    },
+    {
+      "id": "label:Canales ContaPro sidecar",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Canales ContaPro sidecar' exists."
+    },
+    {
+      "id": "label:Resumen canales sidecar",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Resumen canales sidecar' exists."
+    },
+    {
+      "id": "label:Recargar sidecar",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Recargar sidecar' exists."
+    },
+    {
+      "id": "label:Libro SII",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Libro SII' exists."
+    },
+    {
+      "id": "label:Endpoint SII",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Endpoint SII' exists."
+    },
+    {
+      "id": "label:URL sidecar SII",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'URL sidecar SII' exists."
+    },
+    {
+      "id": "label:Preflight SII sidecar",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Preflight SII sidecar' exists."
+    },
+    {
+      "id": "label:Territorio TicketBAI",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Territorio TicketBAI' exists."
+    },
+    {
+      "id": "label:Endpoint TicketBAI",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Endpoint TicketBAI' exists."
+    },
+    {
+      "id": "label:URL sidecar TicketBAI",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'URL sidecar TicketBAI' exists."
+    },
+    {
+      "id": "label:Preflight TicketBAI sidecar",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Preflight TicketBAI sidecar' exists."
+    },
+    {
+      "id": "label:Validar restore",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Validar restore' exists."
+    },
+    {
+      "id": "label:Exportar XML",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Exportar XML' exists."
+    },
+    {
+      "id": "label:Exportar anulacion",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Exportar anulacion' exists."
+    },
+    {
+      "id": "label:Preparar",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Preparar' exists."
+    },
+    {
+      "id": "label:Preflight XAdES",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Preflight XAdES' exists."
+    },
+    {
+      "id": "label:Firmar XAdES",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Firmar XAdES' exists."
+    },
+    {
+      "id": "label:Preflight AEAT",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Preflight AEAT' exists."
+    },
+    {
+      "id": "label:Preflight envio sidecar",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Preflight envio sidecar' exists."
+    },
+    {
+      "id": "label:Enviar via sidecar",
+      "ok": true,
+      "detail": "Visible fiscal workflow label 'Enviar via sidecar' exists."
+    },
+    {
+      "id": "guard:disabled={!s.canDraft || s.draftSaving || busy || Boolean(s.issued) || uncertain || !amountSafe}",
+      "ok": true,
+      "detail": "UI guard 'disabled={!s.canDraft || s.draftSaving || busy || Boolean(s.issued) || uncertain || !amountSafe}' exists."
+    },
+    {
+      "id": "guard:disabled={!onboardingReady}",
+      "ok": true,
+      "detail": "UI guard 'disabled={!onboardingReady}' exists."
+    },
+    {
+      "id": "guard:disabled={!s.canIssue || s.draftSaving || busy || Boolean(s.issued) || !amountSafe}",
+      "ok": true,
+      "detail": "UI guard 'disabled={!s.canIssue || s.draftSaving || busy || Boolean(s.issued) || !amountSafe}' exists."
+    },
+    {
+      "id": "guard:disabled={!canRectify || busy}",
+      "ok": true,
+      "detail": "UI guard 'disabled={!canRectify || busy}' exists."
+    },
+    {
+      "id": "guard:disabled={!canExportXml}",
+      "ok": true,
+      "detail": "UI guard 'disabled={!canExportXml}' exists."
+    },
+    {
+      "id": "guard:disabled={!xmlResult && !cancelXmlResult}",
+      "ok": true,
+      "detail": "UI guard 'disabled={!xmlResult && !cancelXmlResult}' exists."
+    },
+    {
+      "id": "guard:disabled={!submission}",
+      "ok": true,
+      "detail": "UI guard 'disabled={!submission}' exists."
+    },
+    {
+      "id": "guard:disabled={!submission || !xadesPreflight?.ready}",
+      "ok": true,
+      "detail": "UI guard 'disabled={!submission || !xadesPreflight?.ready}' exists."
+    },
+    {
+      "id": "guard:disabled={!submission || submission.signature_status !== \"signed_xades\"}",
+      "ok": true,
+      "detail": "UI guard 'disabled={!submission || submission.signature_status !== \"signed_xades\"}' exists."
+    },
+    {
+      "id": "guard:disabled={!submission || !submitPreflight?.ready}",
+      "ok": true,
+      "detail": "UI guard 'disabled={!submission || !submitPreflight?.ready}' exists."
+    },
+    {
+      "id": "limit:sin firma ni envio",
+      "ok": true,
+      "detail": "Visible limit 'sin firma ni envio' exists."
+    },
+    {
+      "id": "limit:external_blocked",
+      "ok": true,
+      "detail": "Visible limit 'external_blocked' exists."
+    },
+    {
+      "id": "limit:Pre-MVP local-first",
+      "ok": true,
+      "detail": "Visible limit 'Pre-MVP local-first' exists."
+    },
+    {
+      "id": "limit:Configura continuar numeracion anterior",
+      "ok": true,
+      "detail": "Visible limit 'Configura continuar numeracion anterior' exists."
+    },
+    {
+      "id": "limit:discount_rate_basis_points",
+      "ok": true,
+      "detail": "Visible limit 'discount_rate_basis_points' exists."
+    },
+    {
+      "id": "limit:pendiente de XAdES/envio",
+      "ok": true,
+      "detail": "Visible limit 'pendiente de XAdES/envio' exists."
+    },
+    {
+      "id": "limit:no llama al sidecar",
+      "ok": true,
+      "detail": "Visible limit 'no llama al sidecar' exists."
+    },
+    {
+      "id": "limit:exige XAdES real",
+      "ok": true,
+      "detail": "Visible limit 'exige XAdES real' exists."
+    },
+    {
+      "id": "limit:La causa jurídica la decides tú",
+      "ok": true,
+      "detail": "Visible limit 'La causa jurídica la decides tú' exists."
+    },
+    {
+      "id": "limit:no llama a AEAT",
+      "ok": true,
+      "detail": "Visible limit 'no llama a AEAT' exists."
+    },
+    {
+      "id": "limit:sin llamada AEAT real ni CSV",
+      "ok": true,
+      "detail": "Visible limit 'sin llamada AEAT real ni CSV' exists."
+    },
+    {
+      "id": "limit:gate usa sidecar falso",
+      "ok": true,
+      "detail": "Visible limit 'gate usa sidecar falso' exists."
+    },
+    {
+      "id": "limit:Importado de ContaPro",
+      "ok": true,
+      "detail": "Visible limit 'Importado de ContaPro' exists."
+    },
+    {
+      "id": "limit:sin SOAP AEAT",
+      "ok": true,
+      "detail": "Visible limit 'sin SOAP AEAT' exists."
+    },
+    {
+      "id": "limit:homologacion foral sigue bloqueada",
+      "ok": true,
+      "detail": "Visible limit 'homologacion foral sigue bloqueada' exists."
+    }
+  ]
+}
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

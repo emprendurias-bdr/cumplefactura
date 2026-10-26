@@ -75,6 +75,8 @@ export type InvoiceSummary = {
   rectification_reason_code?: string | null;
   rectification_method?: string | null;
   total_cents: number;
+  taxable_base_cents?: number;
+  issued_at?: string | null;
   fiscal_hash?: string | null;
 };
 export type AuditSummary = {

@@ -1,0 +1,9 @@
+{
+  "source": "src/shared/forms.ts",
+  "baseline": "cc4341e",
+  "functions": 23,
+  "changed": [
+    "cents"
+  ],
+  "limit": "Only cents presentation now delegates to the shared canonical formatter. Input parsers and totals are unchanged."
+}

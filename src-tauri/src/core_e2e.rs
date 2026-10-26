@@ -204,6 +204,30 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
     )
     .expect("Fiscal audit export");
 
+    assert_eq!(
+        crate::commands::preview::render_preview(&conn, &invoice_data.id).expect("PDF preview"),
+        fs::read(&pdf_path).expect("original PDF")
+    );
+
+    let presented = serde_json::to_value(crate::commands::invoices::presentation_rows(
+        db::list_invoices(&conn).expect("UI rows"),
+    ))
+    .expect("UI JSON");
+    let presented_invoice = presented
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == invoice_data.id)
+        .expect("issued UI row");
+    assert_eq!(
+        presented_invoice["taxable_base_cents"],
+        invoice_data.taxable_base_cents
+    );
+    assert_eq!(
+        presented_invoice["issued_at"],
+        serde_json::json!(invoice_data.issued_at)
+    );
+
     let mut package = submission::prepare_unsigned_verifactu_package(
         issued.id.clone(),
         "pending".to_string(),

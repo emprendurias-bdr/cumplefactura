@@ -1,0 +1,27 @@
+✔ a draft confirms none of the four fiscal steps (1.928181ms)
+✔ an issued invoice with its actual alta confirms only the first two steps (0.326002ms)
+✔ foreign or mismatched records cannot confirm the alta (0.244459ms)
+✔ preflight-like replies and foreign invoice replies never confirm sending or acceptance (0.266212ms)
+✔ even an actual external call is not acceptance when no AEAT response exists (0.347455ms)
+✔ a confirmed matching response carries its CSV and text (0.235375ms)
+✔ a rejection is shown with text and never labelled accepted (0.171259ms)
+✔ a stale export or XML digest cannot promote fiscal steps (0.260453ms)
+✔ a response cannot be reassigned to an annulled or rectified business state without record-specific evidence (0.389658ms)
+✔ uses the native civil issue date without reinterpreting it in the host timezone (1.48357ms)
+✔ never invents a date for a draft or malformed native value (0.252151ms)
+✔ formats native integer cents with the shared Spanish grouping and decimals (1.222195ms)
+✔ does not round away a cent when formatting a large safe integer (0.227704ms)
+✔ marks unsafe or nonfinite amounts instead of displaying a rounded fiscal value (0.698274ms)
+✔ keeps real zero distinct from a missing value (0.202095ms)
+✔ shows the native preview in the same format used by XML: series-number (0.710532ms)
+✔ does not reuse a preview from a previous company, series or fiscal year (0.156125ms)
+✔ does not invent a sequence number before a safe native preview exists (0.13938ms)
+✔ in-page skip link preserves the selected application route (0.770032ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 204.554456

@@ -7,11 +7,13 @@ import {
 } from "@bdr/ui";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CustomerCompanyForms } from "../features/customers/CustomerCompanyForms";
-import { Onboarding } from "../features/onboarding/Onboarding";
+import { FirstRun } from "../features/onboarding/FirstRun";
+import { RuntimeStatus } from "../features/verifactu/RuntimeStatus";
+import { InvoiceLists } from "../features/invoices/InvoiceLists";
 import { ProductCatalog } from "../features/products/ProductCatalog";
 import { ExportsSettings } from "../features/settings/ExportsSettings";
 import { SeriesSettings } from "../features/settings/SeriesSettings";
-import { FiscalAudit } from "../features/verifactu/FiscalAudit";
+import { VerifactuScreen } from "../features/verifactu/VerifactuScreen";
 import { SidecarChannels } from "../features/verifactu/SidecarChannels";
 import { routeFromHash } from "./routes";
 import { invoke } from "./tauri";
@@ -109,17 +111,14 @@ export function SuiteShell({
   }
 
   const view =
-    route === "facturas" ? (
+    route === "facturas" || route === "facturas/nueva" ? (
       children
     ) : route === "clientes" ? (
       <CustomerCompanyForms />
     ) : route === "productos" ? (
       <ProductCatalog />
     ) : route === "verifactu" ? (
-      <>
-        <FiscalAudit />
-        <SidecarChannels />
-      </>
+      <VerifactuScreen />
     ) : route === "ajustes" ? (
       <>
         <h1>
@@ -132,9 +131,13 @@ export function SuiteShell({
           onDensityChange={(v) => void appearance(theme, v)}
         />
         <p role="status">{prefStatus}</p>
-        <Onboarding />
-        <SeriesSettings />
-        <ExportsSettings />
+        <FirstRun />
+        <details className="technical-details">
+          <summary>Herramientas locales y exportaciones</summary>
+          <RuntimeStatus />
+          <ExportsSettings />
+          <InvoiceLists />
+        </details>
       </>
     ) : (
       <EmptyState
@@ -169,7 +172,7 @@ export function SuiteShell({
       navigation={areas.map(([id, label]) => ({
         label,
         href: `#/${id}`,
-        active: route === id,
+        active: route.split("/")[0] === id,
       }))}
       onSearch={() => setSearch(true)}
     >

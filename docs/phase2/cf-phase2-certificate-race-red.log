@@ -1,0 +1,44 @@
+ExpectError: expect(locator).toContainText(expected) failed
+
+Locator: getByRole('button', { name: 'Paso 4: Certificado y carpeta', exact: true })
+Expected substring: "Pendiente"
+Received string:    "4 · Certificado y carpeta · Comprobado"
+Timeout: 5000ms
+
+Call log:
+  - Expect "to.have.text" with timeout 5000ms
+  - waiting for getByRole('button', { name: 'Paso 4: Certificado y carpeta', exact: true })
+    14 × locator resolved to <button type="button" aria-label="Paso 4: Certificado y carpeta">…</button>
+       - unexpected value "4 · Certificado y carpeta · Comprobado"
+
+    at captureRawStack (/workspace/cumplefactura/node_modules/playwright-core/lib/coreBundle.js:3130:17)
+    at callMatcherAsStep (/workspace/cumplefactura/node_modules/playwright/lib/matchers/expect.js:12873:57)
+    at Object.toContainText (/workspace/cumplefactura/node_modules/playwright/lib/matchers/expect.js:12863:23)
+    at /workspace/cumplefactura/tools/verify-phase2-browser.mjs:272:98 {
+  matcherResult: {
+    name: 'toContainText',
+    expected: 'Pendiente',
+    message: 'expect(locator).toContainText(expected) failed\n' +
+      '\n' +
+      "Locator: getByRole('button', { name: 'Paso 4: Certificado y carpeta', exact: true })\n" +
+      'Expected substring: "Pendiente"\n' +
+      'Received string:    "4 · Certificado y carpeta · Comprobado"\n' +
+      'Timeout: 5000ms\n' +
+      '\n' +
+      'Call log:\n' +
+      '  - Expect "to.have.text" with timeout 5000ms\n' +
+      "  - waiting for getByRole('button', { name: 'Paso 4: Certificado y carpeta', exact: true })\n" +
+      '    14 × locator resolved to <button type="button" aria-label="Paso 4: Certificado y carpeta">…</button>\n' +
+      '       - unexpected value "4 · Certificado y carpeta · Comprobado"\n',
+    pass: false,
+    actual: '4 · Certificado y carpeta · Comprobado',
+    log: [
+      '  - Expect "to.have.text" with timeout 5000ms',
+      "  - waiting for getByRole('button', { name: 'Paso 4: Certificado y carpeta', exact: true })",
+      '    14 × locator resolved to <button type="button" aria-label="Paso 4: Certificado y carpeta">…</button>',
+      '       - unexpected value "4 · Certificado y carpeta · Comprobado"'
+    ],
+    timeout: 5000,
+    ariaSnapshot: `- 'button "Paso 4: Certificado y carpeta"': 4 · Certificado y carpeta · Comprobado`
+  }
+}

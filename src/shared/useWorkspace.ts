@@ -1,5 +1,5 @@
 import { open as openDialog,save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { FormEvent,useEffect,useMemo,useState } from "react";
+import { FormEvent,useEffect,useMemo,useRef,useState } from "react";
 import { companyToForm,customerToForm,editorTotals,emptyCompanyForm,emptyCustomerForm,emptyInvoiceFilters,emptyProductForm,eurosToCents,isInvoiceLineReady,joinPath,lineToInput,listPagination,newInvoiceLine,optionalNumber,optionalText,percentToBasisPoints,productToForm,productToInvoiceLine,resolvedSeriesCode,timestamp } from './forms';
 import { invoke } from "./tauri";
 import type { AeatTransportPreflight,AppDefaults,AppSettings,AuditSummary,BackupRestoreResult,BackupResult,Company,CompanyForm,Customer,CustomerForm,ExportResult,FiscalChainVerification,FiscalRecordSummary,ImportedSidecarCapabilities,Invoice,InvoiceLineForm,InvoiceSeriesConfig,InvoiceSummary,IssuedInvoice,NextNumberPreview,Product,ProductForm,RectificationAdvice,SiiSidecarPreflight,SubmissionPreparation,TicketBaiSidecarPreflight,VerifactuSubmitSidecarInvocation,VerifactuSubmitSidecarPreflight,VerifactuXmlResult,XadesSidecarPreflight,XadesSidecarSignature } from './types';
@@ -11,6 +11,9 @@ export function useWorkspace(){
   const [companyForm, setCompanyForm] = useState<CompanyForm>(emptyCompanyForm());
   const [customerForm, setCustomerForm] = useState<CustomerForm>(emptyCustomerForm());
   const [productForm, setProductForm] = useState<ProductForm>(emptyProductForm());
+  const draftRequestInFlight = useRef(false);
+  const draftRevision = useRef(0);
+  const [draftSaving, setDraftSaving] = useState(false);
   const [draft, setDraft] = useState<Invoice | null>(null);
   const [issued, setIssued] = useState<IssuedInvoice | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -81,7 +84,8 @@ export function useWorkspace(){
   const [xadesPreflight, setXadesPreflight] = useState<XadesSidecarPreflight | null>(null);
   const [xadesSignature, setXadesSignature] = useState<XadesSidecarSignature | null>(null);
   const [transportPreflight, setTransportPreflight] = useState<AeatTransportPreflight | null>(null);
-  const [submitPreflight, setSubmitPreflight] = useState<VerifactuSubmitSidecarPreflight | null>(null);
+  const [storedSubmitPreflight, setSubmitPreflight] = useState<VerifactuSubmitSidecarPreflight | null>(null);
+  const [checkedSubmitScope, setCheckedSubmitScope] = useState<string | null>(null);
   const [submitInvocation, setSubmitInvocation] = useState<VerifactuSubmitSidecarInvocation | null>(null);
   const [sidecarCapabilities, setSidecarCapabilities] = useState<ImportedSidecarCapabilities | null>(null);
   const [siiBook, setSiiBook] = useState("issued");
@@ -92,6 +96,8 @@ export function useWorkspace(){
   const [ticketbaiEndpoint, setTicketbaiEndpoint] = useState("https://batuz.eus/TicketBai/submit");
   const [ticketbaiSidecarUrl, setTicketbaiSidecarUrl] = useState("http://127.0.0.1:8000/ticketbai/submit-preflight");
   const [ticketbaiPreflight, setTicketbaiPreflight] = useState<TicketBaiSidecarPreflight | null>(null);
+  const submitScope = JSON.stringify([company?.id, xadesCertRef, xadesSidecarUrl, submitSidecarUrl, invokeSidecarUrl, aeatEndpoint, aeatEndpointName, submission?.invoice_id, submission?.export_id, submission?.xml_sha256, submission?.signature_status]);
+  const submitPreflight = checkedSubmitScope === submitScope ? storedSubmitPreflight : null;
   const invoiceLinesReady = invoiceLines.length > 0 && invoiceLines.every(isInvoiceLineReady);
   const invoiceTotals = useMemo(() => editorTotals(invoiceLines), [invoiceLines]);
   const canDraft = Boolean(company && customer && invoiceLinesReady);
@@ -102,6 +108,9 @@ export function useWorkspace(){
   const canRectify = Boolean(rectifiableInvoice);
   const fiscalYear = seriesFiscalYear || new Date().getFullYear();
   const activeSeries = selectedSeries?.resolved_series ?? company?.default_series ?? "A";
+  const draftEditorKey = JSON.stringify([company?.id, customer?.id, fiscalYear, activeSeries, defaultTerritoryFlags, invoiceLines, draftRevision.current]);
+  const currentDraftEditorKey = useRef(draftEditorKey);
+  currentDraftEditorKey.current = draftEditorKey;
   const activeSeriesPreview = selectedSeries?.preview ?? `${activeSeries}-${String(nextNumber).padStart(3, "0")}`;
   const onboardingSteps = [
     { label: "Empresa", ok: Boolean(company) },
@@ -295,10 +304,9 @@ export function useWorkspace(){
   function selectCompany(companyId: string) {
     const selected = companies.find((item) => item.id === companyId) ?? null;
     if (!selected) return;
+    markInvoiceEditorDirty();
     setCompany(selected);
     setCompanyForm(companyToForm(selected));
-    setDraft(null);
-    setIssued(null);
     void loadSeries(selected);
     void loadProducts(selected.id);
   }
@@ -306,10 +314,9 @@ export function useWorkspace(){
   function selectCustomer(customerId: string) {
     const selected = customers.find((item) => item.id === customerId) ?? null;
     if (!selected) return;
+    markInvoiceEditorDirty();
     setCustomer(selected);
     setCustomerForm(customerToForm(selected));
-    setDraft(null);
-    setIssued(null);
   }
 
   function selectProduct(productId: string) {
@@ -320,6 +327,7 @@ export function useWorkspace(){
   }
 
   function markInvoiceEditorDirty() {
+    draftRevision.current += 1;
     setDraft(null);
     setIssued(null);
   }
@@ -581,29 +589,42 @@ export function useWorkspace(){
 
   async function createDraft(event: FormEvent) {
     event.preventDefault();
-    if (!company || !customer) return;
+    if (draftRequestInFlight.current || !company || !customer) return;
     const lines = currentInvoiceLineInputs();
     if (!lines) return;
-    const created = await run("Crear borrador", () =>
-      invoke<Invoice>("invoice_draft_create", {
-        input: {
-          company_id: company.id,
-          customer_id: customer.id,
-          fiscal_year: fiscalYear,
-          series: activeSeries,
-          number: null,
-          kind: "Complete",
-          territory_flags: defaultTerritoryFlags,
-          rectifies_invoice_id: null,
-          rectification_reason_code: null,
-          rectification_method: null,
-          lines,
-        },
-      }),
-    );
-    if (created) {
-      setDraft(created);
-      await refreshData();
+    draftRequestInFlight.current = true;
+    setDraftSaving(true);
+    const requestKey = draftEditorKey;
+    try {
+      const created = await run("Crear borrador", () =>
+        invoke<Invoice>("invoice_draft_create", {
+          input: {
+            company_id: company.id,
+            customer_id: customer.id,
+            fiscal_year: fiscalYear,
+            series: activeSeries,
+            number: null,
+            kind: "Complete",
+            territory_flags: defaultTerritoryFlags,
+            rectifies_invoice_id: null,
+            rectification_reason_code: null,
+            rectification_method: null,
+            lines,
+          },
+        }),
+      );
+      if (created && requestKey !== currentDraftEditorKey.current) {
+        setDraft(null);
+        setStatus("Borrador guardado para una versión anterior. Revisa la lista; guarda de nuevo los datos actuales.");
+        return;
+      }
+      if (created) {
+        setDraft(created);
+        await refreshData();
+      }
+    } finally {
+      draftRequestInFlight.current = false;
+      setDraftSaving(false);
     }
   }
 
@@ -943,6 +964,7 @@ export function useWorkspace(){
       setStatus("Preflight envio sidecar: firma XAdES primero");
       return;
     }
+    const requestScope = submitScope;
     const result = await run("Preflight envio sidecar", () =>
       invoke<VerifactuSubmitSidecarPreflight>("verifactu_submit_sidecar_preflight", {
         input: {
@@ -958,7 +980,10 @@ export function useWorkspace(){
         },
       }),
     );
-    if (result) setSubmitPreflight(result);
+    if (result) {
+      setSubmitPreflight(result);
+      setCheckedSubmitScope(requestScope);
+    }
   }
 
   async function preflightSiiSidecar(event: FormEvent) {
@@ -1025,6 +1050,6 @@ export function useWorkspace(){
   }
 
   
-return {company,setCompany,customer,setCustomer,product,setProduct,companyForm,setCompanyForm,customerForm,setCustomerForm,productForm,setProductForm,draft,setDraft,issued,setIssued,companies,setCompanies,customers,setCustomers,products,setProducts,invoices,setInvoices,invoiceSearch,setInvoiceSearch,invoiceCompanyFilter,setInvoiceCompanyFilter,invoiceCustomerFilter,setInvoiceCustomerFilter,invoiceYearFilter,setInvoiceYearFilter,invoiceSeriesFilter,setInvoiceSeriesFilter,invoiceStatusFilter,setInvoiceStatusFilter,invoiceKindFilter,setInvoiceKindFilter,invoicePage,setInvoicePage,auditPage,setAuditPage,fiscalPage,setFiscalPage,audit,setAudit,fiscalRecords,setFiscalRecords,fiscalChain,setFiscalChain,status,setStatus,demoSeedEnabled,setDemoSeedEnabled,nextNumber,setNextNumber,seriesConfigs,setSeriesConfigs,selectedSeries,setSelectedSeries,seriesLabel,setSeriesLabel,seriesCode,setSeriesCode,seriesFiscalYear,setSeriesFiscalYear,seriesIncludeYear,setSeriesIncludeYear,seriesSeparator,setSeriesSeparator,seriesPadding,setSeriesPadding,seriesNextNumber,setSeriesNextNumber,invoiceLines,setInvoiceLines,appDefaults,setAppDefaults,appSettings,setAppSettings,exportDir,setExportDir,defaultTerritoryFlags,setDefaultTerritoryFlags,numberPreview,setNumberPreview,rectificationScenario,setRectificationScenario,rectificationReason,setRectificationReason,rectificationMethod,setRectificationMethod,rectificationAdvice,setRectificationAdvice,backupPath,setBackupPath,pdfPath,setPdfPath,xmlPath,setXmlPath,cancelXmlPath,setCancelXmlPath,signedXmlPath,setSignedXmlPath,jsonPath,setJsonPath,csvPath,setCsvPath,auditExportPath,setAuditExportPath,restorePath,setRestorePath,aeatEndpoint,setAeatEndpoint,aeatEndpointName,setAeatEndpointName,xadesCertRef,setXadesCertRef,xadesSidecarUrl,setXadesSidecarUrl,submitSidecarUrl,setSubmitSidecarUrl,invokeSidecarUrl,setInvokeSidecarUrl,backup,setBackup,restore,setRestore,pdfResult,setPdfResult,jsonResult,setJsonResult,csvResult,setCsvResult,auditExportResult,setAuditExportResult,xmlResult,setXmlResult,cancelXmlResult,setCancelXmlResult,submission,setSubmission,xadesPreflight,setXadesPreflight,xadesSignature,setXadesSignature,transportPreflight,setTransportPreflight,submitPreflight,setSubmitPreflight,submitInvocation,setSubmitInvocation,sidecarCapabilities,setSidecarCapabilities,siiBook,setSiiBook,siiEndpointName,setSiiEndpointName,siiSidecarUrl,setSiiSidecarUrl,siiPreflight,setSiiPreflight,ticketbaiTerritorio,setTicketbaiTerritorio,ticketbaiEndpoint,setTicketbaiEndpoint,ticketbaiSidecarUrl,setTicketbaiSidecarUrl,ticketbaiPreflight,setTicketbaiPreflight,invoiceLinesReady,invoiceTotals,canDraft,canIssue,issuedInvoiceId,rectifiableInvoice,canExportXml,canRectify,fiscalYear,activeSeries,activeSeriesPreview,onboardingSteps,onboardingReady,siiChannel,ticketbaiChannel,mvpSidecarChannels,deferredSidecarChannels,flowState,run,updateCompanyForm,updateCustomerForm,updateProductForm,applyExportDirPaths,pickExportDirectory,pickSavePath,pickRestoreFile,toggleTerritoryFlag,invoiceFiltersInput,newCompanyForm,newCustomerForm,newProductForm,fillDemoData,selectCompany,selectCustomer,selectProduct,markInvoiceEditorDirty,useProductInFirstLine,updateInvoiceLine,addInvoiceLine,removeInvoiceLine,currentInvoiceLineInputs,selectInvoiceSeries,refreshData,searchInvoices,clearInvoiceFilters,changeInvoicePage,changeAuditPage,changeFiscalPage,verifyFiscalChain,loadProducts,loadSeries,configureSeries,saveCompany,saveCustomer,saveProduct,createDraft,issueInvoice,exportBackup,exportPdf,exportJson,exportCsv,exportFiscalAudit,restoreBackup,exportXml,loadDefaults,saveOnboarding,previewNextNumber,adviseRectification,issueRectifyingInvoice,exportCancelXml,prepareSubmission,preflightXadesSidecar,signWithXadesSidecar,preflightAeatTransport,preflightSubmitSidecar,preflightSiiSidecar,preflightTicketBaiSidecar,invokeSubmitSidecar};
+return {company,setCompany,customer,setCustomer,product,setProduct,companyForm,setCompanyForm,customerForm,setCustomerForm,productForm,setProductForm,draftSaving,draft,setDraft,issued,setIssued,companies,setCompanies,customers,setCustomers,products,setProducts,invoices,setInvoices,invoiceSearch,setInvoiceSearch,invoiceCompanyFilter,setInvoiceCompanyFilter,invoiceCustomerFilter,setInvoiceCustomerFilter,invoiceYearFilter,setInvoiceYearFilter,invoiceSeriesFilter,setInvoiceSeriesFilter,invoiceStatusFilter,setInvoiceStatusFilter,invoiceKindFilter,setInvoiceKindFilter,invoicePage,setInvoicePage,auditPage,setAuditPage,fiscalPage,setFiscalPage,audit,setAudit,fiscalRecords,setFiscalRecords,fiscalChain,setFiscalChain,status,setStatus,demoSeedEnabled,setDemoSeedEnabled,nextNumber,setNextNumber,seriesConfigs,setSeriesConfigs,selectedSeries,setSelectedSeries,seriesLabel,setSeriesLabel,seriesCode,setSeriesCode,seriesFiscalYear,setSeriesFiscalYear,seriesIncludeYear,setSeriesIncludeYear,seriesSeparator,setSeriesSeparator,seriesPadding,setSeriesPadding,seriesNextNumber,setSeriesNextNumber,invoiceLines,setInvoiceLines,appDefaults,setAppDefaults,appSettings,setAppSettings,exportDir,setExportDir,defaultTerritoryFlags,setDefaultTerritoryFlags,numberPreview,setNumberPreview,rectificationScenario,setRectificationScenario,rectificationReason,setRectificationReason,rectificationMethod,setRectificationMethod,rectificationAdvice,setRectificationAdvice,backupPath,setBackupPath,pdfPath,setPdfPath,xmlPath,setXmlPath,cancelXmlPath,setCancelXmlPath,signedXmlPath,setSignedXmlPath,jsonPath,setJsonPath,csvPath,setCsvPath,auditExportPath,setAuditExportPath,restorePath,setRestorePath,aeatEndpoint,setAeatEndpoint,aeatEndpointName,setAeatEndpointName,xadesCertRef,setXadesCertRef,xadesSidecarUrl,setXadesSidecarUrl,submitSidecarUrl,setSubmitSidecarUrl,invokeSidecarUrl,setInvokeSidecarUrl,backup,setBackup,restore,setRestore,pdfResult,setPdfResult,jsonResult,setJsonResult,csvResult,setCsvResult,auditExportResult,setAuditExportResult,xmlResult,setXmlResult,cancelXmlResult,setCancelXmlResult,submission,setSubmission,xadesPreflight,setXadesPreflight,xadesSignature,setXadesSignature,transportPreflight,setTransportPreflight,submitPreflight,setSubmitPreflight,submitInvocation,setSubmitInvocation,sidecarCapabilities,setSidecarCapabilities,siiBook,setSiiBook,siiEndpointName,setSiiEndpointName,siiSidecarUrl,setSiiSidecarUrl,siiPreflight,setSiiPreflight,ticketbaiTerritorio,setTicketbaiTerritorio,ticketbaiEndpoint,setTicketbaiEndpoint,ticketbaiSidecarUrl,setTicketbaiSidecarUrl,ticketbaiPreflight,setTicketbaiPreflight,invoiceLinesReady,invoiceTotals,canDraft,canIssue,issuedInvoiceId,rectifiableInvoice,canExportXml,canRectify,fiscalYear,activeSeries,activeSeriesPreview,onboardingSteps,onboardingReady,siiChannel,ticketbaiChannel,mvpSidecarChannels,deferredSidecarChannels,flowState,run,updateCompanyForm,updateCustomerForm,updateProductForm,applyExportDirPaths,pickExportDirectory,pickSavePath,pickRestoreFile,toggleTerritoryFlag,invoiceFiltersInput,newCompanyForm,newCustomerForm,newProductForm,fillDemoData,selectCompany,selectCustomer,selectProduct,markInvoiceEditorDirty,useProductInFirstLine,updateInvoiceLine,addInvoiceLine,removeInvoiceLine,currentInvoiceLineInputs,selectInvoiceSeries,refreshData,searchInvoices,clearInvoiceFilters,changeInvoicePage,changeAuditPage,changeFiscalPage,verifyFiscalChain,loadProducts,loadSeries,configureSeries,saveCompany,saveCustomer,saveProduct,createDraft,issueInvoice,exportBackup,exportPdf,exportJson,exportCsv,exportFiscalAudit,restoreBackup,exportXml,loadDefaults,saveOnboarding,previewNextNumber,adviseRectification,issueRectifyingInvoice,exportCancelXml,prepareSubmission,preflightXadesSidecar,signWithXadesSidecar,preflightAeatTransport,preflightSubmitSidecar,preflightSiiSidecar,preflightTicketBaiSidecar,invokeSubmitSidecar};
 }
 export type Workspace=ReturnType<typeof useWorkspace>;

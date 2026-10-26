@@ -1,0 +1,37 @@
+{
+  "app": "CumpleFactura",
+  "generated_at": "2026-10-26T08:56:17.249Z",
+  "status": "passed",
+  "url": "http://127.0.0.1:1421",
+  "viewport": "1366x900",
+  "browser": "Playwright Chromium headless",
+  "browser_plugin_note": "Repeatable npm gate uses Playwright because MCP Browser cannot be invoked from npm scripts.",
+  "flow": "app loads -> create company/customer/series -> edit invoice line with discount/IRPF -> draft -> issue -> export VERI*FACTU XML -> prepare signature/submission package",
+  "checks": {
+    "page_identity": true,
+    "not_blank": true,
+    "framework_overlay_absent": true,
+    "console_health": true,
+    "interaction_proof": true,
+    "visible_limits": {
+      "initial": {
+        "noSignatureOrSend": true,
+        "fakeSidecar": true,
+        "externalBlocked": true,
+        "contaproImport": true
+      },
+      "final": {
+        "noAeatCsv": true,
+        "fakeSidecar": true
+      }
+    }
+  },
+  "screenshot_path": "/workspace/cumplefactura/tests/regulatory/evidence/browser-smoke-2026-10-26T08-56-12-924Z.png",
+  "latest_screenshot_path": "/workspace/cumplefactura/tests/regulatory/evidence/latest-browser-smoke.png",
+  "server_log_path": "/workspace/cumplefactura/tests/regulatory/evidence/browser-smoke-vite-2026-10-26T08-56-12-924Z.log",
+  "limits": [
+    "Browser smoke uses a local Tauri invoke mock.",
+    "It proves rendered UI workflow and visible limits only.",
+    "It does not prove Rust command execution, certificate-backed XAdES, SOAP AEAT transport or external acceptance."
+  ]
+}

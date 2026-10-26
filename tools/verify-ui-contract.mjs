@@ -5,8 +5,10 @@ import ts from "typescript";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const appPath = path.join(root, "src", "App.tsx");
-const sourceText = fs.readFileSync(appPath, "utf8");
-const sourceFile = ts.createSourceFile(appPath, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+function sourceFiles(dir) { return fs.readdirSync(dir, {withFileTypes:true}).flatMap(entry => entry.isDirectory() ? sourceFiles(path.join(dir,entry.name)) : /\.tsx?$/.test(entry.name) ? [path.join(dir,entry.name)] : []); }
+const sources = sourceFiles(path.join(root,'src')).map(file => ({file,text:fs.readFileSync(file,'utf8')}));
+const sourceText = sources.map(source=>source.text).join('\n');
+const sourceFilesAst = sources.map(source=>ts.createSourceFile(source.file,source.text,ts.ScriptTarget.Latest,true,source.file.endsWith('.tsx')?ts.ScriptKind.TSX:ts.ScriptKind.TS));
 
 const invokedCommands = new Set();
 
@@ -24,7 +26,7 @@ function visit(node) {
   ts.forEachChild(node, visit);
 }
 
-visit(sourceFile);
+sourceFilesAst.forEach(visit);
 
 const checks = [
   ...[
@@ -189,7 +191,7 @@ const checks = [
     "disabled={!submission || !submitPreflight?.ready}",
   ].map((snippet) => ({
     id: `guard:${snippet}`,
-    ok: sourceText.includes(snippet),
+    ok: sourceText.replace(/\s/g, "").includes(snippet.replace(/\s/g, "")),
     detail: `UI guard '${snippet}' exists.`,
   })),
   ...[

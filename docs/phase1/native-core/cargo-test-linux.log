@@ -1,0 +1,87 @@
+   Compiling cumplefactura v0.1.0 (/workspace/cumplefactura/src-tauri)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.72s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/cumplefactura_lib-2ab6fd345b31dcb6)
+
+running 67 tests
+test commands::preferences::tests::preferences_round_trip_without_overwriting_onboarding ... ok
+test db::tests::audit_events_are_append_only ... ok
+test db::tests::configures_invoice_series_and_initial_sequence ... ok
+test db::tests::backup_database_creates_sqlite_file ... ok
+test db::tests::fiscal_export_records_prepared_signature_package ... ok
+test db::tests::filters_invoices_by_series_kind_status_and_search ... ok
+test db::tests::fiscal_records_are_append_only ... ok
+test db::tests::fiscal_records_track_issued_and_voided_chain ... ok
+test db::tests::loads_invoice_pdf_data ... ok
+test db::tests::lists_persisted_records ... ok
+test db::tests::paginates_invoice_audit_and_fiscal_lists ... ok
+test db::tests::persists_app_settings_for_onboarding ... ok
+test db::tests::persists_company_customer_and_invoice_draft ... ok
+test db::tests::rectifying_invoice_marks_source_rectified_and_keeps_link ... ok
+test db::tests::rejects_series_next_number_not_after_existing_invoice ... ok
+test db::tests::updates_company_without_recreating_it ... ok
+test db::tests::reserves_invoice_numbers_by_company_year_and_series ... ok
+test domain::invoice::tests::draft_applies_line_discount_before_tax_and_withholding ... ok
+test domain::invoice::tests::draft_calculates_tax_and_withholding_totals ... ok
+test domain::invoice::tests::fiscal_hash_changes_when_number_changes ... ok
+test domain::invoice::tests::issue_requires_positive_number ... ok
+test domain::invoice::tests::rectifying_invoice_allows_negative_adjustment_line ... ok
+test domain::invoice::tests::rectifying_invoice_requires_reason_code_and_method ... ok
+test db::tests::upserts_and_lists_company_products ... ok
+test db::tests::upserts_customer_by_id_without_replace_delete ... ok
+test domain::invoice::tests::rectifying_invoice_requires_source_invoice ... ok
+test services::aeat_transport::tests::blocks_when_transport_flag_or_xades_are_missing ... ok
+test services::aeat_transport::tests::becomes_ready_for_allowed_endpoint_when_signed_and_enabled ... ok
+test services::aeat_transport::tests::blocks_unknown_endpoint_and_hash_mismatch ... ok
+test services::audit::tests::chain_hash_changes_when_previous_hash_changes ... ok
+test services::export::tests::validates_restore_source_extension ... ok
+test services::export::tests::writes_invoice_csv_without_overwriting ... ok
+test services::export::tests::writes_fiscal_audit_json_with_chain_verification ... ok
+test services::fiscal_chain::tests::detects_invoice_tampering_after_fiscal_record ... ok
+test services::pdf::tests::writes_minimal_pdf ... ok
+test services::rectification_advisor::tests::chooses_substitutive_method_for_full_replacement ... ok
+test services::rectification_advisor::tests::explicit_method_preference_wins_over_replacement_flag ... ok
+test services::rectification_advisor::tests::maps_declared_article_80_scenarios_to_r_codes ... ok
+test services::sidecar_channels::tests::imports_channel_statuses_from_contapro_readiness_shape ... ok
+test services::sidecar_channels::tests::sii_preflight_blocks_before_any_sidecar_call_without_flag_or_secret ... ok
+test services::sidecar_channels::tests::ticketbai_preflight_blocks_non_https_endpoint_before_sidecar_call ... ok
+test services::submission::tests::prepares_unsigned_package_with_sha256 ... ok
+test services::verifactu::tests::builds_rectifying_registro_alta_xml_shape ... ok
+test services::verifactu::tests::builds_registro_alta_xml_shape ... ok
+test services::verifactu::tests::builds_registro_anulacion_xml_shape ... ok
+test services::verifactu::tests::builds_substitutive_rectifying_registro_alta_xml_shape ... ok
+test services::verifactu::tests::calculates_official_aeat_chained_registro_alta_hash_example ... ok
+test services::verifactu::tests::calculates_official_aeat_first_registro_alta_hash_example ... ok
+test services::verifactu::tests::calculates_official_aeat_registro_anulacion_hash_example ... ok
+test services::fiscal_chain::tests::verifies_valid_alta_anulacion_chain ... ok
+test services::verifactu::tests::rejects_unissued_invoice ... ok
+test services::fiscal_chain::tests::detects_broken_previous_hash_link ... ok
+test services::verifactu::tests::links_previous_invoice_when_present ... ok
+test services::verifactu_submit_sidecar::tests::blocks_before_network_without_flag_secret_or_signed_xades ... ok
+test services::verifactu_submit_sidecar::tests::calls_sidecar_submit_preflight_with_hmac_without_raw_xml ... ok
+test services::verifactu_submit_sidecar::tests::becomes_ready_when_sidecar_reports_ready ... ok
+test services::verifactu_submit_sidecar::tests::invoke_blocks_before_network_without_flag_secret_or_signed_status ... ok
+test services::verifactu_submit_sidecar::tests::invoke_calls_sidecar_with_hmac_and_returns_redacted_status ... ok
+test services::xades_sidecar::tests::becomes_ready_for_local_sidecar_sign_xml_when_enabled ... ok
+test services::xades_sidecar::tests::blocks_unknown_sidecar_url_hash_mismatch_and_wrong_status ... ok
+test services::verifactu_submit_sidecar::tests::rejects_sidecar_response_that_reports_external_call ... ok
+test services::xades_sidecar::tests::blocks_when_flag_or_vault_ref_are_missing ... ok
+test services::xades_sidecar::tests::sign_exact_xml_blocks_without_flag_or_secret_before_network ... ok
+test services::verifactu_submit_sidecar::tests::invoke_rejects_response_without_external_call_report ... ok
+test services::xades_sidecar::tests::sign_exact_xml_calls_local_sidecar_with_hmac_and_writes_signed_xml ... ok
+test services::xades_sidecar::tests::sign_exact_xml_rejects_mock_signature_mode ... ok
+test core_e2e::real_sqlite_verifactu_core_workflow_generates_evidence ... ok
+
+test result: ok. 67 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.44s
+
+     Running unittests src/main.rs (src-tauri/target/debug/deps/cumplefactura-98e71c9f27ae7cfc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests cumplefactura_lib
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

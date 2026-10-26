@@ -1,0 +1,346 @@
+export type Company = {
+  id: string;
+  legal_name: string;
+  tax_id: string;
+  address: string;
+  postal_code: string;
+  municipality: string;
+  province: string;
+  country_code: string;
+  default_series: string;
+  created_at?: string;
+};
+export type InvoiceSeriesConfig = {
+  id: string;
+  company_id: string;
+  label: string;
+  series_code: string;
+  fiscal_year: number;
+  include_year: boolean;
+  separator: string;
+  padding: number;
+  next_number: number;
+  is_default: boolean;
+  active: boolean;
+  resolved_series: string;
+  preview: string;
+  created_at: string;
+};
+export type Customer = {
+  id: string;
+  display_name: string;
+  tax_id: string;
+  kind: string;
+  address: string;
+  postal_code: string;
+  municipality: string;
+  province: string;
+  country_code: string;
+  updated_at?: string;
+};
+export type Product = {
+  id: string;
+  company_id: string;
+  sku: string;
+  name: string;
+  description: string;
+  kind: string;
+  unit_price_cents: number;
+  tax_rate_basis_points: number;
+  withholding_rate_basis_points?: number | null;
+  discount_rate_basis_points?: number | null;
+  active: boolean;
+  updated_at: string;
+};
+export type Invoice = {
+  id: string;
+  series: string;
+  number?: number | null;
+  totals: { total_cents: number };
+};
+export type IssuedInvoice = {
+  invoice: Invoice;
+  fiscal_hash: string;
+  audit_hash: string;
+};
+export type InvoiceSummary = {
+  id: string;
+  company_id: string;
+  customer_id: string;
+  series: string;
+  number?: number | null;
+  kind: string;
+  status: string;
+  rectifies_invoice_id?: string | null;
+  rectification_reason_code?: string | null;
+  rectification_method?: string | null;
+  total_cents: number;
+  fiscal_hash?: string | null;
+};
+export type AuditSummary = {
+  id: string;
+  action: string;
+  actor: string;
+  hash: string;
+  occurred_at: string;
+};
+export type FiscalRecordSummary = {
+  id: string;
+  invoice_id: string;
+  record_type: string;
+  generated_at: string;
+  fiscal_hash: string;
+  previous_fiscal_hash?: string | null;
+  xml_path?: string | null;
+  status: string;
+};
+export type FiscalChainIssue = {
+  record_id: string;
+  invoice_id: string;
+  severity: string;
+  code: string;
+  message: string;
+};
+export type FiscalCompanyChainHead = {
+  company_id: string;
+  last_hash: string;
+};
+export type FiscalChainVerification = {
+  valid: boolean;
+  total_records: number;
+  issue_count: number;
+  last_hash_by_company: FiscalCompanyChainHead[];
+  issues: FiscalChainIssue[];
+};
+export type RectificationAdvice = {
+  reason_code: string;
+  method: string;
+  confidence: string;
+  source_refs: string[];
+  notes: string[];
+  warnings: string[];
+};
+export type BackupResult = {
+  target_path: string;
+  status: string;
+  notes: string[];
+};
+export type BackupRestoreResult = {
+  source_path: string;
+  status: string;
+  destructive_restore_performed: boolean;
+  notes: string[];
+};
+export type ExportResult = {
+  target_path: string;
+  status: string;
+  notes: string[];
+};
+export type AppDefaults = {
+  app_data_dir: string;
+  export_dir: string;
+  default_backup_path: string;
+  default_pdf_path: string;
+  default_verifactu_xml_path: string;
+  default_cancel_xml_path: string;
+  default_signed_xml_path: string;
+  default_json_export_path: string;
+  default_csv_export_path: string;
+  default_audit_export_path: string;
+  notes: string[];
+};
+export type AppSettings = {
+  export_dir?: string | null;
+  default_territory_flags: string[];
+  onboarding_completed: boolean;
+  updated_at: string;
+};
+export type NextNumberPreview = {
+  company_id: string;
+  fiscal_year: number;
+  series: string;
+  next_number: number;
+  source: string;
+};
+export type InvoiceLineForm = {
+  id: string;
+  description: string;
+  quantity: string;
+  unit_price_euros: string;
+  discount_rate_percent: string;
+  tax_rate_percent: string;
+  withholding_rate_percent: string;
+};
+export type InvoiceLineInput = {
+  description: string;
+  quantity: number;
+  unit_price_cents: number;
+  discount_rate_basis_points: number | null;
+  tax_rate_basis_points: number;
+  withholding_rate_basis_points: number | null;
+};
+export type CompanyForm = Omit<Company, "id" | "created_at">;
+export type CustomerForm = Omit<Customer, "id" | "updated_at">;
+export type ProductForm = {
+  sku: string;
+  name: string;
+  description: string;
+  kind: string;
+  unit_price_euros: string;
+  tax_rate_percent: string;
+  withholding_rate_percent: string;
+  discount_rate_percent: string;
+  active: boolean;
+};
+export type VerifactuXmlResult = {
+  target_path: string;
+  status: string;
+  xsd_validated: boolean;
+  notes: string[];
+};
+export type SubmissionPreparation = {
+  invoice_id: string;
+  export_id: string;
+  xml_path: string;
+  xml_sha256: string;
+  xml_bytes: number;
+  signature_status: string;
+  transmission_status: string;
+};
+export type AeatTransportPreflight = {
+  ready: boolean;
+  status: string;
+  endpoint_name: string;
+  endpoint_url: string;
+  xml_sha256: string;
+  xml_bytes: number;
+  external_call_performed: boolean;
+  blockers: string[];
+  warnings: string[];
+};
+export type XadesSidecarPreflight = {
+  ready: boolean;
+  status: string;
+  sidecar_url: string;
+  sidecar_endpoint: string;
+  xml_sha256: string;
+  xml_bytes: number;
+  certificate_ref_status: string;
+  current_signature_status: string;
+  signature_status_after_success: string;
+  external_call_performed: boolean;
+  blockers: string[];
+  warnings: string[];
+};
+export type XadesSidecarSignature = SubmissionPreparation & {
+  source_export_id: string;
+  source_xml_path: string;
+  source_xml_sha256: string;
+  xsd_validated_before_signature: boolean;
+  signature_mode: string;
+  certificate_source?: string | null;
+  sidecar_url: string;
+  sidecar_call_performed: boolean;
+  external_call_performed: boolean;
+  notes: string[];
+  warnings: string[];
+};
+export type VerifactuSubmitSidecarPreflight = {
+  ready: boolean;
+  status: string;
+  sidecar_url: string;
+  sidecar_endpoint: string;
+  endpoint_name: string;
+  xml_sha256: string;
+  xml_bytes: number;
+  certificate_ref_status: string;
+  current_signature_status: string;
+  wsdl_name?: string | null;
+  wsdl_sha256?: string | null;
+  operation_available: boolean;
+  endpoint_allowed: boolean;
+  transport_enabled: boolean;
+  soap_calls_enabled: boolean;
+  certificate_loaded: boolean;
+  certificate_source?: string | null;
+  certificate_days_remaining?: number | null;
+  sidecar_call_performed: boolean;
+  external_call_performed: boolean;
+  blockers: string[];
+  warnings: string[];
+};
+export type VerifactuSubmitSidecarInvocation = SubmissionPreparation & {
+  source_export_id: string;
+  sidecar_url: string;
+  sidecar_endpoint: string;
+  endpoint_name: string;
+  wsdl_name: string;
+  operation: string;
+  status: string;
+  csv?: string | null;
+  estado_registro?: string | null;
+  codigo_error?: string | null;
+  descripcion_error?: string | null;
+  transport_mode: string;
+  certificate_source: string;
+  sidecar_call_performed: boolean;
+  external_call_performed: boolean;
+  notes: string[];
+  warnings: string[];
+};
+export type ImportedSidecarChannel = {
+  channel: string;
+  status: string;
+  source: string;
+  blockers: string[];
+  mvp_importable: boolean;
+  acceptance_status?: string | null;
+  acceptance_validation_status?: string | null;
+  acceptance_manifest?: string | null;
+  deferred_reason?: string | null;
+  notes: string[];
+};
+export type ImportedSidecarCapabilities = {
+  source_project: string;
+  source_readiness_status: string;
+  source_gate_status: string;
+  source_generated_at?: string | null;
+  channels: ImportedSidecarChannel[];
+  mvp_channels: string[];
+  deferred_channels: string[];
+  external_call_performed_by_importer: boolean;
+  notes: string[];
+};
+export type SiiSidecarPreflight = {
+  ready: boolean;
+  status: string;
+  sidecar_url: string;
+  sidecar_endpoint: string;
+  book: string;
+  endpoint_name: string;
+  wsdl_name?: string | null;
+  transport_enabled: boolean;
+  soap_calls_enabled: boolean;
+  certificate_loaded: boolean;
+  sidecar_call_performed: boolean;
+  external_call_performed: boolean;
+  blockers: string[];
+  warnings: string[];
+};
+export type TicketBaiSidecarPreflight = {
+  ready: boolean;
+  status: string;
+  sidecar_url: string;
+  sidecar_endpoint: string;
+  territorio: string;
+  endpoint: string;
+  xsd_name?: string | null;
+  xsd_available: boolean;
+  endpoint_allowed: boolean;
+  submission_enabled: boolean;
+  certificate_loaded: boolean;
+  sidecar_call_performed: boolean;
+  external_call_performed: boolean;
+  blockers: string[];
+  warnings: string[];
+};

@@ -1,15 +1,5 @@
-:root {
-  font-family: Inter, Segoe UI, Arial, sans-serif;
-  --bg: #eef2ed;
-  --panel: #ffffff;
-  --panel-muted: #f4f7f1;
-  --border: #d8ded6;
-  --text: #16201b;
-  --text-muted: #617067;
-  --primary: #1d5f4a;
-  color: var(--text);
-  background: var(--bg);
-}
+@import "@bdr/ui/tokens.css";
+:root { --panel: var(--surface); --panel-muted: var(--surface-2); --border: var(--line); --text: var(--fg); --text-muted: var(--fg-muted); --primary: var(--menta); }
 
 * {
   box-sizing: border-box;
@@ -22,7 +12,7 @@ body {
 button {
   border: 0;
   background: transparent;
-  color: #33433b;
+  color: var(--fg);
   cursor: pointer;
   font: inherit;
   min-height: 40px;
@@ -36,7 +26,7 @@ button {
 }
 
 .workspace {
-  background: #fbfcfa;
+  background: var(--surface);
   border: 1px solid var(--border);
   display: grid;
   grid-template-columns: 240px 1fr;
@@ -62,7 +52,7 @@ nav {
 
 nav button.active,
 button.primary {
-  background: #1d5f4a;
+  background: var(--menta);
   background: var(--primary);
   color: white;
 }
@@ -130,7 +120,7 @@ p {
 }
 
 .panel ol {
-  color: #33433b;
+  color: var(--fg);
   margin: 10px 0 0;
   padding-left: 20px;
 }
@@ -505,7 +495,7 @@ p {
   }
 
   .sidebar {
-    border-bottom: 1px solid #d8ded6;
+    border-bottom: 1px solid var(--line);
     border-right: 0;
   }
 
@@ -533,7 +523,7 @@ button:disabled {
 }
 
 .flow form {
-  border: 1px solid #d8ded6;
+  border: 1px solid var(--line);
   display: grid;
   gap: 12px;
   padding: 16px;
@@ -559,8 +549,8 @@ button:disabled {
 }
 
 .miniControls select {
-  border: 1px solid #d8ded6;
-  color: #16201b;
+  border: 1px solid var(--line);
+  color: var(--fg);
   font: inherit;
   min-height: 40px;
   min-width: 0;
@@ -617,7 +607,7 @@ button:disabled {
 
 .iconButton {
   align-items: center;
-  border: 1px solid #d8ded6;
+  border: 1px solid var(--line);
   display: inline-flex;
   justify-content: center;
   min-width: 40px;
@@ -631,7 +621,7 @@ button:disabled {
 }
 
 .dataList {
-  border: 1px solid #d8ded6;
+  border: 1px solid var(--line);
   min-height: 150px;
   padding: 16px;
 }
@@ -650,8 +640,8 @@ button:disabled {
 }
 
 .dataList li {
-  border-top: 1px solid #eef2ed;
-  color: #33433b;
+  border-top: 1px solid var(--bg);
+  color: var(--fg);
   font-size: 13px;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -660,7 +650,7 @@ button:disabled {
 
 .pager {
   align-items: center;
-  border-top: 1px solid #eef2ed;
+  border-top: 1px solid var(--bg);
   display: flex;
   gap: 8px;
   justify-content: space-between;
@@ -669,7 +659,7 @@ button:disabled {
 }
 
 .pager button {
-  border: 1px solid #d8ded6;
+  border: 1px solid var(--line);
   font-size: 12px;
   min-height: 34px;
   padding: 7px 9px;
@@ -701,8 +691,8 @@ button:disabled {
 .auditExportForm input,
 .backupForm input,
 .backupForm select {
-  border: 1px solid #d8ded6;
-  color: #16201b;
+  border: 1px solid var(--line);
+  color: var(--fg);
   font: inherit;
   min-height: 40px;
   min-width: 0;
@@ -737,3 +727,11 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* Phase 1: shared shell, preserved native forms; detailed screens follow in phase 2. */
+.bdr-main .content{padding:0;gap:24px}.bdr-main button{min-height:44px;border-radius:999px}.bdr-main button.primary{background:var(--menta);color:var(--pizarra)}.bdr-main input,.bdr-main select,.bdr-main textarea{background:var(--surface);color:var(--fg);border:1px solid var(--control-border);border-radius:12px;min-height:44px}.bdr-main h1{color:var(--fg)}.bdr-main .panel,.bdr-main .card{background:var(--surface);color:var(--fg);border-color:var(--line);border-radius:20px}.bdr-main input,.bdr-main code,.bdr-main .statusBox,.bdr-main .dataList li{font-family:var(--m)}.bdr-main .grid{display:none}.runtime-notice{color:var(--fg-muted);font-size:13px;line-height:1.5}.bdr-main table td{height:var(--row-height)}
+
+.bdr-main .linkButton{color:var(--enlace)}.bdr-main .ok{color:var(--ok-text)}.fieldLabel{display:grid;gap:6px;font-size:13px;font-weight:600}
+
+.bdr-main .dataList li{min-height:var(--row-height);box-sizing:border-box;padding-block:8px;display:flex;align-items:center}.bdr-main .productRow{min-height:var(--row-height)}
+:root[data-density="comfortable"] .bdr-main .dataList li{padding-block:12px}

@@ -1,0 +1,33 @@
+{
+  "id": "100cfa8c-3e65-4759-b1f7-39d1fd2e56d3",
+  "company_id": "7b580a8a-4cfb-434a-9b8f-c31195f273b7",
+  "company_legal_name": "Demo CumpleFactura SL",
+  "company_tax_id": "B00000000",
+  "customer_display_name": "Cliente Demo",
+  "customer_tax_id": "00000000T",
+  "fiscal_year": 2026,
+  "series": "VENDI2026",
+  "number": 7,
+  "kind": "Complete",
+  "status": "Issued",
+  "rectifies_invoice_id": null,
+  "rectification_reason_code": null,
+  "rectification_method": null,
+  "taxable_base_cents": 10000,
+  "tax_cents": 2100,
+  "total_cents": 12100,
+  "fiscal_hash": "BD0EFD5006EFE8DCBDDF5041AB764C3BB967C7C3E95D2A07450DBD2856EC43A9",
+  "issued_at": "2026-05-31T10:00:00+02:00",
+  "lines": [
+    {
+      "description": "Servicio profesional",
+      "quantity": 1,
+      "unit_price_cents": 10000,
+      "discount_rate_basis_points": 0,
+      "taxable_base_cents": 10000,
+      "tax_rate_basis_points": 2100,
+      "tax_cents": 2100
+    }
+  ],
+  "rectified_invoice": null
+}

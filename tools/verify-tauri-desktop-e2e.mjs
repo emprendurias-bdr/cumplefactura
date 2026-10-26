@@ -1,3 +1,5 @@
+import { compatibleDriver, executableDriverVersion, installedWebViewVersion, preferDownloadedDriver } from "./webview-driver.mjs";
+import { waitForWebDriver } from "./webdriver-readiness.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -12,10 +14,13 @@ const releaseExe = resolve(root, "src-tauri/target/release/cumplefactura.exe");
 const realMode = ["1", "true", "yes", "on"].includes(
   (process.env.CUMPLEFACTURA_TAURI_DESKTOP_E2E_REAL ?? "").trim().toLowerCase(),
 );
+const webViewVersion=installedWebViewVersion();
 let resolvedEdgeDriverPath = "";
+let driverResolutionError = webViewVersion ? "" : "WebView2 runtime version could not be detected";
 try {
-  resolvedEdgeDriverPath = await downloadEdgeDriver();
-} catch {
+  if(webViewVersion)resolvedEdgeDriverPath = await downloadEdgeDriver(webViewVersion,resolve(root,"node_modules/.cache/webview-driver",webViewVersion));
+} catch (error) {
+  driverResolutionError=error instanceof Error?error.message:String(error);
   resolvedEdgeDriverPath = "";
 }
 
@@ -53,7 +58,8 @@ function commandExists(command) {
   const wherePaths = result.status === 0
     ? result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
     : [];
-  const paths = [...new Set([...wherePaths, ...localCommandCandidates(command)])];
+  const candidates=[...wherePaths,...localCommandCandidates(command)];
+  const paths=command==="msedgedriver.exe"?preferDownloadedDriver(candidates,resolvedEdgeDriverPath).filter(path=>compatibleDriver(webViewVersion,executableDriverVersion(path))):[...new Set(candidates)];
   return { ok: paths.length > 0, paths };
 }
 
@@ -117,7 +123,7 @@ async function realDesktopSmoke(tauriDriverPath, nativeDriverPath) {
   driver.stderr.on("data", (chunk) => logs.push(chunk.toString()));
 
   try {
-    await wait(1500);
+    await waitForWebDriver({url:`http://127.0.0.1:${port}`,driver,timeoutMs:30000});
     const sessionResponse = await fetch(`http://127.0.0.1:${port}/session`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -190,6 +196,10 @@ async function realDesktopSmoke(tauriDriverPath, nativeDriverPath) {
         "It performs no AEAT call and uses no secrets.",
       ],
     };
+  } catch (error) {
+    const reason=error instanceof Error?error.message:String(error);
+    const cause=error instanceof Error && error.cause instanceof Error?error.cause.message:"";
+    throw new Error(`${reason}${cause?`; cause: ${cause}`:""}; driver exit=${driver.exitCode}, signal=${driver.signalCode}; driver log: ${logs.join("").slice(-4000)}`);
   } finally {
     driver.kill();
   }
@@ -212,6 +222,10 @@ let result = {
   status: Object.values(checks).every(Boolean) ? "passed" : "failed",
   mode: "preflight",
   release_exe: releaseExe,
+  webview_runtime_version: webViewVersion,
+  driver_resolution_error: driverResolutionError || null,
+  downloaded_driver_version: resolvedEdgeDriverPath?executableDriverVersion(resolvedEdgeDriverPath):null,
+  selected_driver_version: edgeDriver.paths[0]?executableDriverVersion(edgeDriver.paths[0]):null,
   checks,
   evidence: {
     tauri_driver_paths: tauriDriver.paths,

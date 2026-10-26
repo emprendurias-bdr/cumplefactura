@@ -24,6 +24,7 @@
     "validate:regulatory": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/run-regulatory-gate.ps1"
   },
   "dependencies": {
+    "@bdr/ui": "file:vendor/emprendurias-bdr-ui-0.1.0.tgz",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "lucide-react": "^0.468.0",
@@ -31,6 +32,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.60.0",
     "@tauri-apps/cli": "^2.5.0",
     "@types/node": "^22.10.0",

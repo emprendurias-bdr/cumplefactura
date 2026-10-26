@@ -18,6 +18,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::app::app_defaults_get,
+            commands::preferences::ui_preferences_get,
+            commands::preferences::ui_preferences_update,
             commands::settings::app_settings_get,
             commands::settings::app_settings_update,
             commands::company::company_create,

@@ -1,0 +1,38 @@
+{
+  "app": "CumpleFactura",
+  "artifacts": {
+    "audit": "/workspace/cumplefactura/tests/regulatory/evidence/latest-core-e2e-audit.json",
+    "csv": "/workspace/cumplefactura/tests/regulatory/evidence/latest-core-e2e-invoices.csv",
+    "json": "/workspace/cumplefactura/tests/regulatory/evidence/latest-core-e2e-invoice.json",
+    "pdf": "/workspace/cumplefactura/tests/regulatory/evidence/latest-core-e2e-invoice.pdf",
+    "xml": "/workspace/cumplefactura/tests/regulatory/evidence/latest-core-e2e-verifactu.xml"
+  },
+  "checks": {
+    "aeat_hash_len": 64,
+    "audit_export_created": true,
+    "company_customer_persisted": true,
+    "csv_export_created": true,
+    "draft_persisted": true,
+    "fiscal_chain_valid": true,
+    "fiscal_export_id": "73a3ba4a-568d-451d-84db-8783e105b806",
+    "fiscal_records": 1,
+    "invoice_series_preview": "VENDI202607",
+    "issued_invoice_persisted": true,
+    "json_export_created": true,
+    "next_number_preview": 8,
+    "pdf_created": true,
+    "signature_status": "pending_xades",
+    "sqlite_real": true,
+    "transmission_status": "not_submitted",
+    "xml_xsd_validated": true
+  },
+  "flow": "SQLite real -> company/customer -> draft -> reserved sequence -> issued invoice -> AEAT hash -> audit/fiscal chain -> VERI*FACTU XML XSD -> PDF/JSON/CSV/audit export -> prepared_for_signature export",
+  "generated_at": "2026-10-26T09:40:05.984209590+00:00",
+  "limits": [
+    "Core E2E uses in-memory SQLite and local files.",
+    "It exercises Rust domain/db/services, not the Tauri window event loop.",
+    "It does not perform XAdES signing, SOAP AEAT transport, certificate use, AEAT CSV retrieval or external acceptance."
+  ],
+  "source_workspace": "C:\\03 LEGISLACION",
+  "status": "passed"
+}

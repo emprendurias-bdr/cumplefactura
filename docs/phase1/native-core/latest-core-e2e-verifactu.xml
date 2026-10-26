@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sfLR:RegFactuSistemaFacturacion xmlns:sfLR="https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroLR.xsd" xmlns:sf="https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd" xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+  <sfLR:Cabecera>
+    <sf:ObligadoEmision>
+      <sf:NombreRazon>Demo CumpleFactura SL</sf:NombreRazon>
+      <sf:NIF>B00000000</sf:NIF>
+    </sf:ObligadoEmision>
+  </sfLR:Cabecera>
+  <sfLR:RegistroFactura>
+    <sf:RegistroAlta>
+      <sf:IDVersion>1.0</sf:IDVersion>
+      <sf:IDFactura>
+        <sf:IDEmisorFactura>B00000000</sf:IDEmisorFactura>
+        <sf:NumSerieFactura>VENDI2026-7</sf:NumSerieFactura>
+        <sf:FechaExpedicionFactura>31-05-2026</sf:FechaExpedicionFactura>
+      </sf:IDFactura>
+      <sf:NombreRazonEmisor>Demo CumpleFactura SL</sf:NombreRazonEmisor>
+      <sf:TipoFactura>F1</sf:TipoFactura>
+      <sf:FechaOperacion>31-05-2026</sf:FechaOperacion>
+      <sf:DescripcionOperacion>Servicio profesional</sf:DescripcionOperacion>
+      <sf:Destinatarios>
+        <sf:IDDestinatario>
+          <sf:NombreRazon>Cliente Demo</sf:NombreRazon>
+          <sf:NIF>00000000T</sf:NIF>
+        </sf:IDDestinatario>
+      </sf:Destinatarios>
+      <sf:Desglose>
+        <sf:DetalleDesglose>
+          <sf:Impuesto>01</sf:Impuesto>
+          <sf:ClaveRegimen>01</sf:ClaveRegimen>
+          <sf:CalificacionOperacion>S1</sf:CalificacionOperacion>
+          <sf:TipoImpositivo>21.00</sf:TipoImpositivo>
+          <sf:BaseImponibleOimporteNoSujeto>100.00</sf:BaseImponibleOimporteNoSujeto>
+          <sf:CuotaRepercutida>21.00</sf:CuotaRepercutida>
+        </sf:DetalleDesglose>
+      </sf:Desglose>
+      <sf:CuotaTotal>21.00</sf:CuotaTotal>
+      <sf:ImporteTotal>121.00</sf:ImporteTotal>
+      <sf:Encadenamiento>
+        <sf:PrimerRegistro>S</sf:PrimerRegistro>
+      </sf:Encadenamiento>
+      <sf:SistemaInformatico>
+        <sf:NombreRazon>Demo CumpleFactura SL</sf:NombreRazon>
+        <sf:NIF>B00000000</sf:NIF>
+        <sf:NombreSistemaInformatico>CumpleFactura</sf:NombreSistemaInformatico>
+        <sf:IdSistemaInformatico>CF</sf:IdSistemaInformatico>
+        <sf:Version>0.1.0</sf:Version>
+        <sf:NumeroInstalacion>LOCAL-B00000000</sf:NumeroInstalacion>
+        <sf:TipoUsoPosibleSoloVerifactu>N</sf:TipoUsoPosibleSoloVerifactu>
+        <sf:TipoUsoPosibleMultiOT>S</sf:TipoUsoPosibleMultiOT>
+        <sf:IndicadorMultiplesOT>S</sf:IndicadorMultiplesOT>
+      </sf:SistemaInformatico>
+      <sf:FechaHoraHusoGenRegistro>2026-05-31T10:00:00+02:00</sf:FechaHoraHusoGenRegistro>
+      <sf:TipoHuella>01</sf:TipoHuella>
+      <sf:Huella>BD0EFD5006EFE8DCBDDF5041AB764C3BB967C7C3E95D2A07450DBD2856EC43A9</sf:Huella>
+    </sf:RegistroAlta>
+  </sfLR:RegistroFactura>
+</sfLR:RegFactuSistemaFacturacion>

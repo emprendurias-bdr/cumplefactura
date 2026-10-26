@@ -1,0 +1,293 @@
+{
+  "results": [
+    {
+      "route": "facturas",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/facturas-1024-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "presupuestos",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/presupuestos-1024-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "proformas",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/proformas-1024-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "albaranes",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/albaranes-1024-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "recurrentes",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/recurrentes-1024-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "clientes",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/clientes-1024-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "productos",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/productos-1024-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "verifactu",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/verifactu-1024-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "ajustes",
+      "width": 1024,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/ajustes-1024-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "facturas",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/facturas-1024-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "presupuestos",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/presupuestos-1024-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "proformas",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/proformas-1024-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "albaranes",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/albaranes-1024-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "recurrentes",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/recurrentes-1024-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "clientes",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/clientes-1024-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "productos",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/productos-1024-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "verifactu",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/verifactu-1024-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "ajustes",
+      "width": 1024,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/ajustes-1024-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "facturas",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/facturas-1440-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "presupuestos",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/presupuestos-1440-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "proformas",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/proformas-1440-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "albaranes",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/albaranes-1440-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "recurrentes",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/recurrentes-1440-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "clientes",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/clientes-1440-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "productos",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/productos-1440-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "verifactu",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/verifactu-1440-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "ajustes",
+      "width": 1440,
+      "theme": "light",
+      "screenshot": "docs/phase1/screenshots/ajustes-1440-light.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "facturas",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/facturas-1440-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "presupuestos",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/presupuestos-1440-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "proformas",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/proformas-1440-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "albaranes",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/albaranes-1440-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "recurrentes",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/recurrentes-1440-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "clientes",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/clientes-1440-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "productos",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/productos-1440-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "verifactu",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/verifactu-1440-dark.png",
+      "violations": [],
+      "errors": []
+    },
+    {
+      "route": "ajustes",
+      "width": 1440,
+      "theme": "dark",
+      "screenshot": "docs/phase1/screenshots/ajustes-1440-dark.png",
+      "violations": [],
+      "errors": []
+    }
+  ],
+  "scope": "mocked native runtime; not native Tauri, web account persistence, AEAT or regulatory validation"
+}

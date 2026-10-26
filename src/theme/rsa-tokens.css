@@ -1,0 +1,118 @@
+/* ===========================================================
+   Ricardo Saiz Aragón — Design tokens RSA (port CSS plano)
+   Copia de la fuente canónica rsa-tokens.css (ContaPro /
+   rsa-design) sin las directivas Tailwind (@theme), porque
+   CumpleFactura no usa Tailwind. Mantener los valores alineados.
+
+   Cada app del ecosistema comparte paleta, superficies, radios y
+   motion, y se distingue por su color de acento (--accent):
+     ContaPro      -> oliva  (--rsa-group)
+     CumpleFactura -> azul fiscal (--rsa-fiscal)
+   =========================================================== */
+
+@font-face {
+  font-family: "Sora";
+  src: url("../assets/fonts/sora/sora-400.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Sora";
+  src: url("../assets/fonts/sora/sora-500.ttf") format("truetype");
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Sora";
+  src: url("../assets/fonts/sora/sora-600.ttf") format("truetype");
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Sora";
+  src: url("../assets/fonts/sora/sora-700.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  /* ── Paleta de marca ─────────────────────────────── */
+  --rsa-base: #EEF2EA;
+  --rsa-base-deep: #DDE7DD;
+  --rsa-ink: #252B27;
+  --rsa-group: #4A5A2E;
+  --rsa-group-soft: #72865F;
+  --rsa-energy: #D6C66A;
+  --rsa-vending: #B8896A;
+  --rsa-tech: #4F8F83;
+  --rsa-fiscal: #46577D;
+  --rsa-rule: rgba(37, 43, 39, 0.14);
+  --rsa-muted: rgba(37, 43, 39, 0.68);
+
+  /* ── Aliases de conveniencia ─────────────────────── */
+  --paper: var(--rsa-base);
+  --bone: #F8FAF6;
+  --bone-soft: #F3F6F0;
+  --surface: var(--bone);
+  --surface-elevated: #FDFEFB;
+  --graf: var(--rsa-ink);
+  --oliv: var(--rsa-group);
+  --sage: var(--rsa-base-deep);
+  --rule: var(--rsa-rule);
+  --rule-2: rgba(37, 43, 39, 0.24);
+  --mute: var(--rsa-muted);
+  --accent: var(--rsa-group);
+  --accent-soft: rgba(102, 118, 90, 0.11);
+  --fiscal: var(--rsa-fiscal);
+  --fiscal-soft: rgba(83, 104, 149, 0.11);
+  --danger: #9A3E3A;
+
+  /* ── Piel v2 ─────────────────────────────────────── */
+  --rsa-shadow-rest: 0 1px 2px rgba(37, 43, 39, 0.05);
+  --rsa-shadow-hover: 0 6px 18px rgba(37, 43, 39, 0.08);
+  --rsa-shadow-float: 0 14px 38px rgba(37, 43, 39, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --rsa-radius-xs: 4px;
+  --rsa-radius-sm: 6px;
+  --rsa-radius: 8px;
+  --rsa-radius-lg: 12px;
+  --rsa-radius-pill: 999px;
+  --rsa-ease: cubic-bezier(0.2, 0, 0.1, 1);
+  --rsa-t-fast: 0.15s;
+  --rsa-t-normal: 0.24s;
+
+  --font-sans: "Sora", system-ui, "Segoe UI", sans-serif;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--rsa-base);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(37, 43, 39, 0.22); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(37, 43, 39, 0.34); }

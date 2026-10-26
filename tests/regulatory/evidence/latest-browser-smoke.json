@@ -1,12 +1,12 @@
 {
   "app": "CumpleFactura",
-  "generated_at": "2026-06-28T19:21:18.272Z",
+  "generated_at": "2026-10-18T23:32:04.557Z",
   "status": "passed",
   "url": "http://127.0.0.1:1421",
   "viewport": "1366x900",
   "browser": "Playwright Chromium headless",
   "browser_plugin_note": "Repeatable npm gate uses Playwright because MCP Browser cannot be invoked from npm scripts.",
-  "flow": "app loads -> create company/customer/series -> edit invoice line with discount/IRPF -> draft -> issue -> export VERI*FACTU XML -> prepare signature/submission package",
+  "flow": "app loads -> navigate areas/views -> create company/customer/series -> edit invoice line with discount/IRPF -> draft -> issue -> audit -> search issued -> export VERI*FACTU XML -> prepare signature/submission package",
   "checks": {
     "page_identity": true,
     "not_blank": true,
@@ -26,9 +26,9 @@
       }
     }
   },
-  "screenshot_path": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\browser-smoke-2026-06-28T19-21-03-586Z.png",
-  "latest_screenshot_path": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-browser-smoke.png",
-  "server_log_path": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\browser-smoke-vite-2026-06-28T19-21-03-586Z.log",
+  "screenshot_path": "/home/user/cumplefactura/tests/regulatory/evidence/browser-smoke-2026-10-18T23-31-57-515Z.png",
+  "latest_screenshot_path": "/home/user/cumplefactura/tests/regulatory/evidence/latest-browser-smoke.png",
+  "server_log_path": "/home/user/cumplefactura/tests/regulatory/evidence/browser-smoke-vite-2026-10-18T23-31-57-515Z.log",
   "limits": [
     "Browser smoke uses a local Tauri invoke mock.",
     "It proves rendered UI workflow and visible limits only.",

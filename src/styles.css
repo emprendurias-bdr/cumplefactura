@@ -1,14 +1,19 @@
+@import "./theme/rsa-tokens.css";
+
+/* CumpleFactura: piel ContaPro (RSA) con acento propio azul fiscal. */
 :root {
-  font-family: Inter, Segoe UI, Arial, sans-serif;
-  --bg: #eef2ed;
-  --panel: #ffffff;
-  --panel-muted: #f4f7f1;
-  --border: #d8ded6;
-  --text: #16201b;
-  --text-muted: #617067;
-  --primary: #1d5f4a;
-  color: var(--text);
-  background: var(--bg);
+  --accent: var(--rsa-fiscal);
+  --accent-strong: #36456A;
+  --accent-soft: var(--fiscal-soft);
+  --accent-ink: #F8FAF6;
+  --topnav-h: 58px;
+  --subsidebar-w: 232px;
+  color: var(--graf);
+  background: var(--paper);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 * {
@@ -16,123 +21,474 @@
 }
 
 body {
+  background: var(--paper);
+  color: var(--graf);
   margin: 0;
 }
 
-button {
-  border: 0;
-  background: transparent;
-  color: #33433b;
-  cursor: pointer;
-  font: inherit;
-  min-height: 40px;
-  padding: 10px 12px;
-  text-align: left;
+:where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
-.shell {
-  min-height: 100vh;
-  padding: 24px;
-}
-
-.workspace {
-  background: #fbfcfa;
-  border: 1px solid var(--border);
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  min-height: calc(100vh - 48px);
-}
-
-.sidebar {
-  background: var(--panel-muted);
-  border-right: 1px solid var(--border);
-  padding: 22px;
-}
-
-.brand {
-  font-size: 20px;
-  font-weight: 800;
-  margin-bottom: 28px;
-}
-
-nav {
-  display: grid;
-  gap: 8px;
-}
-
-nav button.active,
-button.primary {
-  background: #1d5f4a;
-  background: var(--primary);
-  color: white;
-}
-
-button.primary {
-  min-width: 150px;
-  padding: 11px 16px;
-  text-align: center;
-}
-
-.linkButton {
-  align-items: center;
-  border: 1px solid var(--border);
-  color: var(--primary);
-  display: inline-flex;
-  gap: 8px;
-  justify-content: center;
-  margin-top: 4px;
-  min-height: 34px;
-  padding: 7px 10px;
-  text-align: center;
-}
-
-.content {
-  display: grid;
-  gap: 24px;
-  padding: 32px;
-}
-
-header {
-  align-items: flex-start;
-  display: flex;
-  gap: 24px;
-  justify-content: space-between;
+h1,
+h2,
+h3 {
+  color: var(--graf);
+  letter-spacing: 0;
 }
 
 h1 {
-  font-size: 34px;
-  line-height: 1.1;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+}
+
+h2 {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+}
+
+h3 {
+  font-size: 13px;
+  font-weight: 700;
   margin: 0 0 8px;
 }
 
 p {
-  color: var(--text-muted);
+  color: var(--mute);
+  line-height: 1.5;
   margin: 0;
+}
+
+.eyebrow {
+  color: var(--mute);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* ---------- botones ---------- */
+
+button {
+  background: transparent;
+  border: 0;
+  border-radius: var(--rsa-radius);
+  color: var(--graf);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  min-height: 36px;
+  padding: 8px 12px;
+  text-align: left;
+  transition: background-color var(--rsa-t-fast) var(--rsa-ease), color var(--rsa-t-fast) var(--rsa-ease),
+    border-color var(--rsa-t-fast) var(--rsa-ease);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+button.primary {
+  align-items: center;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  box-shadow: var(--rsa-shadow-rest);
+  color: var(--accent-ink);
+  display: inline-flex;
+  font-weight: 600;
+  gap: 8px;
+  justify-content: center;
+  min-width: 150px;
+  padding: 8px 16px;
+  text-align: center;
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--graf);
+  border-color: var(--graf);
+}
+
+.linkButton,
+.seriesQuick button,
+.pager button,
+.flow form > button:not(.primary) {
+  align-items: center;
+  background: var(--bone);
+  border: 1px solid var(--rule);
+  color: var(--graf);
+  display: inline-flex;
+  font-weight: 600;
+  gap: 8px;
+  justify-content: center;
+  min-height: 34px;
+  padding: 7px 12px;
+  text-align: center;
+}
+
+.linkButton:hover:not(:disabled),
+.seriesQuick button:hover:not(:disabled),
+.pager button:hover:not(:disabled),
+.flow form > button:not(.primary):hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--rule-2);
+}
+
+.iconButton {
+  align-items: center;
+  background: var(--bone);
+  border: 1px solid var(--rule);
+  color: var(--mute);
+  display: inline-flex;
+  justify-content: center;
+  min-width: 36px;
+  padding: 8px;
+}
+
+.iconButton:hover:not(:disabled) {
+  color: var(--graf);
+  background: var(--accent-soft);
+}
+
+/* ---------- shell: barra superior ---------- */
+
+.appShell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.topNav {
+  backdrop-filter: blur(6px);
+  background: rgba(238, 242, 234, 0.95);
+  border-bottom: 1px solid var(--rule);
+  box-shadow: var(--rsa-shadow-rest);
+  flex-shrink: 0;
+  height: var(--topnav-h);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.topNavInner {
+  align-items: center;
+  display: flex;
+  gap: 20px;
+  height: 100%;
+  padding: 0 24px;
+}
+
+.brandLink {
+  align-items: center;
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 10px;
+  padding: 4px 6px;
+}
+
+.brandLink:hover {
+  background: transparent;
+}
+
+.brandMark {
+  border-radius: 7px;
+  display: block;
+  height: 26px;
+  width: 26px;
+}
+
+.brandName {
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.moduleBadge {
+  align-items: center;
+  background: var(--bone);
+  border: 1px solid var(--rule);
+  border-radius: var(--rsa-radius-sm);
+  color: var(--mute);
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 600;
+  min-height: 24px;
+  padding: 0 8px;
+}
+
+.topDivider {
+  background: var(--rule);
+  height: 24px;
+  width: 1px;
+}
+
+.areaNav {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+
+.areaTab {
+  align-items: center;
+  color: var(--mute);
+  display: flex;
+  flex-shrink: 0;
+  font-weight: 700;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  position: relative;
+}
+
+.areaTab:hover {
+  background: rgba(248, 250, 246, 0.7);
+  color: var(--graf);
+}
+
+.areaTab.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.areaTab.active::after {
+  background: var(--accent);
+  bottom: -11px;
+  content: "";
+  height: 2px;
+  left: 12px;
+  position: absolute;
+  right: 12px;
+}
+
+.topActions {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.topActions button.primary {
+  min-width: 96px;
+}
+
+.flowPill {
+  background: var(--bone);
+  border: 1px solid var(--rule);
+  border-radius: var(--rsa-radius-pill);
+  color: var(--mute);
+  font-size: 12px;
+  font-weight: 600;
+  max-width: 260px;
+  overflow: hidden;
+  padding: 6px 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- shell: sub-sidebar ---------- */
+
+.appBody {
+  /* Fondo de la columna lateral aunque el contenido sea mas alto que la sub-sidebar. */
+  background: linear-gradient(to right, var(--bone-soft) var(--subsidebar-w), transparent var(--subsidebar-w));
+  display: grid;
+  flex: 1;
+  grid-template-columns: var(--subsidebar-w) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.subSidebar {
+  background: var(--bone-soft);
+  border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--topnav-h));
+  position: sticky;
+  top: var(--topnav-h);
+}
+
+.subSidebarHead {
+  align-items: center;
+  border-bottom: 1px solid var(--rule);
+  color: var(--accent);
+  display: flex;
+  gap: 8px;
+  padding: 16px 18px;
+}
+
+.subSidebarHead span {
+  color: var(--graf);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.subNav {
+  align-content: start;
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.subItem {
+  align-items: center;
+  color: var(--mute);
+  display: flex;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 12px;
+  position: relative;
+  width: 100%;
+}
+
+.subItem:hover {
+  background: var(--bone);
+  color: var(--graf);
+}
+
+.subItem span:first-of-type {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subItem.active {
+  background: var(--accent-soft);
+  color: var(--graf);
+  font-weight: 600;
+}
+
+.subItem.active svg {
+  color: var(--accent);
+}
+
+.subItem.active::before {
+  background: var(--accent);
+  border-radius: 999px;
+  bottom: 8px;
+  content: "";
+  left: 2px;
+  position: absolute;
+  top: 8px;
+  width: 3px;
+}
+
+.soonBadge,
+.statusTag {
+  background: var(--accent-soft);
+  border-radius: var(--rsa-radius-pill);
+  color: var(--accent);
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.statusTag {
+  font-size: 11px;
+  padding: 5px 10px;
+}
+
+.subSidebarFoot {
+  border-top: 1px solid var(--rule);
+  display: grid;
+  gap: 4px;
+  padding: 14px 18px;
+}
+
+.subSidebarFoot span {
+  color: var(--mute);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.subSidebarFoot strong {
+  font-size: 12px;
+}
+
+/* ---------- contenido ---------- */
+
+.content {
+  align-content: start;
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  padding: 24px 28px 40px;
+}
+
+.pageHead {
+  display: grid;
+  gap: 6px;
 }
 
 .grid {
   display: grid;
-  gap: 16px;
+  gap: 14px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .card,
 .panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
+  background: var(--bone);
+  border: 1px solid var(--rule);
+  border-radius: var(--rsa-radius);
+  box-shadow: var(--rsa-shadow-rest);
+}
+
+.card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  transition: transform var(--rsa-t-normal) var(--rsa-ease), box-shadow var(--rsa-t-normal) var(--rsa-ease);
+}
+
+.card:hover {
+  box-shadow: var(--rsa-shadow-hover);
+  transform: translateY(-2px);
+}
+
+.card svg {
+  color: var(--accent);
+}
+
+.card p {
+  font-size: 13px;
+}
+
+.panel {
   padding: 20px;
 }
 
-.card h2,
-.panel h2 {
-  font-size: 18px;
-  margin: 12px 0 8px;
+.stack {
+  display: grid;
+  gap: 8px;
 }
 
-.panel ol {
-  color: #33433b;
-  margin: 10px 0 0;
-  padding-left: 20px;
+.stack > h2 {
+  border-top: 1px solid var(--rule);
+  margin-top: 10px;
+  padding-top: 14px;
+}
+
+.stack > h2:first-child {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.stack > p {
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .split {
@@ -142,81 +498,15 @@ p {
   grid-template-columns: minmax(0, 1fr) 260px;
 }
 
-.statusGrid {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: 1.25fr repeat(3, minmax(0, 1fr));
-}
-
-.statusGrid div {
-  border-left: 3px solid var(--primary);
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-  padding-left: 12px;
-}
-
-.statusGrid strong {
-  color: var(--text);
-  font-size: 14px;
-}
-
-.statusGrid p {
+.emptyState {
+  border: 1px dashed var(--rule-2);
+  border-radius: var(--rsa-radius);
   font-size: 13px;
-  overflow-wrap: anywhere;
+  padding: 18px;
+  text-align: center;
 }
 
-.seriesPanel {
-  display: grid;
-  gap: 14px;
-}
-
-.seriesForm {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: 1.2fr 0.8fr 0.7fr 0.8fr 0.6fr 0.6fr 0.7fr 150px;
-}
-
-.seriesForm input,
-.checkLine {
-  border: 1px solid var(--border);
-  color: var(--text);
-  font: inherit;
-  min-height: 40px;
-  min-width: 0;
-  padding: 9px 10px;
-}
-
-.checkLine {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-}
-
-.seriesQuick {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.seriesQuick button {
-  border: 1px solid var(--border);
-  min-height: 34px;
-  padding: 7px 10px;
-}
-
-.invoiceEditor {
-  display: grid;
-  gap: 16px;
-}
-
-.editorTop,
-.editorFooter {
-  align-items: end;
-  display: flex;
-  gap: 16px;
-  justify-content: space-between;
-}
+/* ---------- formularios ---------- */
 
 .fieldBlock {
   display: grid;
@@ -225,19 +515,180 @@ p {
 }
 
 .fieldBlock span {
-  color: var(--text-muted);
-  font-size: 13px;
+  color: var(--mute);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .fieldBlock input,
 .fieldBlock select,
-.lineRow input {
-  border: 1px solid var(--border);
-  color: var(--text);
+.lineRow input,
+.seriesForm input,
+.checkLine,
+.miniControls select,
+.auditExportForm input,
+.backupForm input,
+.backupForm select {
+  background: var(--surface-elevated);
+  border: 1px solid var(--rule);
+  border-radius: var(--rsa-radius-sm);
+  color: var(--graf);
   font: inherit;
-  min-height: 40px;
+  font-size: 13px;
+  min-height: 38px;
   min-width: 0;
-  padding: 9px 10px;
+  padding: 8px 10px;
+  transition: border-color var(--rsa-t-fast) var(--rsa-ease), box-shadow var(--rsa-t-fast) var(--rsa-ease);
+}
+
+.fieldBlock input:focus,
+.fieldBlock select:focus,
+.lineRow input:focus,
+.seriesForm input:focus,
+.miniControls select:focus,
+.backupForm input:focus,
+.backupForm select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
+}
+
+.fieldBlock input:read-only,
+.backupForm input:read-only,
+.auditExportForm input:read-only {
+  background: var(--bone-soft);
+  color: var(--mute);
+}
+
+.fieldBlock input:disabled {
+  background: var(--bone-soft);
+}
+
+.checkLine {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+.editorTop,
+.editorFooter,
+.formTitle {
+  align-items: end;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.formTitle {
+  align-items: center;
+}
+
+.editorTop p,
+.editorFooter p {
+  font-size: 13px;
+}
+
+.statusGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1.25fr repeat(3, minmax(0, 1fr));
+}
+
+.statusGrid div {
+  border-left: 3px solid var(--accent);
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding-left: 12px;
+}
+
+.statusGrid strong {
+  font-size: 13px;
+}
+
+.statusGrid p {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.onboardingPanel,
+.seriesPanel,
+.invoiceEditor,
+.productCatalog,
+.invoiceFilters,
+.fiscalAuditScreen,
+.sidecarChannels,
+.receivedPanel,
+.networkPanel {
+  display: grid;
+  gap: 16px;
+}
+
+.onboardingForm {
+  align-items: end;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(260px, 1fr) minmax(240px, 0.8fr) 180px;
+}
+
+.stepBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.stepBadges span {
+  background: var(--bone-soft);
+  border: 1px solid var(--rule);
+  border-radius: var(--rsa-radius-pill);
+  color: var(--mute);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+}
+
+.stepBadges .ok {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.flagGroup {
+  border: 1px solid var(--rule);
+  border-radius: var(--rsa-radius-sm);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0;
+  min-height: 38px;
+  padding: 10px;
+}
+
+.flagGroup legend {
+  color: var(--mute);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 4px;
+}
+
+.flagGroup label {
+  align-items: center;
+  display: inline-flex;
+  font-size: 13px;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.pathField {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1fr) 160px;
 }
 
 .entityForms {
@@ -246,22 +697,13 @@ p {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.entityForms.single {
+  grid-template-columns: minmax(0, 860px);
+}
+
 .entityForms form {
-  border: 1px solid var(--border);
   display: grid;
   gap: 14px;
-  padding: 16px;
-}
-
-.formTitle {
-  align-items: center;
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-}
-
-.formTitle h2 {
-  margin: 0;
 }
 
 .formGrid {
@@ -274,9 +716,8 @@ p {
   grid-column: 1 / -1;
 }
 
-.productCatalog {
-  display: grid;
-  gap: 14px;
+.entityForms form > button.primary {
+  justify-self: start;
 }
 
 .productForm {
@@ -291,31 +732,223 @@ p {
 
 .productList {
   display: grid;
-  gap: 8px;
 }
 
 .productRow {
   align-items: center;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--rule);
   display: flex;
   gap: 12px;
   justify-content: space-between;
-  padding-top: 10px;
+  padding: 10px 0;
 }
 
 .productRow p {
+  font-size: 12px;
+}
+
+.seriesForm {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1.2fr 0.8fr 0.7fr 0.8fr 0.6fr 0.6fr 0.7fr 150px;
+}
+
+.seriesQuick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---------- editor de factura ---------- */
+
+.lineTable {
+  border: 1px solid var(--rule);
+  border-radius: var(--rsa-radius);
+  display: grid;
+  gap: 0;
+  overflow-x: auto;
+}
+
+.lineHeader,
+.lineRow {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(220px, 1.7fr) 82px 120px 82px 82px 82px 38px;
+  min-width: 760px;
+  padding: 8px 10px;
+}
+
+.lineHeader {
+  background: var(--bone-soft);
+  border-bottom: 1px solid var(--rule);
+  color: var(--mute);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.lineRow + .lineRow {
+  border-top: 1px solid var(--rule);
+}
+
+.lineRow input {
+  font-variant-numeric: tabular-nums;
+}
+
+.flow {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.flow form {
+  background: var(--surface-elevated);
+  border: 1px solid var(--rule);
+  border-radius: var(--rsa-radius);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.flow form p {
   font-size: 13px;
 }
 
-.invoiceFilters {
-  display: grid;
-  gap: 14px;
+.flow form button.primary {
+  margin-top: auto;
 }
 
-.fiscalAuditScreen {
+.miniControls {
   display: grid;
-  gap: 16px;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+
+/* ---------- listados ---------- */
+
+.filterForm {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1.4fr repeat(6, minmax(120px, 1fr)) 150px;
+}
+
+.lists {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.lists.single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.dataList {
+  min-height: 120px;
+}
+
+.dataList h2 {
+  margin: 0 0 10px;
+}
+
+.dataList ul {
+  display: grid;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dataList li {
+  border-top: 1px solid var(--rule);
+  color: var(--graf);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  padding: 9px 0;
+}
+
+.dataList p {
+  font-size: 13px;
+}
+
+.pager {
+  align-items: center;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding-top: 10px;
+}
+
+.pager button {
+  font-size: 12px;
+}
+
+.pager span {
+  color: var(--mute);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.dataTable {
+  border: 1px solid var(--rule);
+  border-radius: var(--rsa-radius);
+  display: grid;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+}
+
+.dataTableHead {
+  background: var(--bone-soft);
+  border-bottom: 1px solid var(--rule);
+  color: var(--mute);
+  display: grid;
+  font-size: 11px;
+  font-weight: 700;
+  gap: 8px;
+  grid-template-columns: 90px minmax(160px, 1.6fr) 110px 100px repeat(3, 90px) 100px;
+  min-width: 860px;
+  padding: 10px 12px;
+  text-transform: uppercase;
+}
+
+.dataTable .emptyState {
+  margin: 0 12px;
+}
+
+.infoGrid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.infoGrid div {
+  border-left: 3px solid var(--accent);
+  display: grid;
+  gap: 6px;
+  padding-left: 12px;
+}
+
+.infoGrid strong {
+  font-size: 13px;
+}
+
+.infoGrid p {
+  font-size: 13px;
+}
+
+.networkSearch {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(260px, 1fr) 160px;
+}
+
+/* ---------- auditoria y fiscal ---------- */
 
 .auditSummary {
   display: grid;
@@ -324,22 +957,27 @@ p {
 }
 
 .auditSummary div {
-  border-top: 1px solid var(--border);
+  background: var(--surface-elevated);
+  border: 1px solid var(--rule);
+  border-radius: var(--rsa-radius);
   display: grid;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  padding-top: 12px;
+  padding: 12px;
 }
 
-.auditSummary strong,
-.auditList strong {
-  color: var(--text);
-  font-size: 13px;
+.auditSummary strong {
+  color: var(--mute);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
-.auditSummary span,
-.auditList span {
-  color: var(--text-muted);
+.auditSummary span {
+  color: var(--graf);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
   overflow-wrap: anywhere;
 }
 
@@ -349,24 +987,32 @@ p {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.auditColumns h3 {
-  font-size: 15px;
-  margin: 0 0 10px;
-}
-
 .auditList {
   display: grid;
-  gap: 8px;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
 .auditList li {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--rule);
   display: grid;
   gap: 4px;
-  padding-top: 8px;
+  padding: 8px 0;
+}
+
+.auditList strong {
+  font-size: 13px;
+}
+
+.auditList span {
+  color: var(--mute);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.auditColumns p {
+  font-size: 13px;
 }
 
 .auditExportForm {
@@ -375,338 +1021,25 @@ p {
   grid-template-columns: minmax(260px, 1fr) 160px 180px;
 }
 
-.pathField {
-  align-items: end;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: minmax(220px, 1fr) 160px;
-}
-
-.pathForm {
-  grid-template-columns: minmax(0, 1fr) 160px 180px;
-}
-
-.filterForm {
-  align-items: end;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: 1.4fr repeat(6, minmax(120px, 1fr)) 150px;
-}
-
-.onboardingPanel {
-  display: grid;
-  gap: 14px;
-}
-
-.onboardingForm {
-  align-items: end;
-  display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(260px, 1fr) minmax(240px, 0.8fr) 180px;
-}
-
-.stepBadges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.stepBadges span {
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  font-size: 12px;
-  padding: 6px 8px;
-}
-
-.stepBadges .ok {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
-.flagGroup {
-  border: 1px solid var(--border);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 0;
-  min-height: 40px;
-  padding: 10px;
-}
-
-.flagGroup legend {
-  color: var(--text-muted);
-  font-size: 13px;
-  padding: 0 4px;
-}
-
-.flagGroup label {
-  align-items: center;
-  display: inline-flex;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.lineTable {
-  display: grid;
-  gap: 8px;
-  overflow-x: auto;
-}
-
-.lineHeader,
-.lineRow {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(220px, 1.7fr) 82px 120px 82px 82px 82px 42px;
-  min-width: 760px;
-}
-
-.lineHeader {
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.lineRow .iconButton {
-  min-height: 40px;
-}
-
-.statusBox {
-  background: var(--panel-muted);
-  border: 1px solid var(--border);
-  display: grid;
-  gap: 8px;
-  padding: 16px;
-}
-
-.statusBox span {
-  color: var(--text-muted);
-  font-size: 14px;
-}
-
-@media (max-width: 980px) {
-  .grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .split {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 720px) {
-  .shell {
-    padding: 0;
-  }
-
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    border-bottom: 1px solid #d8ded6;
-    border-right: 0;
-  }
-
-  nav {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  header {
-    display: grid;
-  }
-
-  .grid {
-    grid-template-columns: 1fr;
-  }
-}
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.flow {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.flow form {
-  border: 1px solid #d8ded6;
-  display: grid;
-  gap: 12px;
-  padding: 16px;
-}
-
-.flow form h2 {
-  font-size: 16px;
-  margin: 0;
-}
-
-.flow form p {
-  min-height: 40px;
-}
-
-.flow form button {
-  align-self: end;
-}
-
-.miniControls {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.miniControls select {
-  border: 1px solid #d8ded6;
-  color: #16201b;
-  font: inherit;
-  min-height: 40px;
-  min-width: 0;
-  padding: 9px 10px;
-}
-
-@media (max-width: 1080px) {
-  .entityForms,
-  .auditColumns,
-  .auditSummary,
-  .auditExportForm,
-  .pathField,
-  .pathForm,
-  .filterForm,
-  .onboardingForm,
-  .productForm,
-  .statusGrid,
-  .seriesForm,
-  .flow {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 720px) {
-  .entityForms,
-  .auditColumns,
-  .auditSummary,
-  .auditExportForm,
-  .pathField,
-  .pathForm,
-  .filterForm,
-  .onboardingForm,
-  .productForm,
-  .statusGrid,
-  .seriesForm,
-  .flow {
-    grid-template-columns: 1fr;
-  }
-
-  .productForm .wide {
-    grid-column: auto;
-  }
-
-  .productRow {
-    align-items: stretch;
-    display: grid;
-  }
-}
-.headerActions {
-  align-items: center;
-  display: flex;
-  gap: 10px;
-}
-
-.iconButton {
-  align-items: center;
-  border: 1px solid #d8ded6;
-  display: inline-flex;
-  justify-content: center;
-  min-width: 40px;
-  padding: 10px;
-}
-
-.lists {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.dataList {
-  border: 1px solid #d8ded6;
-  min-height: 150px;
-  padding: 16px;
-}
-
-.dataList h2 {
-  font-size: 16px;
-  margin: 0 0 10px;
-}
-
-.dataList ul {
-  display: grid;
-  gap: 8px;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.dataList li {
-  border-top: 1px solid #eef2ed;
-  color: #33433b;
-  font-size: 13px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-  padding-top: 8px;
-}
-
-.pager {
-  align-items: center;
-  border-top: 1px solid #eef2ed;
-  display: flex;
-  gap: 8px;
-  justify-content: space-between;
-  margin-top: 10px;
-  padding-top: 10px;
-}
-
-.pager button {
-  border: 1px solid #d8ded6;
-  font-size: 12px;
-  min-height: 34px;
-  padding: 7px 9px;
-  text-align: center;
-}
-
-.pager span {
-  color: var(--text-muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
 .backupForm {
-  display: grid;
+  align-items: stretch;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
-  grid-template-columns: minmax(0, 1fr) 180px;
-  margin: 10px 0;
+  margin: 6px 0;
 }
 
-.sidecarForms {
-  display: grid;
-  gap: 10px;
-}
-
-.sidecarForms .backupForm {
-  grid-template-columns: 140px 180px minmax(220px, 1fr) 180px;
-}
-
-.auditExportForm input,
 .backupForm input,
 .backupForm select {
-  border: 1px solid #d8ded6;
-  color: #16201b;
-  font: inherit;
-  min-height: 40px;
-  min-width: 0;
-  padding: 9px 10px;
+  flex: 1 1 220px;
+}
+
+.backupForm .linkButton {
+  flex: 0 0 160px;
+}
+
+.backupForm button.primary {
+  flex: 0 0 180px;
 }
 
 .pathField .linkButton,
@@ -715,25 +1048,155 @@ button:disabled {
   margin-top: 0;
 }
 
-@media (max-width: 1080px) {
-  .lists {
+.sidecarForms {
+  display: grid;
+  gap: 10px;
+}
+
+.sidecarForms h3 {
+  align-self: center;
+  margin: 0;
+}
+
+.sidecarForms .backupForm h3 {
+  flex: 0 0 130px;
+}
+
+.sidecarForms > p,
+.sidecarChannels > p,
+.fiscalAuditScreen > p,
+.seriesPanel > p {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.statusBox {
+  background: var(--accent-soft);
+  border: 1px solid var(--rule);
+  border-radius: var(--rsa-radius);
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.statusBox svg {
+  color: var(--accent);
+}
+
+.statusBox span {
+  color: var(--mute);
+  font-size: 13px;
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 1180px) {
+  .grid,
+  .lists,
+  .auditSummary,
+  .infoGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .split {
+    grid-template-columns: 1fr;
+  }
+
+  .entityForms,
+  .auditColumns,
+  .auditExportForm,
+  .pathField,
+  .filterForm,
+  .onboardingForm,
+  .productForm,
+  .statusGrid,
+  .seriesForm,
+  .flow,
+  .networkSearch {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .brandName,
+  .moduleBadge,
+  .flowPill {
+    display: none;
   }
 }
 
-@media (max-width: 720px) {
-  .headerActions,
-  .editorTop,
-  .editorFooter,
-  .auditExportForm,
-  .sidecarForms .backupForm,
-  .backupForm {
-    align-items: stretch;
-    display: grid;
+@media (max-width: 820px) {
+  .appBody {
     grid-template-columns: 1fr;
   }
 
-  .lists {
+  .subSidebar {
+    border-bottom: 1px solid var(--rule);
+    border-right: 0;
+    height: auto;
+    position: static;
+  }
+
+  .subNav {
+    display: flex;
+    overflow-x: auto;
+  }
+
+  .subItem {
+    width: auto;
+  }
+
+  .subSidebarFoot,
+  .topDivider {
+    display: none;
+  }
+
+  .topNavInner {
+    gap: 10px;
+    overflow-x: auto;
+    padding: 0 12px;
+  }
+
+  .areaTab {
+    padding: 0 8px;
+  }
+
+  .content {
+    padding: 16px;
+  }
+
+  .grid,
+  .lists,
+  .auditSummary,
+  .infoGrid,
+  .entityForms,
+  .auditColumns,
+  .auditExportForm,
+  .pathField,
+  .filterForm,
+  .onboardingForm,
+  .productForm,
+  .statusGrid,
+  .seriesForm,
+  .flow,
+  .networkSearch {
     grid-template-columns: 1fr;
+  }
+
+  .backupForm > * {
+    flex-basis: 100% !important;
+  }
+
+  .appBody {
+    background: none;
+  }
+
+  .productForm .wide {
+    grid-column: auto;
+  }
+
+  .editorTop,
+  .editorFooter,
+  .productRow {
+    align-items: stretch;
+    display: grid;
   }
 }

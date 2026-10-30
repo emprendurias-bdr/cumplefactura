@@ -1,3 +1,9 @@
+//! Verificación local de la cadena de registros fiscales (huellas encadenadas por empresa).
+//!
+//! Recorre SQLite en orden, comprueba forma del registro, enlace con el hash previo,
+//! unicidad y recomputa el hash VERI*FACTU (`verifactu::*`) para detectar manipulación.
+//! Evidencia local: no es homologación ni aceptación AEAT.
+
 use crate::db::{self, FiscalRecordVerificationRow};
 use crate::services::verifactu;
 use chrono::DateTime;
@@ -6,6 +12,7 @@ use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+/// Informe agregado: validez, cabezas de cadena por empresa e issues.
 #[derive(Debug, Clone, Serialize)]
 pub struct FiscalChainVerification {
     pub valid: bool,
@@ -15,12 +22,14 @@ pub struct FiscalChainVerification {
     pub issues: Vec<FiscalChainIssue>,
 }
 
+/// Último `fiscal_hash` conocido por `company_id` tras el recorrido.
 #[derive(Debug, Clone, Serialize)]
 pub struct FiscalCompanyChainHead {
     pub company_id: String,
     pub last_hash: String,
 }
 
+/// Incidencia detectada en un registro (severityidad + código estable).
 #[derive(Debug, Clone, Serialize)]
 pub struct FiscalChainIssue {
     pub record_id: String,
@@ -30,6 +39,7 @@ pub struct FiscalChainIssue {
     pub message: String,
 }
 
+/// Punto de entrada: valida toda la cadena fiscal persistida y devuelve el informe.
 pub fn verify(conn: &Connection) -> Result<FiscalChainVerification, String> {
     let records = db::list_fiscal_records_for_verification(conn)?;
     let mut issues = Vec::new();
@@ -62,6 +72,7 @@ pub fn verify(conn: &Connection) -> Result<FiscalChainVerification, String> {
     })
 }
 
+/// Comprueba formato de hash, fechas, número emitido y campos obligatorios del registro.
 fn validate_record_shape(record: &FiscalRecordVerificationRow, issues: &mut Vec<FiscalChainIssue>) {
     if !is_upper_hex_sha256(&record.fiscal_hash) {
         push_issue(
@@ -151,6 +162,7 @@ fn validate_record_shape(record: &FiscalRecordVerificationRow, issues: &mut Vec<
     }
 }
 
+/// Verifica que `previous_hash` coincida con la cabeza previa de esa empresa (o sea None al inicio).
 fn validate_chain_link(
     record: &FiscalRecordVerificationRow,
     previous_by_company: &HashMap<String, String>,
@@ -184,6 +196,7 @@ fn validate_chain_link(
     }
 }
 
+/// Detecta reutilización de `fiscal_hash` entre registros.
 fn validate_hash_uniqueness(
     record: &FiscalRecordVerificationRow,
     seen_hashes: &mut HashSet<String>,
@@ -200,6 +213,7 @@ fn validate_hash_uniqueness(
     }
 }
 
+/// Recalcula huella alta/anulación con `verifactu` y la compara con la persistida.
 fn validate_recomputed_hash(
     record: &FiscalRecordVerificationRow,
     issues: &mut Vec<FiscalChainIssue>,
@@ -271,6 +285,7 @@ fn is_upper_hex_sha256(value: &str) -> bool {
             .all(|byte| byte.is_ascii_digit() || (b'A'..=b'F').contains(&byte))
 }
 
+/// Acumula un issue tipado ligado al registro actual.
 fn push_issue(
     issues: &mut Vec<FiscalChainIssue>,
     record: &FiscalRecordVerificationRow,

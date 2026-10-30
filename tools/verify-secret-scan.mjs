@@ -1,3 +1,4 @@
+// Secret scan: fail gate if credentials/keys appear in tracked sources.
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";

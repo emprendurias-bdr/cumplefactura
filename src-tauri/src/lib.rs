@@ -1,3 +1,7 @@
+//! Crate library CumpleFactura: arranque Tauri + registro de comandos IPC.
+//!
+//! Capas: `commands` (IPC) → `domain` / `db` / `services` (fiscal local + sidecars).
+
 use tauri::Manager;
 
 mod commands;
@@ -7,6 +11,7 @@ mod db;
 mod domain;
 mod services;
 
+/// Inicializa SQLite, plugin dialog y el `invoke_handler` de la app desktop.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()

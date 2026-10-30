@@ -1,3 +1,5 @@
+//! IPC facturas: borrador, emisión (nº + huella en Rust), listado, PDF.
+
 use crate::db::{self, AppState, InvoiceListFilters, InvoiceSummary, ListPagination};
 use crate::domain::invoice::{Invoice, InvoiceDraftInput, InvoiceIssueInput, IssuedInvoice};
 use crate::services::audit::AuditEvent;
@@ -5,6 +7,7 @@ use crate::services::pdf;
 use crate::services::verifactu;
 use tauri::State;
 
+/// Preview del siguiente número (UI); la reserva real ocurre en `invoice_issue`.
 #[derive(Debug, serde::Serialize)]
 pub struct NextNumberPreview {
     pub company_id: String,
@@ -14,6 +17,7 @@ pub struct NextNumberPreview {
     pub source: String,
 }
 
+/// Persiste borrador; no asigna número fiscal definitivo.
 #[tauri::command]
 pub fn invoice_draft_create(
     state: State<'_, AppState>,
@@ -28,6 +32,7 @@ pub fn invoice_draft_create(
     Ok(invoice)
 }
 
+/// Emite: reserva secuencia, calcula huella, audit trail y registro fiscal.
 #[tauri::command]
 pub fn invoice_issue(
     state: State<'_, AppState>,
@@ -112,6 +117,7 @@ pub fn invoice_issue(
     })
 }
 
+/// Consulta el próximo número sin consumir la secuencia.
 #[tauri::command]
 pub fn invoice_next_number_preview(
     state: State<'_, AppState>,
@@ -139,6 +145,7 @@ pub fn invoice_next_number_preview(
     })
 }
 
+/// Listado con filtros opcionales + paginación.
 #[tauri::command]
 pub fn invoice_list(
     state: State<'_, AppState>,
@@ -155,6 +162,7 @@ pub fn invoice_list(
         pagination.unwrap_or_default(),
     )
 }
+/// Exporta PDF local de una factura (servicio `pdf`).
 #[tauri::command]
 pub fn invoice_export_pdf(
     state: State<'_, AppState>,

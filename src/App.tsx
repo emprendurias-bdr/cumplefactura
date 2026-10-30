@@ -1,555 +1,79 @@
-﻿import { invoke } from "@tauri-apps/api/core";
+/**
+ * UI CumpleFactura (React + Tauri invoke).
+ * App orquesta estado/handlers; el JSX por nav vive en src/sections/.
+ */
+import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { FileCheck2, FileCode2, FolderOpen, Hash, LockKeyhole, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
-
-type Company = {
-  id: string;
-  legal_name: string;
-  tax_id: string;
-  address: string;
-  postal_code: string;
-  municipality: string;
-  province: string;
-  country_code: string;
-  default_series: string;
-  created_at?: string;
-};
-type InvoiceSeriesConfig = {
-  id: string;
-  company_id: string;
-  label: string;
-  series_code: string;
-  fiscal_year: number;
-  include_year: boolean;
-  separator: string;
-  padding: number;
-  next_number: number;
-  is_default: boolean;
-  active: boolean;
-  resolved_series: string;
-  preview: string;
-  created_at: string;
-};
-type Customer = {
-  id: string;
-  display_name: string;
-  tax_id: string;
-  kind: string;
-  address: string;
-  postal_code: string;
-  municipality: string;
-  province: string;
-  country_code: string;
-  updated_at?: string;
-};
-type Product = {
-  id: string;
-  company_id: string;
-  sku: string;
-  name: string;
-  description: string;
-  kind: string;
-  unit_price_cents: number;
-  tax_rate_basis_points: number;
-  withholding_rate_basis_points?: number | null;
-  discount_rate_basis_points?: number | null;
-  active: boolean;
-  updated_at: string;
-};
-type Invoice = { id: string; series: string; number?: number | null; totals: { total_cents: number } };
-type IssuedInvoice = { invoice: Invoice; fiscal_hash: string; audit_hash: string };
-type InvoiceSummary = {
-  id: string;
-  company_id: string;
-  customer_id: string;
-  series: string;
-  number?: number | null;
-  kind: string;
-  status: string;
-  rectifies_invoice_id?: string | null;
-  rectification_reason_code?: string | null;
-  rectification_method?: string | null;
-  total_cents: number;
-  fiscal_hash?: string | null;
-};
-type AuditSummary = { id: string; action: string; actor: string; hash: string; occurred_at: string };
-type FiscalRecordSummary = {
-  id: string;
-  invoice_id: string;
-  record_type: string;
-  generated_at: string;
-  fiscal_hash: string;
-  previous_fiscal_hash?: string | null;
-  xml_path?: string | null;
-  status: string;
-};
-type FiscalChainIssue = {
-  record_id: string;
-  invoice_id: string;
-  severity: string;
-  code: string;
-  message: string;
-};
-type FiscalCompanyChainHead = {
-  company_id: string;
-  last_hash: string;
-};
-type FiscalChainVerification = {
-  valid: boolean;
-  total_records: number;
-  issue_count: number;
-  last_hash_by_company: FiscalCompanyChainHead[];
-  issues: FiscalChainIssue[];
-};
-type RectificationAdvice = {
-  reason_code: string;
-  method: string;
-  confidence: string;
-  source_refs: string[];
-  notes: string[];
-  warnings: string[];
-};
-type BackupResult = { target_path: string; status: string; notes: string[] };
-type BackupRestoreResult = { source_path: string; status: string; destructive_restore_performed: boolean; notes: string[] };
-type ExportResult = { target_path: string; status: string; notes: string[] };
-type AppDefaults = {
-  app_data_dir: string;
-  export_dir: string;
-  default_backup_path: string;
-  default_pdf_path: string;
-  default_verifactu_xml_path: string;
-  default_cancel_xml_path: string;
-  default_signed_xml_path: string;
-  default_json_export_path: string;
-  default_csv_export_path: string;
-  default_audit_export_path: string;
-  notes: string[];
-};
-type AppSettings = {
-  export_dir?: string | null;
-  default_territory_flags: string[];
-  onboarding_completed: boolean;
-  updated_at: string;
-};
-type NextNumberPreview = {
-  company_id: string;
-  fiscal_year: number;
-  series: string;
-  next_number: number;
-  source: string;
-};
-type InvoiceLineForm = {
-  id: string;
-  description: string;
-  quantity: string;
-  unit_price_euros: string;
-  discount_rate_percent: string;
-  tax_rate_percent: string;
-  withholding_rate_percent: string;
-};
-type InvoiceLineInput = {
-  description: string;
-  quantity: number;
-  unit_price_cents: number;
-  discount_rate_basis_points: number | null;
-  tax_rate_basis_points: number;
-  withholding_rate_basis_points: number | null;
-};
-type CompanyForm = Omit<Company, "id" | "created_at">;
-type CustomerForm = Omit<Customer, "id" | "updated_at">;
-type ProductForm = {
-  sku: string;
-  name: string;
-  description: string;
-  kind: string;
-  unit_price_euros: string;
-  tax_rate_percent: string;
-  withholding_rate_percent: string;
-  discount_rate_percent: string;
-  active: boolean;
-};
-type VerifactuXmlResult = { target_path: string; status: string; xsd_validated: boolean; notes: string[] };
-type SubmissionPreparation = {
-  invoice_id: string;
-  export_id: string;
-  xml_path: string;
-  xml_sha256: string;
-  xml_bytes: number;
-  signature_status: string;
-  transmission_status: string;
-};
-type AeatTransportPreflight = {
-  ready: boolean;
-  status: string;
-  endpoint_name: string;
-  endpoint_url: string;
-  xml_sha256: string;
-  xml_bytes: number;
-  external_call_performed: boolean;
-  blockers: string[];
-  warnings: string[];
-};
-type XadesSidecarPreflight = {
-  ready: boolean;
-  status: string;
-  sidecar_url: string;
-  sidecar_endpoint: string;
-  xml_sha256: string;
-  xml_bytes: number;
-  certificate_ref_status: string;
-  current_signature_status: string;
-  signature_status_after_success: string;
-  external_call_performed: boolean;
-  blockers: string[];
-  warnings: string[];
-};
-type XadesSidecarSignature = SubmissionPreparation & {
-  source_export_id: string;
-  source_xml_path: string;
-  source_xml_sha256: string;
-  xsd_validated_before_signature: boolean;
-  signature_mode: string;
-  certificate_source?: string | null;
-  sidecar_url: string;
-  sidecar_call_performed: boolean;
-  external_call_performed: boolean;
-  notes: string[];
-  warnings: string[];
-};
-type VerifactuSubmitSidecarPreflight = {
-  ready: boolean;
-  status: string;
-  sidecar_url: string;
-  sidecar_endpoint: string;
-  endpoint_name: string;
-  xml_sha256: string;
-  xml_bytes: number;
-  certificate_ref_status: string;
-  current_signature_status: string;
-  wsdl_name?: string | null;
-  wsdl_sha256?: string | null;
-  operation_available: boolean;
-  endpoint_allowed: boolean;
-  transport_enabled: boolean;
-  soap_calls_enabled: boolean;
-  certificate_loaded: boolean;
-  certificate_source?: string | null;
-  certificate_days_remaining?: number | null;
-  sidecar_call_performed: boolean;
-  external_call_performed: boolean;
-  blockers: string[];
-  warnings: string[];
-};
-type VerifactuSubmitSidecarInvocation = SubmissionPreparation & {
-  source_export_id: string;
-  sidecar_url: string;
-  sidecar_endpoint: string;
-  endpoint_name: string;
-  wsdl_name: string;
-  operation: string;
-  status: string;
-  csv?: string | null;
-  estado_registro?: string | null;
-  codigo_error?: string | null;
-  descripcion_error?: string | null;
-  transport_mode: string;
-  certificate_source: string;
-  sidecar_call_performed: boolean;
-  external_call_performed: boolean;
-  notes: string[];
-  warnings: string[];
-};
-type ImportedSidecarChannel = {
-  channel: string;
-  status: string;
-  source: string;
-  blockers: string[];
-  mvp_importable: boolean;
-  acceptance_status?: string | null;
-  acceptance_validation_status?: string | null;
-  acceptance_manifest?: string | null;
-  deferred_reason?: string | null;
-  notes: string[];
-};
-type ImportedSidecarCapabilities = {
-  source_project: string;
-  source_readiness_status: string;
-  source_gate_status: string;
-  source_generated_at?: string | null;
-  channels: ImportedSidecarChannel[];
-  mvp_channels: string[];
-  deferred_channels: string[];
-  external_call_performed_by_importer: boolean;
-  notes: string[];
-};
-type SiiSidecarPreflight = {
-  ready: boolean;
-  status: string;
-  sidecar_url: string;
-  sidecar_endpoint: string;
-  book: string;
-  endpoint_name: string;
-  wsdl_name?: string | null;
-  transport_enabled: boolean;
-  soap_calls_enabled: boolean;
-  certificate_loaded: boolean;
-  sidecar_call_performed: boolean;
-  external_call_performed: boolean;
-  blockers: string[];
-  warnings: string[];
-};
-type TicketBaiSidecarPreflight = {
-  ready: boolean;
-  status: string;
-  sidecar_url: string;
-  sidecar_endpoint: string;
-  territorio: string;
-  endpoint: string;
-  xsd_name?: string | null;
-  xsd_available: boolean;
-  endpoint_allowed: boolean;
-  submission_enabled: boolean;
-  certificate_loaded: boolean;
-  sidecar_call_performed: boolean;
-  external_call_performed: boolean;
-  blockers: string[];
-  warnings: string[];
-};
-
-const cards = [
-  { icon: FileCheck2, title: "Facturas", text: "Borradores, emision, series y export local." },
-  { icon: LockKeyhole, title: "Auditoria", text: "Registro append-only preparado para RRSIF." },
-  { icon: Hash, title: "Huella", text: "Cadena de hashes estable antes de enviar payload fiscal." },
-  { icon: ShieldCheck, title: "Fiscal", text: "XML VERI*FACTU borrador con XSD local, sin envio ni firma." },
-];
-
-const PAGE_SIZE = 5;
-
-function cents(value: number) {
-  return new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(value / 100);
-}
-
-function short(value?: string | null) {
-  return value ? `${value.slice(0, 12)}...` : "-";
-}
-
-function resolvedSeriesCode(code: string, year: number, includeYear: boolean) {
-  const normalized = code.trim().toUpperCase() || "A";
-  return includeYear ? `${normalized}${year}` : normalized;
-}
-
-function newInvoiceLine(): InvoiceLineForm {
-  return {
-    id: `line-${Date.now()}-${Math.round(Math.random() * 1_000_000)}`,
-    description: "Servicio profesional",
-    quantity: "1",
-    unit_price_euros: "100",
-    discount_rate_percent: "0",
-    tax_rate_percent: "21",
-    withholding_rate_percent: "",
-  };
-}
-
-function emptyCompanyForm(): CompanyForm {
-  return {
-    legal_name: "",
-    tax_id: "",
-    address: "",
-    postal_code: "",
-    municipality: "",
-    province: "",
-    country_code: "ES",
-    default_series: "A",
-  };
-}
-
-function emptyCustomerForm(): CustomerForm {
-  return {
-    display_name: "",
-    tax_id: "",
-    kind: "Business",
-    address: "",
-    postal_code: "",
-    municipality: "",
-    province: "",
-    country_code: "ES",
-  };
-}
-
-function emptyProductForm(): ProductForm {
-  return {
-    sku: "SVC-001",
-    name: "Servicio profesional",
-    description: "Servicio profesional",
-    kind: "Service",
-    unit_price_euros: "100",
-    tax_rate_percent: "21",
-    withholding_rate_percent: "",
-    discount_rate_percent: "0",
-    active: true,
-  };
-}
-
-function companyToForm(value: Company): CompanyForm {
-  return {
-    legal_name: value.legal_name,
-    tax_id: value.tax_id,
-    address: value.address,
-    postal_code: value.postal_code,
-    municipality: value.municipality,
-    province: value.province,
-    country_code: value.country_code,
-    default_series: value.default_series,
-  };
-}
-
-function customerToForm(value: Customer): CustomerForm {
-  return {
-    display_name: value.display_name,
-    tax_id: value.tax_id,
-    kind: value.kind,
-    address: value.address,
-    postal_code: value.postal_code,
-    municipality: value.municipality,
-    province: value.province,
-    country_code: value.country_code,
-  };
-}
-
-function productToForm(value: Product): ProductForm {
-  return {
-    sku: value.sku,
-    name: value.name,
-    description: value.description,
-    kind: value.kind,
-    unit_price_euros: (value.unit_price_cents / 100).toString(),
-    tax_rate_percent: (value.tax_rate_basis_points / 100).toString(),
-    withholding_rate_percent: value.withholding_rate_basis_points ? (value.withholding_rate_basis_points / 100).toString() : "",
-    discount_rate_percent: value.discount_rate_basis_points ? (value.discount_rate_basis_points / 100).toString() : "0",
-    active: value.active,
-  };
-}
-
-function decimal(value: string) {
-  return Number(String(value).replace(",", "."));
-}
-
-function eurosToCents(value: string) {
-  return Math.round(decimal(value) * 100);
-}
-
-function percentToBasisPoints(value: string) {
-  if (value.trim() === "") return 0;
-  return Math.round(decimal(value) * 100);
-}
-
-function isInvoiceLineReady(line: InvoiceLineForm) {
-  const quantity = decimal(line.quantity);
-  const unitPrice = decimal(line.unit_price_euros);
-  const discount = percentToBasisPoints(line.discount_rate_percent);
-  const tax = percentToBasisPoints(line.tax_rate_percent);
-  const withholding = percentToBasisPoints(line.withholding_rate_percent);
-  return (
-    line.description.trim().length > 0 &&
-    Number.isFinite(quantity) &&
-    quantity > 0 &&
-    Number.isInteger(quantity) &&
-    Number.isFinite(unitPrice) &&
-    unitPrice >= 0 &&
-    Number.isFinite(discount) &&
-    discount >= 0 &&
-    discount <= 10_000 &&
-    Number.isFinite(tax) &&
-    tax >= 0 &&
-    Number.isFinite(withholding) &&
-    withholding >= 0
-  );
-}
-
-function lineToInput(line: InvoiceLineForm): InvoiceLineInput {
-  const discount = percentToBasisPoints(line.discount_rate_percent);
-  const withholding = percentToBasisPoints(line.withholding_rate_percent);
-  return {
-    description: line.description.trim(),
-    quantity: decimal(line.quantity),
-    unit_price_cents: eurosToCents(line.unit_price_euros),
-    discount_rate_basis_points: discount > 0 ? discount : null,
-    tax_rate_basis_points: percentToBasisPoints(line.tax_rate_percent),
-    withholding_rate_basis_points: withholding > 0 ? withholding : null,
-  };
-}
-
-function productToInvoiceLine(product: Product, lineId: string): InvoiceLineForm {
-  return {
-    id: lineId,
-    description: product.description || product.name,
-    quantity: "1",
-    unit_price_euros: (product.unit_price_cents / 100).toString(),
-    discount_rate_percent: product.discount_rate_basis_points ? (product.discount_rate_basis_points / 100).toString() : "0",
-    tax_rate_percent: (product.tax_rate_basis_points / 100).toString(),
-    withholding_rate_percent: product.withholding_rate_basis_points ? (product.withholding_rate_basis_points / 100).toString() : "",
-  };
-}
-
-function editorTotals(lines: InvoiceLineForm[]) {
-  return lines.reduce(
-    (totals, line) => {
-      if (!isInvoiceLineReady(line)) return totals;
-      const input = lineToInput(line);
-      const discount = input.discount_rate_basis_points ?? 0;
-      const base = Math.trunc((input.quantity * input.unit_price_cents * (10_000 - discount)) / 10_000);
-      const tax = Math.trunc((base * input.tax_rate_basis_points) / 10_000);
-      const withholding = Math.trunc((base * (input.withholding_rate_basis_points ?? 0)) / 10_000);
-      return {
-        taxable_base_cents: totals.taxable_base_cents + base,
-        tax_cents: totals.tax_cents + tax,
-        withholding_cents: totals.withholding_cents + withholding,
-        total_cents: totals.total_cents + base + tax - withholding,
-      };
-    },
-    { taxable_base_cents: 0, tax_cents: 0, withholding_cents: 0, total_cents: 0 },
-  );
-}
-
-function joinPath(dir: string, file: string) {
-  const separator = dir.includes("\\") ? "\\" : "/";
-  return `${dir.replace(/[\\/]+$/, "")}${separator}${file}`;
-}
-
-function timestamp() {
-  return new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14);
-}
-
-function optionalText(value: string) {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
-
-function optionalNumber(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function emptyInvoiceFilters() {
-  return {
-    company_id: null as string | null,
-    customer_id: null as string | null,
-    fiscal_year: null as number | null,
-    series: null as string | null,
-    status: null as string | null,
-    kind: null as string | null,
-    search: null as string | null,
-  };
-}
-
-function listPagination(page: number) {
-  return { limit: PAGE_SIZE, offset: page * PAGE_SIZE };
-}
+import { FolderOpen, RefreshCw } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { AjustesSection } from "./sections/AjustesSection";
+import { ClientesSection } from "./sections/ClientesSection";
+import { EmpresasSection } from "./sections/EmpresasSection";
+import { FacturasSection } from "./sections/FacturasSection";
+import { FiscalSection } from "./sections/FiscalSection";
+import { PanelSection } from "./sections/PanelSection";
+import {
+  cents,
+  companyToForm,
+  customerToForm,
+  emptyCompanyForm,
+  emptyCustomerForm,
+  emptyInvoiceFilters,
+  emptyProductForm,
+  editorTotals,
+  eurosToCents,
+  isInvoiceLineReady,
+  joinPath,
+  lineToInput,
+  listPagination,
+  newInvoiceLine,
+  optionalNumber,
+  optionalText,
+  percentToBasisPoints,
+  productToForm,
+  productToInvoiceLine,
+  resolvedSeriesCode,
+  short,
+  timestamp,
+} from "./lib/format";
+import { NAV_ITEMS, PAGE_SIZE } from "./types";
+import type {
+  AeatTransportPreflight,
+  AppDefaults,
+  AppSection,
+  AppSettings,
+  AuditSummary,
+  BackupRestoreResult,
+  BackupResult,
+  Company,
+  CompanyForm,
+  Customer,
+  CustomerForm,
+  ExportResult,
+  FiscalChainVerification,
+  FiscalRecordSummary,
+  ImportedSidecarCapabilities,
+  Invoice,
+  InvoiceLineForm,
+  InvoiceSeriesConfig,
+  InvoiceSummary,
+  IssuedInvoice,
+  NextNumberPreview,
+  Product,
+  ProductForm,
+  RectificationAdvice,
+  SiiSidecarPreflight,
+  SubmissionPreparation,
+  TicketBaiSidecarPreflight,
+  VerifactuSubmitSidecarInvocation,
+  VerifactuSubmitSidecarPreflight,
+  VerifactuXmlResult,
+  XadesSidecarPreflight,
+  XadesSidecarSignature,
+} from "./types";
 
 export default function App() {
+  const [section, setSection] = useState<AppSection>("panel");
   const [company, setCompany] = useState<Company | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
@@ -687,6 +211,7 @@ export default function App() {
     }
   }, [company]);
 
+  /** Wrapper de estado: muestra progreso/error en la barra de status. */
   async function run<T>(label: string, action: () => Promise<T>) {
     setStatus(`${label}...`);
     try {
@@ -698,6 +223,8 @@ export default function App() {
       throw error;
     }
   }
+
+  /* --- Mutadores de formularios y diálogos nativos de ruta --- */
 
   function updateCompanyForm(field: keyof CompanyForm, value: string) {
     setCompanyForm((current) => ({ ...current, [field]: value }));
@@ -711,6 +238,7 @@ export default function App() {
     setProductForm((current) => ({ ...current, [field]: value }));
   }
 
+  /** Deriva paths por defecto (backup/PDF/XML/CSV/audit) bajo la carpeta export. */
   function applyExportDirPaths(dir: string) {
     if (!dir.trim()) return;
     const stamp = timestamp();
@@ -724,6 +252,7 @@ export default function App() {
     setAuditExportPath(joinPath(dir, `cumplefactura-auditoria-${stamp}.json`));
   }
 
+  /** Diálogo nativo: carpeta export (plugin dialog). */
   async function pickExportDirectory() {
     const selected = await openDialog({
       title: "Elegir carpeta export",
@@ -736,6 +265,7 @@ export default function App() {
     applyExportDirPaths(selected);
   }
 
+  /** Diálogo nativo save; deja el path read-only en el input asociado. */
   async function pickSavePath(
     title: string,
     currentPath: string,
@@ -751,6 +281,7 @@ export default function App() {
     if (typeof selected === "string") setter(selected);
   }
 
+  /** Diálogo nativo open para origen de restore (preflight en Rust). */
   async function pickRestoreFile() {
     const selected = await openDialog({
       title: "Elegir restore",
@@ -868,6 +399,7 @@ export default function App() {
     setIssued(null);
   }
 
+  /** Aplica producto del catálogo a la primera línea del editor. */
   function useProductInFirstLine(item: Product) {
     markInvoiceEditorDirty();
     setInvoiceLines((current) => {
@@ -892,6 +424,7 @@ export default function App() {
     setInvoiceLines((current) => (current.length === 1 ? current : current.filter((line) => line.id !== id)));
   }
 
+  /** Convierte líneas UI → inputs Rust; null si el editor no está listo. */
   function currentInvoiceLineInputs() {
     if (!invoiceLinesReady) {
       setStatus("Factura: completa descripcion, cantidad, precio, descuento, IVA e IRPF");
@@ -900,6 +433,7 @@ export default function App() {
     return invoiceLines.map(lineToInput);
   }
 
+  /** Cambia serie activa del draft y refresca preview del número. */
   async function selectInvoiceSeries(seriesId: string) {
     const series = seriesConfigs.find((item) => item.id === seriesId) ?? null;
     if (!series || !company) return;
@@ -909,6 +443,7 @@ export default function App() {
     await previewNextNumber(company, series.resolved_series, series.fiscal_year);
   }
 
+  /** Recarga listados + verificación de cadena fiscal desde SQLite vía Tauri. */
   async function refreshData(
     filters = invoiceFiltersInput(),
     pages = { invoice: invoicePage, audit: auditPage, fiscal: fiscalPage },
@@ -941,12 +476,14 @@ export default function App() {
     }
   }
 
+  /** Aplica filtros del panel “Buscar facturas” (página 0). */
   async function searchInvoices(event: FormEvent) {
     event.preventDefault();
     setInvoicePage(0);
     await refreshData(invoiceFiltersInput(), { invoice: 0, audit: auditPage, fiscal: fiscalPage });
   }
 
+  /** Limpia filtros UI y relanza listado sin restricciones. */
   function clearInvoiceFilters() {
     setInvoiceSearch("");
     setInvoiceCompanyFilter("");
@@ -977,6 +514,7 @@ export default function App() {
     await refreshData(invoiceFiltersInput(), { invoice: invoicePage, audit: auditPage, fiscal: page });
   }
 
+  /** Invoca `fiscal_chain_verify` y actualiza el informe en pantalla. */
   async function verifyFiscalChain() {
     const result = await run("Verificar cadena fiscal", () =>
       invoke<FiscalChainVerification>("fiscal_chain_verify"),
@@ -984,6 +522,7 @@ export default function App() {
     setFiscalChain(result);
   }
 
+  /** Catálogo de productos de la empresa activa. */
   async function loadProducts(companyId: string) {
     const rows = await invoke<Product[]>("product_list", { companyId });
     setProducts(rows);
@@ -994,6 +533,7 @@ export default function App() {
     }
   }
 
+  /** Series configuradas + selección de default + preview de número. */
   async function loadSeries(targetCompany: Company) {
     const rows = await invoke<InvoiceSeriesConfig[]>("company_series_list", {
       companyId: targetCompany.id,
@@ -1016,6 +556,7 @@ export default function App() {
     }
   }
 
+  /** Persiste config de serie (`company_series_configure`) y recarga. */
   async function configureSeries(event: FormEvent) {
     event.preventDefault();
     if (!company) return;
@@ -1043,6 +584,7 @@ export default function App() {
     }
   }
 
+  /** Alta/edición empresa (`company_create` / `company_update`). */
   async function saveCompany(event: FormEvent) {
     event.preventDefault();
     const input = {
@@ -1067,6 +609,7 @@ export default function App() {
     }
   }
 
+  /** Upsert cliente (`customer_upsert`). */
   async function saveCustomer(event: FormEvent) {
     event.preventDefault();
     const saved = await run(customer ? "Editar cliente" : "Alta cliente", () =>
@@ -1091,6 +634,7 @@ export default function App() {
     }
   }
 
+  /** Upsert producto en catálogo de la empresa activa. */
   async function saveProduct(event: FormEvent) {
     event.preventDefault();
     if (!company) {
@@ -1123,6 +667,7 @@ export default function App() {
     }
   }
 
+  /** Crea borrador local (`invoice_draft_create`); el número real lo reserva Rust al emitir. */
   async function createDraft(event: FormEvent) {
     event.preventDefault();
     if (!company || !customer) return;
@@ -1151,6 +696,7 @@ export default function App() {
     }
   }
 
+  /** Emite factura: numeración + huella fiscal en Rust (`invoice_issue`). */
   async function issueInvoice(event?: FormEvent) {
     event?.preventDefault();
     if (!company || !customer) return;
@@ -1185,6 +731,8 @@ export default function App() {
       await refreshData();
     }
   }
+
+  /* --- Exports locales, restore preflight, XML VERI*FACTU y sidecars --- */
 
   async function exportBackup(event: FormEvent) {
     event.preventDefault();
@@ -1240,6 +788,7 @@ export default function App() {
     if (result) setRestore(result);
   }
 
+  /** Borrador XML Alta + validación XSD local. */
   async function exportXml(event: FormEvent) {
     event.preventDefault();
     if (!issuedInvoiceId) {
@@ -1252,6 +801,7 @@ export default function App() {
     if (result) setXmlResult(result);
   }
 
+  /** Arranque: defaults de paths, settings onboarding, capabilities ContaPro, refresh. */
   async function loadDefaults() {
     const [defaults, settings, capabilities] = await run("Cargar defaults", () =>
       Promise.all([
@@ -1281,6 +831,7 @@ export default function App() {
     setAuditExportPath((current) => current || defaults.default_audit_export_path);
   }
 
+  /** Persiste carpeta export + flags fiscales (`app_settings_update`). */
   async function saveOnboarding(event: FormEvent) {
     event.preventDefault();
     const saved = await run("Guardar onboarding", () =>
@@ -1298,6 +849,7 @@ export default function App() {
     }
   }
 
+  /** Preview UI del siguiente número (Rust reserva de verdad solo en issue). */
   async function previewNextNumber(targetCompany: Company, series = activeSeries, year = fiscalYear) {
     const preview = await invoke<NextNumberPreview>("invoice_next_number_preview", {
       companyId: targetCompany.id,
@@ -1308,6 +860,7 @@ export default function App() {
     setNextNumber(preview.next_number);
   }
 
+  /** Asistente técnico R1–R5 / S|I (`rectification_advice`). */
   async function adviseRectification() {
     const result = await run("Asistente rectificativa", () =>
       invoke<RectificationAdvice>("rectification_advice", {
@@ -1325,6 +878,7 @@ export default function App() {
     }
   }
 
+  /** Emite factura rectificativa enlazada a una issued no-R. */
   async function issueRectifyingInvoice(event: FormEvent) {
     event.preventDefault();
     const source = rectifiableInvoice;
@@ -1371,6 +925,7 @@ export default function App() {
     }
   }
 
+  /** XML anulación + XSD (`verifactu_xml_anulacion_draft_export`). */
   async function exportCancelXml(event: FormEvent) {
     event.preventDefault();
     if (!issuedInvoiceId) {
@@ -1390,6 +945,7 @@ export default function App() {
     }
   }
 
+  /** Paquete unsigned listo para XAdES (`verifactu_submission_prepare`). */
   async function prepareSubmission(event: FormEvent) {
     event.preventDefault();
     if (!issuedInvoiceId) {
@@ -1432,6 +988,7 @@ export default function App() {
     if (result) setXadesPreflight(result);
   }
 
+  /** Firma exacta vía sidecar local (flag+HMAC en Rust). */
   async function signWithXadesSidecar(event: FormEvent) {
     event.preventDefault();
     if (!submission) {
@@ -1460,6 +1017,7 @@ export default function App() {
     }
   }
 
+  /** Preflight endpoints AEAT (sin SOAP desde la UI). */
   async function preflightAeatTransport(event: FormEvent) {
     event.preventDefault();
     if (!submission) {
@@ -1544,6 +1102,7 @@ export default function App() {
     if (result) setTicketbaiPreflight(result);
   }
 
+  /** Invoke-submit VERI*FACTU solo vía sidecar (último escalón UI). */
   async function invokeSubmitSidecar(event: FormEvent) {
     event.preventDefault();
     if (!submission) {
@@ -1568,18 +1127,84 @@ export default function App() {
     if (result) setSubmitInvocation(result);
   }
 
+
+  const sectionProps = {
+    // shared
+    company, setCompany, customer, setCustomer, product, setProduct,
+    companyForm, setCompanyForm, customerForm, setCustomerForm, productForm, setProductForm,
+    draft, setDraft, issued, setIssued,
+    companies, customers, products, invoices, audit, fiscalRecords, fiscalChain,
+    invoiceSearch, setInvoiceSearch, invoiceCompanyFilter, setInvoiceCompanyFilter,
+    invoiceCustomerFilter, setInvoiceCustomerFilter, invoiceYearFilter, setInvoiceYearFilter,
+    invoiceSeriesFilter, setInvoiceSeriesFilter, invoiceStatusFilter, setInvoiceStatusFilter,
+    invoiceKindFilter, setInvoiceKindFilter,
+    invoicePage, auditPage, fiscalPage,
+    demoSeedEnabled, nextNumber, seriesConfigs, selectedSeries,
+    seriesLabel, setSeriesLabel, seriesCode, setSeriesCode,
+    seriesFiscalYear, setSeriesFiscalYear, seriesIncludeYear, setSeriesIncludeYear,
+    seriesSeparator, setSeriesSeparator, seriesPadding, setSeriesPadding,
+    seriesNextNumber, setSeriesNextNumber,
+    invoiceLines, setInvoiceLines, invoiceTotals,
+    appDefaults, appSettings, exportDir, setExportDir,
+    defaultTerritoryFlags, numberPreview,
+    rectificationScenario, setRectificationScenario,
+    rectificationReason, setRectificationReason,
+    rectificationMethod, setRectificationMethod,
+    rectificationAdvice, rectifiableInvoice,
+    backupPath, setBackupPath, restorePath, setRestorePath,
+    pdfPath, setPdfPath, jsonPath, setJsonPath, csvPath, setCsvPath,
+    xmlPath, setXmlPath, cancelXmlPath, setCancelXmlPath, signedXmlPath, setSignedXmlPath,
+    auditExportPath, setAuditExportPath,
+    backup, restore, pdfResult, jsonResult, csvResult,
+    xmlResult, cancelXmlResult, auditExportResult,
+    submission, xadesPreflight, xadesSignature, transportPreflight,
+    submitPreflight, submitInvocation,
+    xadesSidecarUrl, setXadesSidecarUrl, xadesCertRef, setXadesCertRef,
+    aeatEndpoint, setAeatEndpoint, aeatEndpointName, setAeatEndpointName,
+    submitSidecarUrl, setSubmitSidecarUrl, invokeSidecarUrl, setInvokeSidecarUrl,
+    sidecarCapabilities, siiChannel, ticketbaiChannel,
+    mvpSidecarChannels, deferredSidecarChannels,
+    siiBook, setSiiBook, siiEndpointName, setSiiEndpointName, siiSidecarUrl, setSiiSidecarUrl,
+    ticketbaiTerritorio, setTicketbaiTerritorio, ticketbaiEndpoint, setTicketbaiEndpoint,
+    ticketbaiSidecarUrl, setTicketbaiSidecarUrl,
+    siiPreflight, ticketbaiPreflight,
+    activeSeries, activeSeriesPreview, fiscalYear,
+    canDraft, canIssue, canRectify, canExportXml, onboardingReady, onboardingSteps,
+    // handlers
+    fillDemoData, saveOnboarding, pickExportDirectory, toggleTerritoryFlag,
+    saveCompany, newCompanyForm, selectCompany, updateCompanyForm,
+    saveCustomer, newCustomerForm, selectCustomer, updateCustomerForm,
+    saveProduct, newProductForm, selectProduct, updateProductForm, useProductInFirstLine,
+    configureSeries, selectInvoiceSeries,
+    updateInvoiceLine, removeInvoiceLine, addInvoiceLine,
+    createDraft, issueInvoice, issueRectifyingInvoice, adviseRectification,
+    clearInvoiceFilters, searchInvoices, changeInvoicePage, changeAuditPage, changeFiscalPage,
+    verifyFiscalChain, exportFiscalAudit, pickSavePath, loadDefaults,
+    preflightSiiSidecar, preflightTicketBaiSidecar,
+    exportBackup, restoreBackup, pickRestoreFile,
+    exportPdf, exportJson, exportCsv, exportXml, exportCancelXml,
+    prepareSubmission, preflightXadesSidecar, signWithXadesSidecar,
+    preflightAeatTransport, preflightSubmitSidecar, invokeSubmitSidecar,
+    cents, short, PAGE_SIZE,
+  };
+
   return (
     <main className="shell">
       <section className="workspace">
         <aside className="sidebar">
           <div className="brand">CumpleFactura</div>
           <nav aria-label="Principal">
-            <button className="active">Panel</button>
-            <button>Empresas</button>
-            <button>Clientes</button>
-            <button>Facturas</button>
-            <button>Fiscal</button>
-            <button>Ajustes</button>
+            {NAV_ITEMS.map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                className={section === id ? "active" : undefined}
+                aria-current={section === id ? "page" : undefined}
+                onClick={() => setSection(id)}
+              >
+                {label}
+              </button>
+            ))}
           </nav>
         </aside>
         <section className="content">
@@ -1596,699 +1221,14 @@ export default function App() {
             </div>
           </header>
 
-          <div className="grid">
-            {cards.map(({ icon: Icon, title, text }) => (
-              <article key={title} className="card">
-                <Icon size={22} aria-hidden="true" />
-                <h2>{title}</h2>
-                <p>{text}</p>
-              </article>
-            ))}
-          </div>
-
-          <section className="panel statusGrid" aria-label="Estado pre-MVP">
-            <div>
-              <strong>Roadmap local MVP</strong>
-              <p>Pre-MVP local-first: evidencia local activa, externo bloqueado.</p>
-              <button type="button" className="linkButton" onClick={fillDemoData}>
-                {demoSeedEnabled ? "Datos demo cargados" : "Rellenar demo"}
-              </button>
-            </div>
-            <div>
-              <strong>local_evidence</strong>
-              <p>{fiscalChain?.valid ? `OK (${fiscalChain.total_records} registros)` : "pendiente de primera emision"}</p>
-            </div>
-            <div>
-              <strong>external_blocked</strong>
-              <p>Sin certificado real, vault, flags ni manifiesto AEAT.</p>
-            </div>
-            <div>
-              <strong>Export dir</strong>
-              <p>{appDefaults?.export_dir ?? "Cargando ubicacion segura..."}</p>
-            </div>
-          </section>
-
-          <section className="panel onboardingPanel" aria-label="Onboarding inicial">
-            <div className="editorTop">
-              <div>
-                <h2>Onboarding inicial</h2>
-                <p>{appSettings?.onboarding_completed ? "Completado" : "Pendiente"} - empresa, fiscalidad, serie y carpeta export.</p>
-              </div>
-              <div className="stepBadges">
-                {onboardingSteps.map((step) => (
-                  <span key={step.label} className={step.ok ? "ok" : ""}>{step.label}</span>
-                ))}
-              </div>
-            </div>
-            <form className="onboardingForm" onSubmit={saveOnboarding}>
-              <div className="pathField">
-                <label className="fieldBlock">
-                  <span>Carpeta export</span>
-                  <input
-                    aria-label="Carpeta export"
-                    value={exportDir}
-                    onChange={(event) => setExportDir(event.target.value)}
-                    readOnly
-                    required
-                  />
-                </label>
-                <button type="button" className="linkButton" onClick={() => void pickExportDirectory()}>
-                  <FolderOpen size={16} aria-hidden="true" />
-                  Elegir carpeta
-                </button>
-              </div>
-              <fieldset className="flagGroup">
-                <legend>Fiscalidad local</legend>
-                <label><input type="checkbox" checked={defaultTerritoryFlags.includes("CommonTerritory")} onChange={(event) => toggleTerritoryFlag("CommonTerritory", event.target.checked)} /> Territorio comun</label>
-                <label><input type="checkbox" checked={defaultTerritoryFlags.includes("VeriFactu")} onChange={(event) => toggleTerritoryFlag("VeriFactu", event.target.checked)} /> VERI*FACTU local</label>
-                <label><input type="checkbox" checked={defaultTerritoryFlags.includes("Sii")} onChange={(event) => toggleTerritoryFlag("Sii", event.target.checked)} /> SII pendiente</label>
-              </fieldset>
-              <button className="primary" disabled={!onboardingReady}>Guardar onboarding</button>
-            </form>
-          </section>
-
-          <section className="panel entityForms">
-            <form onSubmit={saveCompany}>
-              <div className="formTitle">
-                <h2>Empresa emisora</h2>
-                <button type="button" className="linkButton" onClick={newCompanyForm}>Nueva empresa</button>
-              </div>
-              <label className="fieldBlock">
-                <span>Empresa activa</span>
-                <select aria-label="Empresa activa" value={company?.id ?? ""} onChange={(event) => selectCompany(event.target.value)}>
-                  <option value="">Nueva empresa</option>
-                  {companies.map((item) => <option key={item.id} value={item.id}>{item.legal_name} - {item.tax_id}</option>)}
-                </select>
-              </label>
-              <div className="formGrid">
-                <label className="fieldBlock"><span>Nombre legal</span><input aria-label="Nombre legal empresa" required value={companyForm.legal_name} onChange={(event) => updateCompanyForm("legal_name", event.target.value)} /></label>
-                <label className="fieldBlock"><span>NIF/CIF</span><input aria-label="NIF empresa" required value={companyForm.tax_id} onChange={(event) => updateCompanyForm("tax_id", event.target.value)} /></label>
-                <label className="fieldBlock wide"><span>Direccion</span><input aria-label="Direccion empresa" required value={companyForm.address} onChange={(event) => updateCompanyForm("address", event.target.value)} /></label>
-                <label className="fieldBlock"><span>CP</span><input aria-label="CP empresa" required value={companyForm.postal_code} onChange={(event) => updateCompanyForm("postal_code", event.target.value)} /></label>
-                <label className="fieldBlock"><span>Municipio</span><input aria-label="Municipio empresa" required value={companyForm.municipality} onChange={(event) => updateCompanyForm("municipality", event.target.value)} /></label>
-                <label className="fieldBlock"><span>Provincia</span><input aria-label="Provincia empresa" required value={companyForm.province} onChange={(event) => updateCompanyForm("province", event.target.value)} /></label>
-                <label className="fieldBlock"><span>Pais</span><input aria-label="Pais empresa" required value={companyForm.country_code} onChange={(event) => updateCompanyForm("country_code", event.target.value.toUpperCase())} /></label>
-                <label className="fieldBlock"><span>Serie por defecto</span><input aria-label="Serie por defecto empresa" value={companyForm.default_series} onChange={(event) => updateCompanyForm("default_series", event.target.value.toUpperCase())} /></label>
-              </div>
-              <button className="primary">Guardar emisor</button>
-            </form>
-
-            <form onSubmit={saveCustomer}>
-              <div className="formTitle">
-                <h2>Cliente</h2>
-                <button type="button" className="linkButton" onClick={newCustomerForm}>Nuevo cliente</button>
-              </div>
-              <label className="fieldBlock">
-                <span>Cliente activo</span>
-                <select aria-label="Cliente activo" value={customer?.id ?? ""} onChange={(event) => selectCustomer(event.target.value)}>
-                  <option value="">Nuevo cliente</option>
-                  {customers.map((item) => <option key={item.id} value={item.id}>{item.display_name} - {item.tax_id}</option>)}
-                </select>
-              </label>
-              <div className="formGrid">
-                <label className="fieldBlock"><span>Nombre</span><input aria-label="Nombre cliente" required value={customerForm.display_name} onChange={(event) => updateCustomerForm("display_name", event.target.value)} /></label>
-                <label className="fieldBlock"><span>NIF/CIF</span><input aria-label="NIF cliente" required value={customerForm.tax_id} onChange={(event) => updateCustomerForm("tax_id", event.target.value)} /></label>
-                <label className="fieldBlock"><span>Tipo</span><select aria-label="Tipo cliente" value={customerForm.kind} onChange={(event) => updateCustomerForm("kind", event.target.value)}><option value="Business">Empresa</option><option value="Individual">Persona fisica</option><option value="PublicAdministration">Administracion</option></select></label>
-                <label className="fieldBlock wide"><span>Direccion</span><input aria-label="Direccion cliente" required value={customerForm.address} onChange={(event) => updateCustomerForm("address", event.target.value)} /></label>
-                <label className="fieldBlock"><span>CP</span><input aria-label="CP cliente" required value={customerForm.postal_code} onChange={(event) => updateCustomerForm("postal_code", event.target.value)} /></label>
-                <label className="fieldBlock"><span>Municipio</span><input aria-label="Municipio cliente" required value={customerForm.municipality} onChange={(event) => updateCustomerForm("municipality", event.target.value)} /></label>
-                <label className="fieldBlock"><span>Provincia</span><input aria-label="Provincia cliente" required value={customerForm.province} onChange={(event) => updateCustomerForm("province", event.target.value)} /></label>
-                <label className="fieldBlock"><span>Pais</span><input aria-label="Pais cliente" required value={customerForm.country_code} onChange={(event) => updateCustomerForm("country_code", event.target.value.toUpperCase())} /></label>
-              </div>
-              <button className="primary">Guardar cliente</button>
-            </form>
-          </section>
-
-          <section className="panel productCatalog" aria-label="Catalogo productos/servicios">
-            <div className="editorTop">
-              <div>
-                <h2>Catalogo productos/servicios</h2>
-                <p>{company ? `${products.length} ficha(s) para ${company.legal_name}` : "Crea empresa para activar catalogo."}</p>
-              </div>
-              <button type="button" className="linkButton" onClick={newProductForm}>Nuevo producto</button>
-            </div>
-            <form className="productForm" onSubmit={saveProduct}>
-              <label className="fieldBlock">
-                <span>Producto activo</span>
-                <select aria-label="Producto activo" value={product?.id ?? ""} onChange={(event) => selectProduct(event.target.value)} disabled={!company || products.length === 0}>
-                  <option value="">Nuevo producto</option>
-                  {products.map((item) => <option key={item.id} value={item.id}>{item.sku} - {item.name}</option>)}
-                </select>
-              </label>
-              <label className="fieldBlock"><span>SKU</span><input aria-label="SKU producto" required value={productForm.sku} onChange={(event) => updateProductForm("sku", event.target.value.toUpperCase())} /></label>
-              <label className="fieldBlock"><span>Nombre</span><input aria-label="Nombre producto" required value={productForm.name} onChange={(event) => updateProductForm("name", event.target.value)} /></label>
-              <label className="fieldBlock wide"><span>Descripcion linea</span><input aria-label="Descripcion producto" required value={productForm.description} onChange={(event) => updateProductForm("description", event.target.value)} /></label>
-              <label className="fieldBlock"><span>Tipo</span><select aria-label="Tipo producto" value={productForm.kind} onChange={(event) => updateProductForm("kind", event.target.value)}><option value="Service">Servicio</option><option value="Product">Producto</option></select></label>
-              <label className="fieldBlock"><span>Precio EUR</span><input aria-label="Precio producto EUR" inputMode="decimal" required value={productForm.unit_price_euros} onChange={(event) => updateProductForm("unit_price_euros", event.target.value)} /></label>
-              <label className="fieldBlock"><span>IVA %</span><input aria-label="IVA producto" inputMode="decimal" required value={productForm.tax_rate_percent} onChange={(event) => updateProductForm("tax_rate_percent", event.target.value)} /></label>
-              <label className="fieldBlock"><span>IRPF %</span><input aria-label="IRPF producto" inputMode="decimal" value={productForm.withholding_rate_percent} onChange={(event) => updateProductForm("withholding_rate_percent", event.target.value)} /></label>
-              <label className="fieldBlock"><span>Dto %</span><input aria-label="Descuento producto" inputMode="decimal" value={productForm.discount_rate_percent} onChange={(event) => updateProductForm("discount_rate_percent", event.target.value)} /></label>
-              <label className="checkLine">
-                <input type="checkbox" checked={productForm.active} onChange={(event) => updateProductForm("active", event.target.checked)} />
-                Activo
-              </label>
-              <button className="primary" disabled={!company}>Guardar producto</button>
-            </form>
-            <div className="productList">
-              {products.length === 0 ? <p>Sin productos/servicios guardados.</p> : null}
-              {products.map((item) => (
-                <div key={item.id} className="productRow">
-                  <div>
-                    <strong>{item.sku} - {item.name}</strong>
-                    <p>{cents(item.unit_price_cents)} - IVA {item.tax_rate_basis_points / 100}% - {item.active ? "activo" : "inactivo"}</p>
-                  </div>
-                  <button type="button" className="linkButton" onClick={() => useProductInFirstLine(item)}>Usar en linea</button>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="panel seriesPanel">
-            <div>
-              <h2>Series de facturacion</h2>
-              <p>Configura continuar numeracion anterior o crear serie nueva. Ejemplos: VENDI202601, AL-001, C-001, I-001.</p>
-            </div>
-            <form className="seriesForm" onSubmit={configureSeries}>
-              <input value={seriesLabel} onChange={(event) => setSeriesLabel(event.target.value)} placeholder="Nombre" />
-              <input value={seriesCode} onChange={(event) => setSeriesCode(event.target.value)} placeholder="Serie" />
-              <input type="number" value={seriesFiscalYear} onChange={(event) => setSeriesFiscalYear(Number(event.target.value))} />
-              <label className="checkLine">
-                <input type="checkbox" checked={seriesIncludeYear} onChange={(event) => setSeriesIncludeYear(event.target.checked)} />
-                Incluir año
-              </label>
-              <input value={seriesSeparator} onChange={(event) => setSeriesSeparator(event.target.value)} placeholder="Separador" />
-              <input type="number" value={seriesPadding} min={1} max={12} onChange={(event) => setSeriesPadding(Number(event.target.value))} />
-              <input type="number" value={seriesNextNumber} min={1} onChange={(event) => setSeriesNextNumber(Number(event.target.value))} />
-              <button className="primary" disabled={!company}>Guardar serie</button>
-            </form>
-            <div className="seriesQuick">
-              <button type="button" onClick={() => { setSeriesLabel("Vendingsaiz Aragon"); setSeriesCode("VENDI"); setSeriesIncludeYear(true); setSeriesSeparator(""); setSeriesPadding(2); }}>
-                Usar VENDI2026XX
-              </button>
-              <button type="button" onClick={() => { setSeriesLabel("Alquiler"); setSeriesCode("AL"); setSeriesIncludeYear(false); setSeriesSeparator("-"); setSeriesPadding(3); }}>
-                Usar AL-XXX
-              </button>
-              <button type="button" onClick={() => { setSeriesLabel("Construccion"); setSeriesCode("C"); setSeriesIncludeYear(false); setSeriesSeparator("-"); setSeriesPadding(3); }}>
-                Usar C-XXX
-              </button>
-              <button type="button" onClick={() => { setSeriesLabel("Inmovilizado"); setSeriesCode("I"); setSeriesIncludeYear(false); setSeriesSeparator("-"); setSeriesPadding(3); }}>
-                Usar I-XXX
-              </button>
-            </div>
-            <p>Activa: {selectedSeries ? `${selectedSeries.label} - ${selectedSeries.preview}` : `${activeSeriesPreview} sin configurar`}</p>
-            <DataList title="Series" empty="Sin series configuradas" rows={seriesConfigs.map((item) => `${item.label} - ${item.preview} - siguiente ${item.next_number}`)} />
-          </section>
-
-          <section className="panel invoiceEditor">
-            <div className="editorTop">
-              <div>
-                <h2>Editor de factura</h2>
-                <p>{invoiceLines.length} linea(s) - Base {cents(invoiceTotals.taxable_base_cents)} - Total {cents(invoiceTotals.total_cents)}</p>
-              </div>
-              <label className="fieldBlock">
-                <span>Serie de esta factura</span>
-                <select
-                  aria-label="Serie de esta factura"
-                  value={selectedSeries?.id ?? ""}
-                  onChange={(event) => void selectInvoiceSeries(event.target.value)}
-                  disabled={seriesConfigs.length === 0}
-                >
-                  {seriesConfigs.length === 0 ? <option value="">Sin series</option> : null}
-                  {seriesConfigs.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label} - {item.preview}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="lineTable" aria-label="Lineas de factura">
-              <div className="lineHeader">
-                <span>Descripcion</span>
-                <span>Cant.</span>
-                <span>Precio EUR</span>
-                <span>Dto %</span>
-                <span>IVA %</span>
-                <span>IRPF %</span>
-                <span />
-              </div>
-              {invoiceLines.map((line, index) => (
-                <div className="lineRow" key={line.id}>
-                  <input
-                    aria-label={`Descripcion linea ${index + 1}`}
-                    value={line.description}
-                    onChange={(event) => updateInvoiceLine(line.id, "description", event.target.value)}
-                  />
-                  <input
-                    aria-label={`Cantidad linea ${index + 1}`}
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={line.quantity}
-                    onChange={(event) => updateInvoiceLine(line.id, "quantity", event.target.value)}
-                  />
-                  <input
-                    aria-label={`Precio EUR linea ${index + 1}`}
-                    inputMode="decimal"
-                    value={line.unit_price_euros}
-                    onChange={(event) => updateInvoiceLine(line.id, "unit_price_euros", event.target.value)}
-                  />
-                  <input
-                    aria-label={`Descuento linea ${index + 1}`}
-                    inputMode="decimal"
-                    value={line.discount_rate_percent}
-                    onChange={(event) => updateInvoiceLine(line.id, "discount_rate_percent", event.target.value)}
-                  />
-                  <input
-                    aria-label={`IVA linea ${index + 1}`}
-                    inputMode="decimal"
-                    value={line.tax_rate_percent}
-                    onChange={(event) => updateInvoiceLine(line.id, "tax_rate_percent", event.target.value)}
-                  />
-                  <input
-                    aria-label={`IRPF linea ${index + 1}`}
-                    inputMode="decimal"
-                    value={line.withholding_rate_percent}
-                    onChange={(event) => updateInvoiceLine(line.id, "withholding_rate_percent", event.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="iconButton"
-                    aria-label={`Quitar linea ${index + 1}`}
-                    title={`Quitar linea ${index + 1}`}
-                    onClick={() => removeInvoiceLine(line.id)}
-                    disabled={invoiceLines.length === 1}
-                  >
-                    <Trash2 size={16} aria-hidden="true" />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div className="editorFooter">
-              <button type="button" className="linkButton" onClick={addInvoiceLine}>
-                <Plus size={16} aria-hidden="true" />
-                Añadir linea
-              </button>
-              <p>IVA {cents(invoiceTotals.tax_cents)} - IRPF {cents(invoiceTotals.withholding_cents)} - Numero {activeSeriesPreview}</p>
-            </div>
-          </section>
-
-          <section className="panel flow">
-            <form onSubmit={createDraft}>
-              <h2>1. Borrador</h2>
-              <p>{draft ? `${draft.series} - ${cents(draft.totals.total_cents)}` : `${invoiceLines.length} linea(s) - ${cents(invoiceTotals.total_cents)}`}</p>
-              <button className="primary" disabled={!canDraft}>Crear borrador</button>
-            </form>
-            <form onSubmit={issueInvoice}>
-              <h2>2. Emision</h2>
-              <p>{issued ? `Hash ${short(issued.fiscal_hash)}` : `Numero ${activeSeriesPreview} (${numberPreview?.source ?? "secuencia Rust"})`}</p>
-              <button className="primary" disabled={!canIssue}>Emitir factura</button>
-            </form>
-            <form onSubmit={issueRectifyingInvoice}>
-              <h2>3. Rectificativa</h2>
-              <p>{rectifiableInvoice ? `${rectifiableInvoice.series}-${rectifiableInvoice.number}` : "Sin factura emitida"}</p>
-              <div className="miniControls">
-                <select value={rectificationScenario} onChange={(event) => setRectificationScenario(event.target.value)}>
-                  <option value="Article80OneTwoOrLegalError">80.1/80.2/error</option>
-                  <option value="Article80Three">80.3</option>
-                  <option value="Article80Four">80.4</option>
-                  <option value="Other">Resto</option>
-                  <option value="SimplifiedInvoice">Simplificada</option>
-                </select>
-                <select value={rectificationReason} onChange={(event) => setRectificationReason(event.target.value)}>
-                  {["R1", "R2", "R3", "R4", "R5"].map((item) => <option key={item} value={item}>{item}</option>)}
-                </select>
-                <select value={rectificationMethod} onChange={(event) => setRectificationMethod(event.target.value)}>
-                  <option value="I">I</option>
-                  <option value="S">S</option>
-                </select>
-              </div>
-              <button type="button" onClick={() => void adviseRectification()} disabled={!canRectify}>Sugerir</button>
-              <p>{rectificationAdvice ? `${rectificationAdvice.reason_code}/${rectificationAdvice.method} - ${rectificationAdvice.confidence}` : "Selector tecnico R1-R5/I-S."}</p>
-              <button className="primary" disabled={!canRectify}>Emitir rectificativa</button>
-            </form>
-          </section>
-
-          <section className="panel invoiceFilters" aria-label="Buscar facturas">
-            <div className="editorTop">
-              <div>
-                <h2>Buscar facturas</h2>
-                <p>{invoices.length} resultado(s) con filtros actuales.</p>
-              </div>
-              <button type="button" className="linkButton" onClick={clearInvoiceFilters}>Limpiar filtros</button>
-            </div>
-            <form className="filterForm" onSubmit={searchInvoices}>
-              <label className="fieldBlock">
-                <span>Texto</span>
-                <input aria-label="Buscar texto factura" value={invoiceSearch} onChange={(event) => setInvoiceSearch(event.target.value)} placeholder="serie, numero, cliente, NIF, hash" />
-              </label>
-              <label className="fieldBlock">
-                <span>Empresa</span>
-                <select aria-label="Filtro empresa factura" value={invoiceCompanyFilter} onChange={(event) => setInvoiceCompanyFilter(event.target.value)}>
-                  <option value="">Todas</option>
-                  {companies.map((item) => <option key={item.id} value={item.id}>{item.legal_name}</option>)}
-                </select>
-              </label>
-              <label className="fieldBlock">
-                <span>Cliente</span>
-                <select aria-label="Filtro cliente factura" value={invoiceCustomerFilter} onChange={(event) => setInvoiceCustomerFilter(event.target.value)}>
-                  <option value="">Todos</option>
-                  {customers.map((item) => <option key={item.id} value={item.id}>{item.display_name}</option>)}
-                </select>
-              </label>
-              <label className="fieldBlock">
-                <span>Año</span>
-                <input aria-label="Filtro año factura" inputMode="numeric" value={invoiceYearFilter} onChange={(event) => setInvoiceYearFilter(event.target.value)} placeholder="2026" />
-              </label>
-              <label className="fieldBlock">
-                <span>Serie</span>
-                <input aria-label="Filtro serie factura" value={invoiceSeriesFilter} onChange={(event) => setInvoiceSeriesFilter(event.target.value.toUpperCase())} placeholder="A, AL, VENDI2026" />
-              </label>
-              <label className="fieldBlock">
-                <span>Estado</span>
-                <select aria-label="Filtro estado factura" value={invoiceStatusFilter} onChange={(event) => setInvoiceStatusFilter(event.target.value)}>
-                  <option value="">Todos</option>
-                  <option value="Draft">Draft</option>
-                  <option value="Issued">Issued</option>
-                  <option value="Void">Void</option>
-                  <option value="Rectified">Rectified</option>
-                </select>
-              </label>
-              <label className="fieldBlock">
-                <span>Tipo</span>
-                <select aria-label="Filtro tipo factura" value={invoiceKindFilter} onChange={(event) => setInvoiceKindFilter(event.target.value)}>
-                  <option value="">Todos</option>
-                  <option value="Complete">Complete</option>
-                  <option value="Simplified">Simplified</option>
-                  <option value="Rectifying">Rectifying</option>
-                </select>
-              </label>
-              <button className="primary">Buscar facturas</button>
-            </form>
-          </section>
-
-          <section className="panel lists">
-            <DataList title="Empresas" empty="Sin empresas" rows={companies.map((item) => `${item.legal_name} - ${item.tax_id}`)} />
-            <DataList title="Clientes" empty="Sin clientes" rows={customers.map((item) => `${item.display_name} - ${item.tax_id}`)} />
-            <DataList
-              title="Facturas"
-              empty="Sin facturas"
-              rows={invoices.map((item) => `${item.series}-${item.number ?? "BOR"} - ${item.kind} - ${item.status} - ${cents(item.total_cents)} - ${short(item.fiscal_hash)}`)}
-              footer={<Pager regionLabel="Pagina facturas" prevLabel="Anterior facturas" nextLabel="Siguiente facturas" page={invoicePage} hasNext={invoices.length === PAGE_SIZE} onPrev={() => void changeInvoicePage(invoicePage - 1)} onNext={() => void changeInvoicePage(invoicePage + 1)} />}
-            />
-            <DataList
-              title="Auditoria"
-              empty="Sin eventos"
-              rows={audit.map((item) => `${item.action} - ${item.actor} - ${short(item.hash)}`)}
-              footer={<Pager regionLabel="Pagina auditoria" prevLabel="Anterior auditoria" nextLabel="Siguiente auditoria" page={auditPage} hasNext={audit.length === PAGE_SIZE} onPrev={() => void changeAuditPage(auditPage - 1)} onNext={() => void changeAuditPage(auditPage + 1)} />}
-            />
-            <DataList
-              title="Fiscal"
-              empty="Sin registros"
-              rows={fiscalRecords.map((item) => `${item.record_type} - ${short(item.fiscal_hash)} - prev ${short(item.previous_fiscal_hash)} - ${item.status}`)}
-              footer={<Pager regionLabel="Pagina fiscal" prevLabel="Anterior fiscal" nextLabel="Siguiente fiscal" page={fiscalPage} hasNext={fiscalRecords.length === PAGE_SIZE} onPrev={() => void changeFiscalPage(fiscalPage - 1)} onNext={() => void changeFiscalPage(fiscalPage + 1)} />}
-            />
-          </section>
-
-          <section className="panel fiscalAuditScreen" aria-label="Auditoria fiscal local">
-            <div className="editorTop">
-              <div>
-                <h2>Auditoria fiscal local</h2>
-                <p>{fiscalChain?.valid ? `Cadena fiscal OK (${fiscalChain.total_records})` : `Incidencias cadena ${fiscalChain?.issue_count ?? 0}`}</p>
-              </div>
-              <button type="button" className="linkButton" onClick={() => void verifyFiscalChain()}>
-                <RefreshCw size={16} aria-hidden="true" />
-                Verificar cadena
-              </button>
-            </div>
-            <div className="auditSummary" aria-label="Resumen auditoria fiscal">
-              <div>
-                <strong>Estado cadena</strong>
-                <span>{fiscalChain?.valid ? "OK" : "Revisar"}</span>
-              </div>
-              <div>
-                <strong>Registros fiscales verificados</strong>
-                <span>{fiscalChain?.total_records ?? 0}</span>
-              </div>
-              <div>
-                <strong>Incidencias cadena</strong>
-                <span>{fiscalChain?.issue_count ?? 0}</span>
-              </div>
-              <div>
-                <strong>Empresas con hash final</strong>
-                <span>{fiscalChain?.last_hash_by_company.length ?? 0}</span>
-              </div>
-            </div>
-            <div className="auditColumns">
-              <div>
-                <h3>Incidencias cadena</h3>
-                {fiscalChain && fiscalChain.issues.length > 0 ? (
-                  <ul className="auditList">
-                    {fiscalChain.issues.map((issue) => (
-                      <li key={`${issue.record_id}-${issue.code}`}>
-                        <strong>{issue.severity} / {issue.code}</strong>
-                        <span>{short(issue.record_id)} - {issue.message}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>Sin incidencias cadena.</p>
-                )}
-              </div>
-              <div>
-                <h3>Ultimo hash por empresa</h3>
-                {fiscalChain && fiscalChain.last_hash_by_company.length > 0 ? (
-                  <ul className="auditList">
-                    {fiscalChain.last_hash_by_company.map((head) => (
-                      <li key={head.company_id}>
-                        <strong>{short(head.company_id)}</strong>
-                        <span>{short(head.last_hash)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>Sin hash final todavia.</p>
-                )}
-              </div>
-            </div>
-            <form className="auditExportForm" onSubmit={exportFiscalAudit}>
-              <input aria-label="Ruta informe auditoria fiscal" value={auditExportPath} readOnly />
-              <button type="button" className="linkButton" onClick={() => void pickSavePath("Informe auditoria fiscal", auditExportPath, ["json"], setAuditExportPath)}>
-                <FolderOpen size={16} aria-hidden="true" />
-                Elegir auditoria
-              </button>
-              <button className="primary" disabled={audit.length === 0 && fiscalRecords.length === 0}>Exportar auditoria</button>
-            </form>
-            <p>{auditExportResult ? `${auditExportResult.status} - ${auditExportResult.target_path}` : "Informe JSON de trazabilidad local, no certificacion."}</p>
-          </section>
-
-          <section className="panel sidecarChannels" aria-label="Canales ContaPro sidecar">
-            <div className="editorTop">
-              <div>
-                <h2>Canales ContaPro sidecar</h2>
-                <p>{sidecarCapabilities ? `${sidecarCapabilities.source_project} - MVP ${mvpSidecarChannels} - diferido ${deferredSidecarChannels}` : "Cargando evidencia importada."}</p>
-              </div>
-              <button type="button" className="linkButton" onClick={() => void loadDefaults()}>
-                <RefreshCw size={16} aria-hidden="true" />
-                Recargar sidecar
-              </button>
-            </div>
-            <div className="auditSummary" aria-label="Resumen canales sidecar">
-              {(sidecarCapabilities?.channels ?? []).map((channel) => (
-                <div key={channel.channel}>
-                  <strong>{channel.channel.toUpperCase()}</strong>
-                  <span>{channel.mvp_importable ? "MVP" : channel.status}</span>
-                </div>
-              ))}
-            </div>
-            <p>Importado de ContaPro para MVP: {mvpSidecarChannels}. FACe y TicketBAI quedan diferidos. CumpleFactura no llama a AEAT/SII/FACe/forales durante la importacion.</p>
-            <div className="sidecarForms">
-              <form className="backupForm" onSubmit={preflightSiiSidecar}>
-                <h3>SII sidecar</h3>
-                <input aria-label="Libro SII" value={siiBook} onChange={(event) => setSiiBook(event.target.value)} />
-                <input aria-label="Endpoint SII" value={siiEndpointName} onChange={(event) => setSiiEndpointName(event.target.value)} />
-                <input aria-label="URL sidecar SII" value={siiSidecarUrl} onChange={(event) => setSiiSidecarUrl(event.target.value)} />
-                <button className="primary" disabled={!siiChannel?.mvp_importable}>Preflight SII sidecar</button>
-              </form>
-              <p>{siiPreflight ? `${siiPreflight.status} - ${siiPreflight.sidecar_endpoint} - sidecar ${siiPreflight.sidecar_call_performed ? "SI" : "NO"} - AEAT ${siiPreflight.external_call_performed ? "SI" : "NO"} - ${siiPreflight.blockers.join(", ") || "sin bloqueos"}` : `MVP ${siiChannel?.mvp_importable ? "importable" : "no listo"} - acceptance ${siiChannel?.acceptance_status ?? "missing"}. Preflight local; sin SOAP AEAT.`}</p>
-              <form className="backupForm" onSubmit={preflightTicketBaiSidecar}>
-                <h3>TicketBAI sidecar</h3>
-                <select aria-label="Territorio TicketBAI" value={ticketbaiTerritorio} onChange={(event) => setTicketbaiTerritorio(event.target.value)}>
-                  <option value="bizkaia">bizkaia</option>
-                  <option value="gipuzkoa">gipuzkoa</option>
-                  <option value="araba">araba</option>
-                </select>
-                <input aria-label="Endpoint TicketBAI" value={ticketbaiEndpoint} onChange={(event) => setTicketbaiEndpoint(event.target.value)} />
-                <input aria-label="URL sidecar TicketBAI" value={ticketbaiSidecarUrl} onChange={(event) => setTicketbaiSidecarUrl(event.target.value)} />
-                <button className="primary" disabled={!ticketbaiChannel?.mvp_importable}>Preflight TicketBAI sidecar</button>
-              </form>
-              <p>{ticketbaiPreflight ? `${ticketbaiPreflight.status} - ${ticketbaiPreflight.sidecar_endpoint} - sidecar ${ticketbaiPreflight.sidecar_call_performed ? "SI" : "NO"} - foral ${ticketbaiPreflight.external_call_performed ? "SI" : "NO"} - ${ticketbaiPreflight.blockers.join(", ") || "sin bloqueos"}` : `Diferido: ${ticketbaiChannel?.deferred_reason ?? "sin evidencia MVP aceptada"}; homologacion foral sigue bloqueada.`}</p>
-            </div>
-          </section>
-
-          <section className="panel split">
-            <div>
-              <h2>Backup local</h2>
-              <form className="backupForm pathForm" onSubmit={exportBackup}>
-                <input aria-label="Ruta backup SQLite" value={backupPath} readOnly />
-                <button type="button" className="linkButton" onClick={() => void pickSavePath("Backup SQLite", backupPath, ["sqlite3", "sqlite", "db"], setBackupPath)}>
-                  <FolderOpen size={16} aria-hidden="true" />
-                  Elegir backup
-                </button>
-                <button className="primary">Exportar SQLite</button>
-              </form>
-              <p>{backup ? `${backup.status} - ${backup.target_path}` : "Crea copia SQLite con VACUUM INTO."}</p>
-              <h2>Restore backup</h2>
-              <form className="backupForm pathForm" onSubmit={restoreBackup}>
-                <input aria-label="Ruta restore backup" value={restorePath} readOnly placeholder="Ruta .sqlite3/.db" />
-                <button type="button" className="linkButton" onClick={() => void pickRestoreFile()}>
-                  <FolderOpen size={16} aria-hidden="true" />
-                  Elegir restore
-                </button>
-                <button className="primary" disabled={!restorePath}>Validar restore</button>
-              </form>
-              <p>{restore ? `${restore.status} - destructivo ${restore.destructive_restore_performed ? "SI" : "NO"} - ${restore.source_path}` : "Preflight local: valida origen, no reemplaza la base activa."}</p>
-              <h2>PDF factura</h2>
-              <form className="backupForm pathForm" onSubmit={exportPdf}>
-                <input aria-label="Ruta PDF factura" value={pdfPath} readOnly />
-                <button type="button" className="linkButton" onClick={() => void pickSavePath("PDF factura", pdfPath, ["pdf"], setPdfPath)}>
-                  <FolderOpen size={16} aria-hidden="true" />
-                  Elegir PDF
-                </button>
-                <button className="primary" disabled={!draft && invoices.length === 0}>Exportar PDF</button>
-              </form>
-              <p>{pdfResult ? `PDF creado - ${pdfResult}` : "Exporta la factura/borrador seleccionado."}</p>
-              <h2>JSON factura</h2>
-              <form className="backupForm pathForm" onSubmit={exportJson}>
-                <input aria-label="Ruta JSON factura" value={jsonPath} readOnly />
-                <button type="button" className="linkButton" onClick={() => void pickSavePath("JSON factura", jsonPath, ["json"], setJsonPath)}>
-                  <FolderOpen size={16} aria-hidden="true" />
-                  Elegir JSON
-                </button>
-                <button className="primary" disabled={!draft && invoices.length === 0}>Exportar JSON</button>
-              </form>
-              <p>{jsonResult ? `${jsonResult.status} - ${jsonResult.target_path}` : "Exporta datos de factura a JSON local."}</p>
-              <h2>CSV facturas</h2>
-              <form className="backupForm pathForm" onSubmit={exportCsv}>
-                <input aria-label="Ruta CSV facturas" value={csvPath} readOnly />
-                <button type="button" className="linkButton" onClick={() => void pickSavePath("CSV facturas", csvPath, ["csv"], setCsvPath)}>
-                  <FolderOpen size={16} aria-hidden="true" />
-                  Elegir CSV
-                </button>
-                <button className="primary" disabled={invoices.length === 0}>Exportar CSV</button>
-              </form>
-              <p>{csvResult ? `${csvResult.status} - ${csvResult.target_path}` : "Exporta listado local de facturas; filtros en contrato MVP."}</p>
-              <h2>XML VERI*FACTU</h2>
-              <form className="backupForm pathForm" onSubmit={exportXml}>
-                <input aria-label="Ruta XML VERIFACTU" value={xmlPath} readOnly />
-                <button type="button" className="linkButton" onClick={() => void pickSavePath("XML VERIFACTU", xmlPath, ["xml"], setXmlPath)}>
-                  <FolderOpen size={16} aria-hidden="true" />
-                  Elegir XML
-                </button>
-                <button className="primary" disabled={!canExportXml}>Exportar XML</button>
-              </form>
-              <p>{xmlResult ? `${xmlResult.status} - XSD ${xmlResult.xsd_validated ? "OK" : "NO"} - ${xmlResult.target_path}` : "Borrador tecnico: XSD local, sin firma ni envio."}</p>
-              <h2>XML anulacion</h2>
-              <form className="backupForm pathForm" onSubmit={exportCancelXml}>
-                <input aria-label="Ruta XML anulacion" value={cancelXmlPath} readOnly />
-                <button type="button" className="linkButton" onClick={() => void pickSavePath("XML anulacion", cancelXmlPath, ["xml"], setCancelXmlPath)}>
-                  <FolderOpen size={16} aria-hidden="true" />
-                  Elegir anulacion
-                </button>
-                <button className="primary" disabled={!canExportXml}>Exportar anulacion</button>
-              </form>
-              <p>{cancelXmlResult ? `${cancelXmlResult.status} - XSD ${cancelXmlResult.xsd_validated ? "OK" : "NO"} - ${cancelXmlResult.target_path}` : "Borrador de anulacion: valida XSD y registra estado fiscal."}</p>
-              <h2>Firma/envio</h2>
-              <form className="backupForm" onSubmit={prepareSubmission}>
-                <input value={submission?.xml_sha256 ?? "XML SHA256 pendiente"} readOnly />
-                <button className="primary" disabled={!xmlResult && !cancelXmlResult}>Preparar</button>
-              </form>
-              <p>{submission ? `${submission.signature_status} - ${submission.transmission_status} - ${short(submission.xml_sha256)} - export ${short(submission.export_id)}` : "Prepara paquete local: XSD, SHA256 y estado pendiente de XAdES/envio."}</p>
-              <h2>Preflight XAdES</h2>
-              <form className="backupForm" onSubmit={preflightXadesSidecar}>
-                <input value={xadesSidecarUrl} onChange={(event) => setXadesSidecarUrl(event.target.value)} />
-                <input value={xadesCertRef} onChange={(event) => setXadesCertRef(event.target.value)} />
-                <button className="primary" disabled={!submission}>Preflight XAdES</button>
-              </form>
-              <p>{xadesPreflight ? `${xadesPreflight.status} - ${xadesPreflight.sidecar_endpoint} - ref ${xadesPreflight.certificate_ref_status} - llamada externa ${xadesPreflight.external_call_performed ? "SI" : "NO"} - ${xadesPreflight.blockers.join(", ") || "sin bloqueos"}` : "Comprueba sidecar local, hash XML, vault ref y flag; no llama al sidecar."}</p>
-              <form className="backupForm pathForm" onSubmit={signWithXadesSidecar}>
-                <input aria-label="Ruta XML firmado" value={signedXmlPath} readOnly />
-                <button type="button" className="linkButton" onClick={() => void pickSavePath("XML firmado", signedXmlPath, ["xml"], setSignedXmlPath)}>
-                  <FolderOpen size={16} aria-hidden="true" />
-                  Elegir firmado
-                </button>
-                <button className="primary" disabled={!submission || !xadesPreflight?.ready}>Firmar XAdES</button>
-              </form>
-              <p>{xadesSignature ? `${xadesSignature.signature_status} - ${xadesSignature.signature_mode} - sidecar ${xadesSignature.sidecar_call_performed ? "SI" : "NO"} - AEAT ${xadesSignature.external_call_performed ? "SI" : "NO"} - ${short(xadesSignature.xml_sha256)}` : "Llama al sidecar local con HMAC y exige XAdES real; no llama a AEAT."}</p>
-              <h2>Preflight AEAT</h2>
-              <form className="backupForm" onSubmit={preflightAeatTransport}>
-                <input value={aeatEndpoint} onChange={(event) => setAeatEndpoint(event.target.value)} />
-                <button className="primary" disabled={!submission}>Preflight AEAT</button>
-              </form>
-              <p>{transportPreflight ? `${transportPreflight.status} - ${transportPreflight.endpoint_name} - llamada externa ${transportPreflight.external_call_performed ? "SI" : "NO"} - ${transportPreflight.blockers.join(", ") || "sin bloqueos"}` : "Comprueba endpoint WSDL, hash, XAdES y flag; no llama a AEAT."}</p>
-              <h2>Preflight envio sidecar</h2>
-              <form className="backupForm" onSubmit={preflightSubmitSidecar}>
-                <input value={submitSidecarUrl} onChange={(event) => setSubmitSidecarUrl(event.target.value)} />
-                <input value={aeatEndpointName} onChange={(event) => setAeatEndpointName(event.target.value)} />
-                <button className="primary" disabled={!submission || submission.signature_status !== "signed_xades"}>Preflight envio sidecar</button>
-              </form>
-              <p>{submitPreflight ? `${submitPreflight.status} - ${submitPreflight.sidecar_endpoint} - ${submitPreflight.endpoint_name} - sidecar ${submitPreflight.sidecar_call_performed ? "SI" : "NO"} - AEAT ${submitPreflight.external_call_performed ? "SI" : "NO"} - ${submitPreflight.blockers.join(", ") || "sin bloqueos"}` : "Llama al sidecar local con HMAC para readiness WSDL/vault/flags; sin llamada AEAT real ni CSV."}</p>
-              <h2>Enviar via sidecar</h2>
-              <form className="backupForm" onSubmit={invokeSubmitSidecar}>
-                <input value={invokeSidecarUrl} onChange={(event) => setInvokeSidecarUrl(event.target.value)} />
-                <button className="primary" disabled={!submission || !submitPreflight?.ready}>Enviar via sidecar</button>
-              </form>
-              <p>{submitInvocation ? `${submitInvocation.transmission_status} - ${submitInvocation.operation} - sidecar ${submitInvocation.sidecar_call_performed ? "SI" : "NO"} - AEAT ${submitInvocation.external_call_performed ? "SI" : "NO"} - CSV ${submitInvocation.csv ?? "sin CSV"}` : "Frontera final: solo sidecar local con HMAC puede invocar AEAT; gate usa sidecar falso, sin aceptacion real."}</p>
-            </div>
-            <div className="statusBox">
-              <FileCode2 size={24} aria-hidden="true" />
-              <strong>SQLite local</strong>
-              <span>{fiscalChain?.valid ? `Cadena fiscal OK (${fiscalChain.total_records})` : "Runtime, PDF, backup y XML cableados."}</span>
-            </div>
-          </section>
+          {section === "panel" && <PanelSection {...sectionProps} />}
+          {section === "empresas" && <EmpresasSection {...sectionProps} />}
+          {section === "clientes" && <ClientesSection {...sectionProps} />}
+          {section === "facturas" && <FacturasSection {...sectionProps} />}
+          {section === "fiscal" && <FiscalSection {...sectionProps} />}
+          {section === "ajustes" && <AjustesSection {...sectionProps} />}
         </section>
       </section>
     </main>
-  );
-}
-
-function chainRows(result: FiscalChainVerification) {
-  if (result.valid) return [`OK - ${result.total_records} registros fiscales`];
-  return result.issues.map((issue) => `${issue.severity} - ${issue.code} - ${short(issue.record_id)} - ${issue.message}`);
-}
-
-function DataList({ title, empty, rows, footer }: { title: string; empty: string; rows: string[]; footer?: ReactNode }) {
-  return (
-    <div className="dataList">
-      <h2>{title}</h2>
-      {rows.length === 0 ? <p>{empty}</p> : <ul>{rows.map((row) => <li key={row}>{row}</li>)}</ul>}
-      {footer}
-    </div>
-  );
-}
-
-function Pager({
-  regionLabel,
-  prevLabel,
-  nextLabel,
-  page,
-  hasNext,
-  onPrev,
-  onNext,
-}: {
-  regionLabel: string;
-  prevLabel: string;
-  nextLabel: string;
-  page: number;
-  hasNext: boolean;
-  onPrev: () => void;
-  onNext: () => void;
-}) {
-  return (
-    <div className="pager" aria-label={regionLabel}>
-      <button type="button" onClick={onPrev} disabled={page === 0}>{prevLabel}</button>
-      <span>Pagina {page + 1}</span>
-      <button type="button" onClick={onNext} disabled={!hasNext}>{nextLabel}</button>
-    </div>
   );
 }

@@ -1,3 +1,5 @@
+//! Settings de app: carpeta export, flags territoriales, onboarding.
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

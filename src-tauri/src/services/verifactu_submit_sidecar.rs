@@ -1,12 +1,14 @@
-use hmac::{Hmac, Mac};
-use serde::de::DeserializeOwned;
+//! Envío VERI*FACTU a AEAT solo a través del sidecar ContaPro (fail-closed).
+//!
+//! - `preflight` → `/verifactu/submit-preflight`: WSDL, vault, flags; **sin** XML crudo ni SOAP.
+//! - `invoke_submit` → `/verifactu/invoke-submit`: XML firmado + HMAC; requiere flag invoke.
+//! CumpleFactura no abre sockets a dominios AEAT directamente.
+
+use crate::services::sidecar_http;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::{Read, Write};
-use std::net::TcpStream;
 use std::path::Path;
-use std::time::Duration;
 
 const ENABLE_SUBMIT_PREFLIGHT_ENV: &str = "CUMPLEFACTURA_ENABLE_VERIFACTU_SUBMIT_SIDECAR_PREFLIGHT";
 const ENABLE_SUBMIT_INVOKE_ENV: &str = "CUMPLEFACTURA_ENABLE_VERIFACTU_SUBMIT_SIDECAR_INVOKE";
@@ -18,7 +20,6 @@ const DEFAULT_ENDPOINT_NAME: &str = "SistemaVerifactuPruebas";
 const CERT_REF_PREFIX: &str = "vault://certs/";
 const SUBMIT_PREFLIGHT_PATH: &str = "/verifactu/submit-preflight";
 const SUBMIT_INVOKE_PATH: &str = "/verifactu/invoke-submit";
-type HmacSha256 = Hmac<Sha256>;
 
 const ALLOWED_ENDPOINT_NAMES: [&str; 4] = [
     "SistemaVerifactu",
@@ -27,6 +28,7 @@ const ALLOWED_ENDPOINT_NAMES: [&str; 4] = [
     "SistemaVerifactuSelloPruebas",
 ];
 
+/// Entrada preflight de submit (metadatos del paquete + ref vault + endpoint).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifactuSubmitSidecarPreflightRequest {
     pub invoice_id: String,
@@ -40,6 +42,7 @@ pub struct VerifactuSubmitSidecarPreflightRequest {
     pub require_soap_enabled: Option<bool>,
 }
 
+/// Estado de readiness del sidecar para submit (WSDL/cert/flags); sin SOAP AEAT aquí.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct VerifactuSubmitSidecarPreflight {
     pub ready: bool,
@@ -70,6 +73,7 @@ pub struct VerifactuSubmitSidecarPreflight {
     pub request_contract: Vec<String>,
 }
 
+/// Entrada invoke: XML firmado identificado por path + SHA.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifactuSubmitSidecarInvokeRequest {
     pub invoice_id: String,
@@ -83,6 +87,7 @@ pub struct VerifactuSubmitSidecarInvokeRequest {
     pub timeout_seconds: Option<f64>,
 }
 
+/// Resultado del invoke-submit (CSV/estado registro o error devolverlos por el sidecar).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct VerifactuSubmitSidecarInvocation {
     pub invoice_id: String,
@@ -114,6 +119,7 @@ pub struct VerifactuSubmitSidecarInvocation {
     pub warnings: Vec<String>,
 }
 
+/// Preflight submit leyendo flags/secret de entorno.
 pub fn preflight(
     request: VerifactuSubmitSidecarPreflightRequest,
 ) -> Result<VerifactuSubmitSidecarPreflight, String> {
@@ -124,6 +130,7 @@ pub fn preflight(
     preflight_with_config(request, enabled, secret.as_str())
 }
 
+/// Invoke submit leyendo flags/secret de entorno.
 pub fn invoke_submit(
     request: VerifactuSubmitSidecarInvokeRequest,
 ) -> Result<VerifactuSubmitSidecarInvocation, String> {
@@ -134,6 +141,7 @@ pub fn invoke_submit(
     invoke_submit_with_config(request, enabled, secret.as_str())
 }
 
+/// Núcleo preflight inyectable: valida contrato y opcionalmente consulta sidecar.
 pub fn preflight_with_config(
     request: VerifactuSubmitSidecarPreflightRequest,
     submit_preflight_enabled: bool,
@@ -209,8 +217,12 @@ pub fn preflight_with_config(
     };
     let body =
         serde_json::to_vec(&payload).map_err(|err| format!("sidecar payload error: {err}"))?;
-    let response: SidecarSubmitPreflightResponse =
-        post_json_local_sidecar(&sidecar_url, SUBMIT_PREFLIGHT_PATH, shared_secret, &body)?;
+    let response: SidecarSubmitPreflightResponse = sidecar_http::post_json_local_sidecar(
+        &sidecar_url,
+        SUBMIT_PREFLIGHT_PATH,
+        shared_secret,
+        &body,
+    )?;
     if response.external_call_performed {
         return Err("sidecar_reported_external_call".to_string());
     }
@@ -233,6 +245,7 @@ pub fn preflight_with_config(
     Ok(result)
 }
 
+/// Núcleo invoke inyectable: exige XML firmado + flag + HMAC al path invoke.
 pub fn invoke_submit_with_config(
     request: VerifactuSubmitSidecarInvokeRequest,
     submit_invoke_enabled: bool,
@@ -306,8 +319,12 @@ pub fn invoke_submit_with_config(
     };
     let body =
         serde_json::to_vec(&payload).map_err(|err| format!("sidecar payload error: {err}"))?;
-    let response: SidecarInvokeSubmitResponse =
-        post_json_local_sidecar(&sidecar_url, SUBMIT_INVOKE_PATH, shared_secret, &body)?;
+    let response: SidecarInvokeSubmitResponse = sidecar_http::post_json_local_sidecar(
+        &sidecar_url,
+        SUBMIT_INVOKE_PATH,
+        shared_secret,
+        &body,
+    )?;
 
     if response.xml_sha256.to_uppercase() != actual_sha256 {
         return Err("sidecar_xml_sha256_mismatch".to_string());
@@ -363,6 +380,7 @@ pub fn invoke_submit_with_config(
     })
 }
 
+/// Plantilla de respuesta preflight (blockers/warnings/source_refs) antes del POST.
 fn base_result(
     request: &VerifactuSubmitSidecarPreflightRequest,
     sidecar_url: &str,
@@ -423,6 +441,7 @@ fn valid_certificate_ref(value: &str) -> bool {
     trimmed.starts_with(CERT_REF_PREFIX) && trimmed.len() > CERT_REF_PREFIX.len()
 }
 
+/// Whitelist de nombres de endpoint AEAT VERI*FACTU (prod/pruebas).
 fn allowed_endpoint_name(value: &str) -> bool {
     ALLOWED_ENDPOINT_NAMES.contains(&value.trim())
 }
@@ -499,106 +518,6 @@ struct SidecarInvokeSubmitResponse {
     external_call_performed: bool,
 }
 
-struct LocalHttpTarget {
-    host: String,
-    port: u16,
-    path: String,
-}
-
-fn post_json_local_sidecar<T: DeserializeOwned>(
-    url: &str,
-    expected_path: &str,
-    shared_secret: &str,
-    body: &[u8],
-) -> Result<T, String> {
-    let target = parse_local_http_url(url, expected_path)?;
-    let signature = hmac_sha256_hex(shared_secret.as_bytes(), body)?;
-    let mut stream = TcpStream::connect((target.host.as_str(), target.port))
-        .map_err(|err| format!("sidecar connection error: {err}"))?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(20)))
-        .map_err(|err| format!("sidecar read timeout error: {err}"))?;
-    stream
-        .set_write_timeout(Some(Duration::from_secs(20)))
-        .map_err(|err| format!("sidecar write timeout error: {err}"))?;
-
-    let request = format!(
-        "POST {} HTTP/1.1\r\nHost: {}:{}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nx-correlation-id: {}\r\nx-idempotency-key: {}\r\nx-signature: {}\r\nConnection: close\r\n\r\n",
-        target.path,
-        target.host,
-        target.port,
-        body.len(),
-        uuid::Uuid::new_v4(),
-        uuid::Uuid::new_v4(),
-        signature
-    );
-    stream
-        .write_all(request.as_bytes())
-        .and_then(|_| stream.write_all(body))
-        .map_err(|err| format!("sidecar request error: {err}"))?;
-
-    let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .map_err(|err| format!("sidecar response read error: {err}"))?;
-    parse_http_json_response(&response)
-}
-
-fn parse_local_http_url(url: &str, expected_path: &str) -> Result<LocalHttpTarget, String> {
-    let rest = url
-        .strip_prefix("http://")
-        .ok_or_else(|| "sidecar_url_must_use_http_localhost".to_string())?;
-    let (host_port, path) = rest
-        .split_once('/')
-        .ok_or_else(|| "sidecar_url_missing_path".to_string())?;
-    let (host, port_text) = host_port
-        .split_once(':')
-        .ok_or_else(|| "sidecar_url_missing_port".to_string())?;
-    if host != "127.0.0.1" && host != "localhost" {
-        return Err("sidecar_url_host_must_be_local".to_string());
-    }
-    let path = format!("/{path}");
-    if path != expected_path {
-        return Err(format!(
-            "sidecar_url_path_must_be_{}",
-            expected_path.trim_start_matches('/').replace('/', "_")
-        ));
-    }
-    let port = port_text
-        .parse::<u16>()
-        .map_err(|_| "sidecar_url_invalid_port".to_string())?;
-    Ok(LocalHttpTarget {
-        host: host.to_string(),
-        port,
-        path,
-    })
-}
-
-fn parse_http_json_response<T: DeserializeOwned>(response: &[u8]) -> Result<T, String> {
-    let raw = String::from_utf8_lossy(response);
-    let (headers, body) = raw
-        .split_once("\r\n\r\n")
-        .ok_or_else(|| "sidecar response missing body".to_string())?;
-    let status_code = headers
-        .lines()
-        .next()
-        .and_then(|line| line.split_whitespace().nth(1))
-        .ok_or_else(|| "sidecar_missing_status_code".to_string())?
-        .parse::<u16>()
-        .map_err(|_| "sidecar_invalid_status_code".to_string())?;
-    if !(200..300).contains(&status_code) {
-        return Err(format!("sidecar_http_status_{status_code}"));
-    }
-    serde_json::from_str(body).map_err(|err| format!("sidecar response JSON error: {err}"))
-}
-
-fn hmac_sha256_hex(key: &[u8], body: &[u8]) -> Result<String, String> {
-    let mut mac =
-        HmacSha256::new_from_slice(key).map_err(|_| "sidecar_hmac_key_invalid".to_string())?;
-    mac.update(body);
-    Ok(hex::encode(mac.finalize().into_bytes()))
-}
-
 fn require(field: &str, value: &str) -> Result<(), String> {
     if value.trim().is_empty() {
         Err(format!("{field} is required"))
@@ -610,6 +529,8 @@ fn require(field: &str, value: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::sidecar_http::hmac_sha256_hex;
+    use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::mpsc;
     use std::thread;

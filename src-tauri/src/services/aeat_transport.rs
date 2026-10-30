@@ -1,3 +1,9 @@
+//! Preflight de transporte AEAT VERI*FACTU (fail-closed).
+//!
+//! Comprueba XML, SHA-256, estado de firma y endpoint permitido. Por defecto **no** realiza
+//! llamada externa; solo reporta blockers. Flag `CUMPLEFACTURA_ENABLE_REAL_AEAT_TRANSPORT=1`
+//! no implica SOAP real aquí: este módulo sigue siendo preflight de evidencia local.
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -26,6 +32,7 @@ const ALLOWED_ENDPOINTS: [(&str, &str); 4] = [
     ),
 ];
 
+/// Datos del paquete firmado/a enviar que el preflight debe verificar.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AeatTransportPreflightRequest {
     pub invoice_id: String,
@@ -36,6 +43,7 @@ pub struct AeatTransportPreflightRequest {
     pub endpoint_url: Option<String>,
 }
 
+/// Resultado del preflight: ready/blockers, endpoint resuelto, sin llamada AEAT en MVP.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AeatTransportPreflight {
     pub ready: bool,
@@ -52,11 +60,13 @@ pub struct AeatTransportPreflight {
     pub source_refs: Vec<String>,
 }
 
+/// Preflight leyendo el flag de entorno real-transport.
 pub fn preflight(request: AeatTransportPreflightRequest) -> Result<AeatTransportPreflight, String> {
     let enabled = std::env::var(ENABLE_REAL_TRANSPORT_ENV).unwrap_or_default() == "1";
     preflight_with_flag(request, enabled)
 }
 
+/// Misma lógica inyectando el flag (tests / evidencia sin tocar env).
 pub fn preflight_with_flag(
     request: AeatTransportPreflightRequest,
     real_transport_enabled: bool,
@@ -118,6 +128,7 @@ pub fn preflight_with_flag(
     })
 }
 
+/// Resuelve URL → nombre canónico AEAT (prod/pruebas, sello o no).
 fn allowed_endpoint_name(endpoint_url: &str) -> Option<&'static str> {
     ALLOWED_ENDPOINTS
         .iter()
@@ -130,6 +141,7 @@ fn sha256_file(path: &Path) -> Result<String, String> {
     Ok(hex::encode(Sha256::digest(&bytes)).to_uppercase())
 }
 
+/// Rechaza campos vacíos/whitespace (contrato de entrada del preflight).
 fn require(field: &str, value: &str) -> Result<(), String> {
     if value.trim().is_empty() {
         Err(format!("{field} is required"))

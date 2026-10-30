@@ -1,3 +1,4 @@
+# Core E2E: exercises Rust fiscal/invoice paths and writes evidence JSON.
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()

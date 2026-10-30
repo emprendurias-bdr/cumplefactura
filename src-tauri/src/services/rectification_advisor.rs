@@ -1,6 +1,12 @@
+//! Asistente técnico de rectificativas: mapea escenario → códigos XSD R1–R5 y método S/I.
+//!
+//! No decide la causa jurídica; parte del escenario declarado por el usuario y documenta
+//! referencias al XSD VERI*FACTU. Confianza marcada como `technical-xsd-mapping`.
+
 use crate::domain::invoice::{RectificationMethod, RectificationReasonCode};
 use serde::{Deserialize, Serialize};
 
+/// Escenarios de negocio alineados con claves R1–R5 del XSD.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RectificationScenario {
     Article80OneTwoOrLegalError,
@@ -10,6 +16,7 @@ pub enum RectificationScenario {
     SimplifiedInvoice,
 }
 
+/// Entrada del asistente: escenario, preferencia de método y si sustituye la factura completa.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RectificationAdviceInput {
     pub scenario: RectificationScenario,
@@ -17,6 +24,7 @@ pub struct RectificationAdviceInput {
     pub replaces_full_invoice: bool,
 }
 
+/// Consejo técnico (códigos, notas, warnings) para construir la rectificativa.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RectificationAdvice {
     pub reason_code: RectificationReasonCode,
@@ -27,6 +35,7 @@ pub struct RectificationAdvice {
     pub warnings: Vec<String>,
 }
 
+/// Traduce escenario → `reason_code` + método (S si sustituye completa, si no I).
 pub fn advise(input: RectificationAdviceInput) -> RectificationAdvice {
     let (reason_code, scenario_note) = match input.scenario {
         RectificationScenario::Article80OneTwoOrLegalError => (

@@ -1,3 +1,5 @@
+//! Cliente receptor (tipos, input, entidad).
+
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

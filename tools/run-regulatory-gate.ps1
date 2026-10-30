@@ -1,3 +1,4 @@
+# Regulatory gate orchestrator: runs validators and writes tests/regulatory/evidence.
 param(
     [switch]$SkipTauriBuild
 )

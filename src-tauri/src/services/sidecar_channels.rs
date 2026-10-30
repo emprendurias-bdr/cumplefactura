@@ -1,13 +1,14 @@
-use hmac::{Hmac, Mac};
-use serde::de::DeserializeOwned;
+//! Canales ContaPro sidecar distintos de VERI*FACTU: import de readiness + preflights SII/TicketBAI.
+//!
+//! - `imported_sidecar_capabilities`: lee evidencia local ContaPro (sin red); marca mvp vs diferido.
+//! - `sii_preflight` / `ticketbai_preflight`: POST HMAC loopback si flags ON; FACe no se invoca aquí.
+//! Fail-closed: sin secretos, sin SOAP AEAT/foral desde este proceso.
+
+use crate::services::sidecar_http;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::Sha256;
 use std::fs;
-use std::io::{Read, Write};
-use std::net::TcpStream;
 use std::path::PathBuf;
-use std::time::Duration;
 
 const ENABLE_SII_PREFLIGHT_ENV: &str = "CUMPLEFACTURA_ENABLE_SII_SUBMIT_SIDECAR_PREFLIGHT";
 const ENABLE_TICKETBAI_PREFLIGHT_ENV: &str =
@@ -19,8 +20,8 @@ const DEFAULT_TICKETBAI_PREFLIGHT_URL: &str = "http://127.0.0.1:8000/ticketbai/s
 const SII_PREFLIGHT_PATH: &str = "/sii/submit-preflight";
 const TICKETBAI_PREFLIGHT_PATH: &str = "/ticketbai/submit-preflight";
 const CERT_REF_PREFIX: &str = "vault://certs/";
-type HmacSha256 = Hmac<Sha256>;
 
+/// Estado importado de un canal (VERI*FACTU/SII/FACe/TicketBAI) desde evidencia ContaPro.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ImportedSidecarChannel {
     pub channel: String,
@@ -35,6 +36,7 @@ pub struct ImportedSidecarChannel {
     pub notes: Vec<String>,
 }
 
+/// Resumen de canales importables vs diferidos para la UI MVP.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ImportedSidecarCapabilities {
     pub source_project: String,
@@ -49,6 +51,7 @@ pub struct ImportedSidecarCapabilities {
     pub notes: Vec<String>,
 }
 
+/// Preflight SII: libro, endpoint y vault ref (sin payload de facturas).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SiiSidecarPreflightRequest {
     pub book: String,
@@ -58,6 +61,7 @@ pub struct SiiSidecarPreflightRequest {
     pub require_soap_enabled: Option<bool>,
 }
 
+/// Resultado readiness SII vía sidecar (WSDL/cert/flags).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SiiSidecarPreflight {
     pub ready: bool,
@@ -82,6 +86,7 @@ pub struct SiiSidecarPreflight {
     pub source_refs: Vec<String>,
 }
 
+/// Preflight TicketBAI: territorio + endpoint + vault (suele quedar diferido por política).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TicketBaiSidecarPreflightRequest {
     pub territorio: String,
@@ -90,6 +95,7 @@ pub struct TicketBaiSidecarPreflightRequest {
     pub sidecar_url: Option<String>,
 }
 
+/// Resultado readiness TicketBAI (XSD/endpoint/cert) reportado por el sidecar.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TicketBaiSidecarPreflight {
     pub ready: bool,
@@ -113,6 +119,7 @@ pub struct TicketBaiSidecarPreflight {
     pub source_refs: Vec<String>,
 }
 
+/// Importa readiness/gate locales ContaPro y clasifica canales mvp vs diferidos.
 pub fn imported_sidecar_capabilities() -> ImportedSidecarCapabilities {
     let root = sidecar_root();
     let readiness_path = root
@@ -192,6 +199,7 @@ pub fn imported_sidecar_capabilities() -> ImportedSidecarCapabilities {
     }
 }
 
+/// Preflight SII fail-closed; POST a `/sii/submit-preflight` solo con flag + HMAC.
 pub fn sii_preflight(request: SiiSidecarPreflightRequest) -> Result<SiiSidecarPreflight, String> {
     require("book", &request.book)?;
     require("endpoint_name", &request.endpoint_name)?;
@@ -238,7 +246,7 @@ pub fn sii_preflight(request: SiiSidecarPreflightRequest) -> Result<SiiSidecarPr
     let body =
         serde_json::to_vec(&payload).map_err(|err| format!("sidecar payload error: {err}"))?;
     let response: SiiSidecarResponse =
-        post_json_local_sidecar(&sidecar_url, SII_PREFLIGHT_PATH, &secret, &body)?;
+        sidecar_http::post_json_local_sidecar(&sidecar_url, SII_PREFLIGHT_PATH, &secret, &body)?;
     if response.external_call_performed {
         return Err("sidecar_reported_external_call".to_string());
     }
@@ -262,6 +270,7 @@ pub fn sii_preflight(request: SiiSidecarPreflightRequest) -> Result<SiiSidecarPr
     Ok(result)
 }
 
+/// Preflight TicketBAI fail-closed; POST a `/ticketbai/submit-preflight` solo con flag + HMAC.
 pub fn ticketbai_preflight(
     request: TicketBaiSidecarPreflightRequest,
 ) -> Result<TicketBaiSidecarPreflight, String> {
@@ -313,8 +322,12 @@ pub fn ticketbai_preflight(
     };
     let body =
         serde_json::to_vec(&payload).map_err(|err| format!("sidecar payload error: {err}"))?;
-    let response: TicketBaiSidecarResponse =
-        post_json_local_sidecar(&sidecar_url, TICKETBAI_PREFLIGHT_PATH, &secret, &body)?;
+    let response: TicketBaiSidecarResponse = sidecar_http::post_json_local_sidecar(
+        &sidecar_url,
+        TICKETBAI_PREFLIGHT_PATH,
+        &secret,
+        &body,
+    )?;
     if response.external_call_performed {
         return Err("sidecar_reported_external_call".to_string());
     }
@@ -337,6 +350,7 @@ pub fn ticketbai_preflight(
     Ok(result)
 }
 
+/// Construye un `ImportedSidecarChannel` a partir de JSON de readiness/gate + manifiestos.
 fn import_channel(
     readiness: Option<&Value>,
     channel: &str,
@@ -429,6 +443,7 @@ fn acceptance_manifest_path(root: &PathBuf, channel: &str) -> Option<PathBuf> {
     }
 }
 
+/// Motivo fijo de diferido (FACe alta SP, TicketBAI homologación, etc.).
 fn deferred_reason(channel: &str) -> &'static str {
     match channel {
         "face" => "blocked_by_external_sp_certificate_registration",
@@ -448,6 +463,7 @@ fn channel_notes(channel: &str) -> Vec<String> {
     }
 }
 
+/// Respuesta SII base (blockers locales) antes de intentar el POST.
 fn base_sii_result(request: &SiiSidecarPreflightRequest, sidecar_url: &str) -> SiiSidecarPreflight {
     SiiSidecarPreflight {
         ready: false,
@@ -479,6 +495,7 @@ fn base_sii_result(request: &SiiSidecarPreflightRequest, sidecar_url: &str) -> S
     }
 }
 
+/// Respuesta TicketBAI base (blockers locales) antes de intentar el POST.
 fn base_ticketbai_result(
     request: &TicketBaiSidecarPreflightRequest,
     sidecar_url: &str,
@@ -512,6 +529,7 @@ fn base_ticketbai_result(
     }
 }
 
+/// Raíz ContaPro sidecar (env o path relativo de evidencia).
 fn sidecar_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -539,7 +557,7 @@ fn sidecar_secret() -> String {
 }
 
 fn allowed_url(value: &str, expected_path: &str) -> bool {
-    parse_local_http_url(value, expected_path).is_ok()
+    sidecar_http::parse_local_http_url(value, expected_path).is_ok()
 }
 
 #[derive(Serialize)]
@@ -602,106 +620,6 @@ struct TicketBaiSidecarResponse {
     blockers: Vec<String>,
     warnings: Vec<String>,
     external_call_performed: bool,
-}
-
-struct LocalHttpTarget {
-    host: String,
-    port: u16,
-    path: String,
-}
-
-fn post_json_local_sidecar<T: DeserializeOwned>(
-    url: &str,
-    expected_path: &str,
-    shared_secret: &str,
-    body: &[u8],
-) -> Result<T, String> {
-    let target = parse_local_http_url(url, expected_path)?;
-    let signature = hmac_sha256_hex(shared_secret.as_bytes(), body)?;
-    let mut stream = TcpStream::connect((target.host.as_str(), target.port))
-        .map_err(|err| format!("sidecar connection error: {err}"))?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(20)))
-        .map_err(|err| format!("sidecar read timeout error: {err}"))?;
-    stream
-        .set_write_timeout(Some(Duration::from_secs(20)))
-        .map_err(|err| format!("sidecar write timeout error: {err}"))?;
-
-    let request = format!(
-        "POST {} HTTP/1.1\r\nHost: {}:{}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nx-correlation-id: {}\r\nx-idempotency-key: {}\r\nx-signature: {}\r\nConnection: close\r\n\r\n",
-        target.path,
-        target.host,
-        target.port,
-        body.len(),
-        uuid::Uuid::new_v4(),
-        uuid::Uuid::new_v4(),
-        signature
-    );
-    stream
-        .write_all(request.as_bytes())
-        .and_then(|_| stream.write_all(body))
-        .map_err(|err| format!("sidecar request error: {err}"))?;
-
-    let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .map_err(|err| format!("sidecar response read error: {err}"))?;
-    parse_http_json_response(&response)
-}
-
-fn parse_local_http_url(url: &str, expected_path: &str) -> Result<LocalHttpTarget, String> {
-    let rest = url
-        .strip_prefix("http://")
-        .ok_or_else(|| "sidecar_url_must_use_http_localhost".to_string())?;
-    let (host_port, path) = rest
-        .split_once('/')
-        .ok_or_else(|| "sidecar_url_missing_path".to_string())?;
-    let (host, port_text) = host_port
-        .split_once(':')
-        .ok_or_else(|| "sidecar_url_missing_port".to_string())?;
-    if host != "127.0.0.1" && host != "localhost" {
-        return Err("sidecar_url_host_must_be_local".to_string());
-    }
-    let path = format!("/{path}");
-    if path != expected_path {
-        return Err(format!(
-            "sidecar_url_path_must_be_{}",
-            expected_path.trim_start_matches('/').replace('/', "_")
-        ));
-    }
-    let port = port_text
-        .parse::<u16>()
-        .map_err(|_| "sidecar_url_invalid_port".to_string())?;
-    Ok(LocalHttpTarget {
-        host: host.to_string(),
-        port,
-        path,
-    })
-}
-
-fn parse_http_json_response<T: DeserializeOwned>(response: &[u8]) -> Result<T, String> {
-    let raw = String::from_utf8_lossy(response);
-    let (headers, body) = raw
-        .split_once("\r\n\r\n")
-        .ok_or_else(|| "sidecar response missing body".to_string())?;
-    let status_code = headers
-        .lines()
-        .next()
-        .and_then(|line| line.split_whitespace().nth(1))
-        .ok_or_else(|| "sidecar_missing_status_code".to_string())?
-        .parse::<u16>()
-        .map_err(|_| "sidecar_invalid_status_code".to_string())?;
-    if !(200..300).contains(&status_code) {
-        return Err(format!("sidecar_http_status_{status_code}"));
-    }
-    serde_json::from_str(body).map_err(|err| format!("sidecar response JSON error: {err}"))
-}
-
-fn hmac_sha256_hex(key: &[u8], body: &[u8]) -> Result<String, String> {
-    let mut mac =
-        HmacSha256::new_from_slice(key).map_err(|_| "sidecar_hmac_key_invalid".to_string())?;
-    mac.update(body);
-    Ok(hex::encode(mac.finalize().into_bytes()))
 }
 
 fn require(field: &str, value: &str) -> Result<(), String> {

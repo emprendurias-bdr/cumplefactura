@@ -1,3 +1,4 @@
+// External acceptance evidence checker (manifest / not_provided safe).
 import { createHash } from "node:crypto";
 import {
   existsSync,

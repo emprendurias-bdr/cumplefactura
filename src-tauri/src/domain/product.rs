@@ -1,3 +1,5 @@
+//! Catálogo producto/servicio (SKU, precios, IVA/IRPF/dto).
+
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

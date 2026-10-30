@@ -1,3 +1,4 @@
+// External readiness: AEAT/sidecar readiness JSON (often blocked).
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";

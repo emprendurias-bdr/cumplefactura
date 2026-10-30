@@ -1,7 +1,10 @@
+//! IPC catálogo de productos/servicios por empresa.
+
 use crate::db::{self, AppState};
 use crate::domain::product::{Product, ProductInput};
 use tauri::State;
 
+/// Upsert producto (SKU único por company).
 #[tauri::command]
 pub fn product_upsert(state: State<'_, AppState>, input: ProductInput) -> Result<Product, String> {
     input.validate()?;
@@ -14,6 +17,7 @@ pub fn product_upsert(state: State<'_, AppState>, input: ProductInput) -> Result
     Ok(product)
 }
 
+/// Lista productos de una empresa.
 #[tauri::command]
 pub fn product_list(
     state: State<'_, AppState>,

@@ -1,21 +1,21 @@
 # CumpleFactura ContaPro sidecar import
 
-- Generated: 2026-06-28T19:21:30.264Z
-- Status: passed
-- Source readiness: blocked
-- Source gate: passed
+- Generated: 2026-10-28T10:48:12.200Z
+- Status: missing_source_evidence
+- Source readiness: missing
+- Source gate: missing
 - External call: false
-- MVP importable: verifactu, sii
-- Deferred: face, ticketbai
+- MVP importable: none
+- Deferred: verifactu, sii, face, ticketbai
 
 ## Channels
 
 | Channel | Status | MVP importable | Acceptance | Blockers |
 |---|---|---:|---|---|
-| verifactu | ready | yes | accepted/passed | none |
-| sii | ready | yes | accepted/passed | none |
-| face | blocked | no | missing/missing | face_acceptance_manifest_validated |
-| ticketbai | blocked | no | missing/missing | ticketbai_sidecar_enable_real_ticketbai_submission_enabled, ticketbai_acceptance_manifest_validated |
+| verifactu | missing | no | missing/missing | none |
+| sii | missing | no | missing/missing | none |
+| face | missing | no | missing/missing | none |
+| ticketbai | missing | no | missing/missing | none |
 
 ## Deferred
 

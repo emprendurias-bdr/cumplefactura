@@ -1,3 +1,5 @@
+//! Empresa emisora y series de numeración (resolución de código / preview).
+
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

@@ -1,29 +1,27 @@
 {
   "app": "CumpleFactura",
-  "generated_at": "2026-06-28T19:23:23.321Z",
+  "generated_at": "2026-10-28T10:50:17.469Z",
   "status": "blocked",
-  "gate_run_id": "20260628-212017",
+  "gate_run_id": "20261028-124731",
   "sections": [
     {
       "id": "tauri_desktop_e2e",
       "title": "Tauri desktop E2E",
-      "status": "ready",
+      "status": "blocked",
       "checks": [
         {
           "id": "tauri_release_exe_exists",
-          "ok": true,
+          "ok": false,
           "required": true,
           "detail": "Release executable must exist before desktop E2E can run.",
-          "evidence": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\src-tauri\\target\\release\\cumplefactura.exe"
+          "evidence": "C:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\src-tauri\\target\\release\\cumplefactura.exe"
         },
         {
           "id": "tauri_driver_available",
-          "ok": true,
+          "ok": false,
           "required": true,
           "detail": "tauri-driver is required for real Tauri WebDriver E2E.",
-          "evidence": [
-            "C:\\Users\\Usuario\\.cargo\\bin\\tauri-driver.exe"
-          ]
+          "evidence": []
         },
         {
           "id": "webdriver_available",
@@ -32,23 +30,36 @@
           "detail": "Microsoft Edge WebDriver is required for Windows Tauri/WebView2 desktop automation.",
           "evidence": {
             "msedgedriver": [
-              "C:\\Users\\Usuario\\AppData\\Local\\Temp\\msedgedriver.exe"
+              "C:\\Users\\bilel\\AppData\\Local\\Temp\\msedgedriver.exe"
             ],
             "chromedriver": [
-              "C:\\07 DESARROLLO\\apps\\CumpleFactura\\node_modules\\.bin\\chromedriver.cmd",
-              "C:\\07 DESARROLLO\\apps\\CumpleFactura\\node_modules\\chromedriver\\lib\\chromedriver\\chromedriver.exe"
+              "C:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\node_modules\\.bin\\chromedriver.cmd",
+              "C:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\node_modules\\chromedriver\\lib\\chromedriver\\chromedriver.exe"
             ]
           }
         },
         {
           "id": "tauri_desktop_e2e_evidence_passed",
-          "ok": true,
+          "ok": false,
           "required": true,
           "detail": "Latest Tauri desktop E2E verifier evidence must be present and passed.",
-          "evidence": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-tauri-desktop-e2e.json"
+          "evidence": "C:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\tests\\regulatory\\evidence\\latest-tauri-desktop-e2e.json"
         }
       ],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "tauri_release_exe_exists",
+          "detail": "Release executable must exist before desktop E2E can run."
+        },
+        {
+          "id": "tauri_driver_available",
+          "detail": "tauri-driver is required for real Tauri WebDriver E2E."
+        },
+        {
+          "id": "tauri_desktop_e2e_evidence_passed",
+          "detail": "Latest Tauri desktop E2E verifier evidence must be present and passed."
+        }
+      ],
       "warnings": []
     },
     {
@@ -58,24 +69,24 @@
       "checks": [
         {
           "id": "sidecar_workspace_exists",
-          "ok": true,
+          "ok": false,
           "required": true,
           "detail": "ContaPro sidecar workspace must exist.",
-          "evidence": "C:\\07 DESARROLLO\\apps\\contapro\\services\\sidecar"
+          "evidence": "C:\\Users\\bilel\\Desktop\\BDR\\contapro\\services\\sidecar"
         },
         {
           "id": "sidecar_gate_passed",
-          "ok": true,
+          "ok": false,
           "required": true,
           "detail": "Sidecar regulatory gate must be green before using it for real signing.",
-          "evidence": "C:\\07 DESARROLLO\\apps\\contapro\\services\\sidecar\\tests\\regulatory\\evidence\\latest-regulatory-gate.json"
+          "evidence": "C:\\Users\\bilel\\Desktop\\BDR\\contapro\\services\\sidecar\\tests\\regulatory\\evidence\\latest-regulatory-gate.json"
         },
         {
           "id": "sidecar_ledger_passed",
-          "ok": true,
+          "ok": false,
           "required": true,
           "detail": "Sidecar evidence ledger must be green before using it for real signing.",
-          "evidence": "C:\\07 DESARROLLO\\apps\\contapro\\services\\sidecar\\tests\\regulatory\\evidence\\latest-evidence-ledger.json"
+          "evidence": "C:\\Users\\bilel\\Desktop\\BDR\\contapro\\services\\sidecar\\tests\\regulatory\\evidence\\latest-evidence-ledger.json"
         },
         {
           "id": "cumplefactura_real_xades_flag",
@@ -125,6 +136,18 @@
         }
       ],
       "blockers": [
+        {
+          "id": "sidecar_workspace_exists",
+          "detail": "ContaPro sidecar workspace must exist."
+        },
+        {
+          "id": "sidecar_gate_passed",
+          "detail": "Sidecar regulatory gate must be green before using it for real signing."
+        },
+        {
+          "id": "sidecar_ledger_passed",
+          "detail": "Sidecar evidence ledger must be green before using it for real signing."
+        },
         {
           "id": "cumplefactura_real_xades_flag",
           "detail": "CUMPLEFACTURA_ENABLE_REAL_XADES_SIDECAR must be enabled explicitly."
@@ -185,7 +208,7 @@
           "required": true,
           "detail": "External AEAT VERI*FACTU acceptance/homologation must be recorded through the validated redacted manifest intake.",
           "evidence": {
-            "latest_external_acceptance": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-external-acceptance-evidence.json",
+            "latest_external_acceptance": "C:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\tests\\regulatory\\evidence\\latest-external-acceptance-evidence.json",
             "latest_status": "not_provided",
             "legacy_path_present": false
           }
@@ -214,14 +237,14 @@
     {
       "id": "imported_sidecar_channels",
       "title": "Imported ContaPro sidecar channels",
-      "status": "ready",
+      "status": "blocked",
       "checks": [
         {
           "id": "contapro_import_passed",
-          "ok": true,
+          "ok": false,
           "required": true,
           "detail": "ContaPro sidecar readiness evidence must be imported locally.",
-          "evidence": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-contapro-sidecar-import.json"
+          "evidence": "C:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\tests\\regulatory\\evidence\\latest-contapro-sidecar-import.json"
         },
         {
           "id": "contapro_import_no_external_call",
@@ -248,11 +271,46 @@
           "detail": "TicketBAI sidecar channel status must be present, even if blocked."
         }
       ],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "contapro_import_passed",
+          "detail": "ContaPro sidecar readiness evidence must be imported locally."
+        }
+      ],
       "warnings": []
     }
   ],
   "blockers": [
+    {
+      "section": "tauri_desktop_e2e",
+      "id": "tauri_release_exe_exists",
+      "detail": "Release executable must exist before desktop E2E can run."
+    },
+    {
+      "section": "tauri_desktop_e2e",
+      "id": "tauri_driver_available",
+      "detail": "tauri-driver is required for real Tauri WebDriver E2E."
+    },
+    {
+      "section": "tauri_desktop_e2e",
+      "id": "tauri_desktop_e2e_evidence_passed",
+      "detail": "Latest Tauri desktop E2E verifier evidence must be present and passed."
+    },
+    {
+      "section": "real_xades",
+      "id": "sidecar_workspace_exists",
+      "detail": "ContaPro sidecar workspace must exist."
+    },
+    {
+      "section": "real_xades",
+      "id": "sidecar_gate_passed",
+      "detail": "Sidecar regulatory gate must be green before using it for real signing."
+    },
+    {
+      "section": "real_xades",
+      "id": "sidecar_ledger_passed",
+      "detail": "Sidecar evidence ledger must be green before using it for real signing."
+    },
     {
       "section": "real_xades",
       "id": "cumplefactura_real_xades_flag",
@@ -307,6 +365,11 @@
       "section": "real_verifactu_submission",
       "id": "aeat_acceptance_evidence_validated",
       "detail": "External AEAT VERI*FACTU acceptance/homologation must be recorded through the validated redacted manifest intake."
+    },
+    {
+      "section": "imported_sidecar_channels",
+      "id": "contapro_import_passed",
+      "detail": "ContaPro sidecar readiness evidence must be imported locally."
     }
   ],
   "warnings": [],

@@ -1,20 +1,24 @@
-use hmac::{Hmac, Mac};
+//! Firma XAdES del XML VERI*FACTU vía ContaPro sidecar local (fail-closed).
+//!
+//! Flujo: preflight (hash, vault ref, flag, URL local) → POST HMAC a `/verifactu/sign-xml`
+//! solo si `CUMPLEFACTURA_ENABLE_REAL_XADES_SIDECAR=1`. No abre AEAT; el certificado es
+//! referencia `vault://certs/...`, nunca materializado aquí.
+
+use crate::services::sidecar_http;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::io::{Read, Write};
-use std::net::TcpStream;
 use std::path::Path;
-use std::time::Duration;
 
 const ENABLE_REAL_XADES_ENV: &str = "CUMPLEFACTURA_ENABLE_REAL_XADES_SIDECAR";
 const SIDECAR_SHARED_SECRET_ENV: &str = "CUMPLEFACTURA_SIDECAR_SHARED_SECRET";
 const SIDECAR_SHARED_SECRET_FALLBACK_ENV: &str = "SIDECAR_SHARED_SECRET";
 const DEFAULT_SIDECAR_SIGN_XML_URL: &str = "http://127.0.0.1:8000/verifactu/sign-xml";
+const SIGN_XML_PATH: &str = "/verifactu/sign-xml";
 const CERT_REF_PREFIX: &str = "vault://certs/";
 const SIGNATURE_MODE_REAL_XADES: &str = "xades_bes_local";
-type HmacSha256 = Hmac<Sha256>;
 
+/// Entrada del preflight de firma (XML + SHA + estado + ref vault).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct XadesSidecarPreflightRequest {
     pub invoice_id: String,
@@ -26,6 +30,7 @@ pub struct XadesSidecarPreflightRequest {
     pub sidecar_url: Option<String>,
 }
 
+/// Entrada de firma: igual que preflight + path destino del XML firmado.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct XadesSidecarSignRequest {
     pub invoice_id: String,
@@ -40,6 +45,7 @@ pub struct XadesSidecarSignRequest {
     pub id_attribute: Option<String>,
 }
 
+/// Resultado del preflight: ready/blockers sin necesariamente llamar al sidecar.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct XadesSidecarPreflight {
     pub ready: bool,
@@ -60,6 +66,7 @@ pub struct XadesSidecarPreflight {
     pub request_contract: Vec<String>,
 }
 
+/// Resultado de firma: paths/hashes del XML firmado y estados post-sidecar.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct XadesSidecarSignature {
     pub invoice_id: String,
@@ -85,11 +92,13 @@ pub struct XadesSidecarSignature {
     pub warnings: Vec<String>,
 }
 
+/// Preflight leyendo el flag de entorno XAdES real.
 pub fn preflight(request: XadesSidecarPreflightRequest) -> Result<XadesSidecarPreflight, String> {
     let enabled = std::env::var(ENABLE_REAL_XADES_ENV).unwrap_or_default() == "1";
     preflight_with_flag(request, enabled)
 }
 
+/// Firma el XML exacto (mismo SHA) vía sidecar; requiere secret HMAC + flag.
 pub fn sign_exact_xml(request: XadesSidecarSignRequest) -> Result<XadesSidecarSignature, String> {
     let enabled = std::env::var(ENABLE_REAL_XADES_ENV).unwrap_or_default() == "1";
     let secret = std::env::var(SIDECAR_SHARED_SECRET_ENV)
@@ -98,6 +107,7 @@ pub fn sign_exact_xml(request: XadesSidecarSignRequest) -> Result<XadesSidecarSi
     sign_exact_xml_with_config(request, enabled, secret.as_str())
 }
 
+/// Núcleo de firma inyectable (tests): preflight → POST local → escribe signed XML.
 pub fn sign_exact_xml_with_config(
     request: XadesSidecarSignRequest,
     real_xades_enabled: bool,
@@ -151,7 +161,12 @@ pub fn sign_exact_xml_with_config(
     };
     let body =
         serde_json::to_vec(&payload).map_err(|err| format!("sidecar payload error: {err}"))?;
-    let response = post_json_local_sidecar(&preflight.sidecar_url, shared_secret, &body)?;
+    let response: SidecarSignXmlResponse = sidecar_http::post_json_local_sidecar(
+        &preflight.sidecar_url,
+        SIGN_XML_PATH,
+        shared_secret,
+        &body,
+    )?;
 
     if response.signature_mode != SIGNATURE_MODE_REAL_XADES {
         return Err("sidecar_returned_non_real_signature_mode".to_string());
@@ -210,6 +225,7 @@ pub fn sign_exact_xml_with_config(
     })
 }
 
+/// Preflight inyectable: valida contrato local y blockers sin AEAT.
 pub fn preflight_with_flag(
     request: XadesSidecarPreflightRequest,
     real_xades_enabled: bool,
@@ -291,11 +307,13 @@ pub fn preflight_with_flag(
     })
 }
 
+/// Solo acepta refs `vault://certs/...` (sin secretos embebidos).
 fn valid_certificate_ref(value: &str) -> bool {
     let trimmed = value.trim();
     trimmed.starts_with(CERT_REF_PREFIX) && trimmed.len() > CERT_REF_PREFIX.len()
 }
 
+/// URL debe ser loopback y terminar en `/verifactu/sign-xml`.
 fn allowed_sidecar_sign_xml_url(value: &str) -> bool {
     let trimmed = value.trim();
     let local =
@@ -329,105 +347,6 @@ struct SidecarSignXmlResponse {
     external_call_performed: bool,
 }
 
-struct LocalHttpTarget {
-    host: String,
-    port: u16,
-    path: String,
-}
-
-fn post_json_local_sidecar(
-    url: &str,
-    shared_secret: &str,
-    body: &[u8],
-) -> Result<SidecarSignXmlResponse, String> {
-    let target = parse_local_http_url(url)?;
-    let signature = hmac_sha256_hex(shared_secret.as_bytes(), body)?;
-    let mut stream = TcpStream::connect((target.host.as_str(), target.port))
-        .map_err(|err| format!("sidecar connection error: {err}"))?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(20)))
-        .map_err(|err| format!("sidecar read timeout error: {err}"))?;
-    stream
-        .set_write_timeout(Some(Duration::from_secs(20)))
-        .map_err(|err| format!("sidecar write timeout error: {err}"))?;
-
-    let request = format!(
-        "POST {} HTTP/1.1\r\nHost: {}:{}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nx-correlation-id: {}\r\nx-idempotency-key: {}\r\nx-signature: {}\r\nConnection: close\r\n\r\n",
-        target.path,
-        target.host,
-        target.port,
-        body.len(),
-        uuid::Uuid::new_v4(),
-        uuid::Uuid::new_v4(),
-        signature
-    );
-    stream
-        .write_all(request.as_bytes())
-        .and_then(|_| stream.write_all(body))
-        .map_err(|err| format!("sidecar write error: {err}"))?;
-
-    let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .map_err(|err| format!("sidecar read error: {err}"))?;
-    parse_http_json_response(&response)
-}
-
-fn parse_local_http_url(url: &str) -> Result<LocalHttpTarget, String> {
-    if !allowed_sidecar_sign_xml_url(url) {
-        return Err("sidecar_url_must_be_local_verifactu_sign_xml".to_string());
-    }
-    let rest = url
-        .strip_prefix("http://")
-        .ok_or_else(|| "sidecar_url_must_use_http_localhost".to_string())?;
-    let (host_port, path) = rest
-        .split_once('/')
-        .ok_or_else(|| "sidecar_url_missing_path".to_string())?;
-    let path = format!("/{path}");
-    let (host, port) = host_port
-        .rsplit_once(':')
-        .ok_or_else(|| "sidecar_url_missing_port".to_string())?;
-    if host != "127.0.0.1" && host != "localhost" {
-        return Err("sidecar_url_must_be_localhost".to_string());
-    }
-    let port = port
-        .parse::<u16>()
-        .map_err(|_| "sidecar_url_invalid_port".to_string())?;
-    Ok(LocalHttpTarget {
-        host: host.to_string(),
-        port,
-        path,
-    })
-}
-
-fn parse_http_json_response(response: &[u8]) -> Result<SidecarSignXmlResponse, String> {
-    let text = String::from_utf8_lossy(response);
-    let (head, body) = text
-        .split_once("\r\n\r\n")
-        .ok_or_else(|| "sidecar_invalid_http_response".to_string())?;
-    let status_line = head
-        .lines()
-        .next()
-        .ok_or_else(|| "sidecar_missing_status_line".to_string())?;
-    let status_code = status_line
-        .split_whitespace()
-        .nth(1)
-        .ok_or_else(|| "sidecar_missing_status_code".to_string())?
-        .parse::<u16>()
-        .map_err(|_| "sidecar_invalid_status_code".to_string())?;
-    if !(200..300).contains(&status_code) {
-        return Err(format!("sidecar_http_status_{status_code}"));
-    }
-    serde_json::from_str(body).map_err(|err| format!("sidecar response JSON error: {err}"))
-}
-
-fn hmac_sha256_hex(key: &[u8], body: &[u8]) -> Result<String, String> {
-    let mut mac =
-        HmacSha256::new_from_slice(key).map_err(|_| "sidecar_hmac_key_invalid".to_string())?;
-    mac.update(body);
-    Ok(hex::encode(mac.finalize().into_bytes()))
-}
-
 fn require(field: &str, value: &str) -> Result<(), String> {
     if value.trim().is_empty() {
         Err(format!("{field} is required"))
@@ -439,6 +358,8 @@ fn require(field: &str, value: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::sidecar_http::hmac_sha256_hex;
+    use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::mpsc;
     use std::thread;

@@ -1,3 +1,4 @@
+# Validates an XML file against local VERI*FACTU XSD (System.Xml.Schema).
 param(
     [Parameter(Mandatory = $true)]
     [string]$XmlPath,

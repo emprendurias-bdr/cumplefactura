@@ -1,3 +1,7 @@
+//! IPC fiscal/local: exports, XML VERI\*FACTU, cadena, backup y fronteras sidecar.
+//!
+//! Orquesta `services::*`; restore es preflight-only (sin replace destructivo en MVP).
+
 use crate::db::{
     self, AppState, AuditSummary, FiscalRecordSummary, ListPagination, PreviousInvoiceLink,
 };
@@ -57,6 +61,7 @@ pub struct ExportResult {
     pub notes: Vec<String>,
 }
 
+/// Placeholder de payload VERI\*FACTU (pre-MVP; sin transporte).
 #[tauri::command]
 pub fn fiscal_prepare_verifactu(invoice_id: String) -> Result<FiscalPayload, String> {
     if invoice_id.trim().is_empty() {
@@ -76,6 +81,7 @@ pub fn fiscal_prepare_verifactu(invoice_id: String) -> Result<FiscalPayload, Str
     })
 }
 
+/// Import local ContaPro: canales mvp vs diferidos.
 #[tauri::command]
 pub fn fiscal_sidecar_capabilities_get() -> Result<ImportedSidecarCapabilities, String> {
     Ok(sidecar_channels::imported_sidecar_capabilities())
@@ -95,6 +101,7 @@ pub fn ticketbai_submit_sidecar_preflight(
     sidecar_channels::ticketbai_preflight(input)
 }
 
+/// Asistente técnico R1–R5 / S|I (no decide causa jurídica).
 #[tauri::command]
 pub fn rectification_advice(
     input: RectificationAdviceInput,
@@ -102,6 +109,7 @@ pub fn rectification_advice(
     Ok(rectification_advisor::advise(input))
 }
 
+/// Copia de seguridad SQLite a path nuevo.
 #[tauri::command]
 pub fn backup_export(
     state: State<'_, AppState>,
@@ -124,6 +132,7 @@ pub fn backup_export(
     })
 }
 
+/// Preflight restore: valida origen; no reemplaza la BD en MVP.
 #[tauri::command]
 pub fn backup_restore(source_path: String) -> Result<BackupRestoreResult, String> {
     if source_path.trim().is_empty() {
@@ -382,6 +391,7 @@ pub fn fiscal_record_list(
     db::list_fiscal_records_paginated(&conn, pagination.unwrap_or_default())
 }
 
+/// Verifica cadena de huellas fiscales en SQLite.
 #[tauri::command]
 pub fn fiscal_chain_verify(state: State<'_, AppState>) -> Result<FiscalChainVerification, String> {
     let conn = state

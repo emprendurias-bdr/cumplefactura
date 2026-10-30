@@ -1,9 +1,12 @@
+//! Onboarding / settings persistidos (`app_settings` singleton en SQLite).
+
 use crate::db::{self, AppState};
 use crate::domain::settings::{AppSettings, AppSettingsInput};
 use std::fs;
 use std::path::Path;
 use tauri::State;
 
+/// Lee settings (export dir, flags fiscales, onboarding).
 #[tauri::command]
 pub fn app_settings_get(state: State<'_, AppState>) -> Result<AppSettings, String> {
     let conn = state
@@ -13,6 +16,7 @@ pub fn app_settings_get(state: State<'_, AppState>) -> Result<AppSettings, Strin
     db::get_app_settings(&conn)
 }
 
+/// Actualiza settings; crea la carpeta export si viene en el input.
 #[tauri::command]
 pub fn app_settings_update(
     state: State<'_, AppState>,

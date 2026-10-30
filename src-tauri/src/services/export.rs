@@ -1,9 +1,15 @@
+//! Exportaciones locales (JSON/CSV/auditoría) y preflight de restore de backup.
+//!
+//! No llama a AEAT. El JSON de auditoría incluye verificación de cadena fiscal.
+//! `write_new_file` rechaza sobrescritura (solo archivos nuevos).
+
 use crate::db::{AuditSummary, FiscalRecordSummary, InvoicePdfData, InvoiceSummary};
 use crate::services::fiscal_chain::FiscalChainVerification;
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
 
+/// Payload del informe de auditoría fiscal exportable a JSON.
 #[derive(Debug, Clone, Serialize)]
 pub struct FiscalAuditExport {
     pub generated_at: String,
@@ -14,6 +20,7 @@ pub struct FiscalAuditExport {
     pub limits: Vec<String>,
 }
 
+/// Exporta una factura completa (`InvoicePdfData`) a JSON pretty.
 pub fn write_invoice_json(path: &str, invoice: &InvoicePdfData) -> Result<(), String> {
     write_new_file(
         path,
@@ -21,6 +28,7 @@ pub fn write_invoice_json(path: &str, invoice: &InvoicePdfData) -> Result<(), St
     )
 }
 
+/// Exporta un listado de facturas a CSV (MVP: sin filtrar columnas extra).
 pub fn write_invoice_csv(path: &str, invoices: &[InvoiceSummary]) -> Result<(), String> {
     let mut csv = String::from(
         "id,company_id,customer_id,fiscal_year,series,number,kind,status,total_cents,fiscal_hash,created_at,issued_at\n",
@@ -48,6 +56,7 @@ pub fn write_invoice_csv(path: &str, invoices: &[InvoiceSummary]) -> Result<(), 
     write_new_file(path, &csv)
 }
 
+/// Informe local: facturas + audit + registros fiscales + resultado de `fiscal_chain::verify`.
 pub fn write_fiscal_audit_json(
     path: &str,
     invoices: Vec<InvoiceSummary>,
@@ -72,6 +81,8 @@ pub fn write_fiscal_audit_json(
     )
 }
 
+/// Preflight de restore: el origen debe ser fichero `.sqlite`/`.sqlite3`/`.db` existente.
+/// No restaura la BD; solo valida la ruta (restore destructivo sigue fuera del MVP).
 pub fn validate_restore_source(path: &str) -> Result<(), String> {
     let source = Path::new(path);
     if !source.exists() {
@@ -96,6 +107,7 @@ pub fn validate_restore_source(path: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Escribe solo si el destino no existe; crea directorios padre si hace falta.
 fn write_new_file(path: &str, contents: &str) -> Result<(), String> {
     let target = Path::new(path);
     if target.exists() {
@@ -107,6 +119,7 @@ fn write_new_file(path: &str, contents: &str) -> Result<(), String> {
     fs::write(target, contents).map_err(|err| format!("export write error: {err}"))
 }
 
+/// Escapa celdas CSV (comillas si hay coma/comilla/salto).
 fn cell(value: &str) -> String {
     let escaped = value.replace('"', "\"\"");
     format!("\"{escaped}\"")

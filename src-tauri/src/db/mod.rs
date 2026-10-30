@@ -1,3 +1,8 @@
+//! Persistencia SQLite: migraciones, `AppState` y acceso a entidades fiscales.
+//!
+//! Schema versionado en `migrations/*.sql`. Numeración y hashes se escriben en
+//! transacciones de emisión; listados soportan filtros + `ListPagination`.
+
 use crate::domain::company::{
     format_invoice_number, Company, CompanyUpdateInput, InvoiceSeriesConfig,
     InvoiceSeriesConfigInput,

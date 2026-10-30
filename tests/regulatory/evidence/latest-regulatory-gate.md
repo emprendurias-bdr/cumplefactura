@@ -1,29 +1,29 @@
 # CumpleFactura regulatory gate
 
-- Generated: 2026-06-28T21:23:26.6115755+02:00
-- Status: passed
-- App: `C:\07 DESARROLLO\apps\CumpleFactura`
+- Generated: 2026-10-28T12:50:17.8852186+02:00
+- Status: failed
+- App: `C:\Users\bilel\Desktop\BDR\cumplefactura`
 - Source workspace: `C:\03 LEGISLACION`
 
 ## Steps
 
 | Step | Status | Seconds | Log |
 |---|---:|---:|---|
-| `cargo_fmt_check` | passed | 1.672 | `C:\07 DESARROLLO\apps\CumpleFactura\tests\regulatory\evidence\20260628-212017-cargo_fmt_check.log` |
-| `cargo_test` | passed | 18.234 | `C:\07 DESARROLLO\apps\CumpleFactura\tests\regulatory\evidence\20260628-212017-cargo_test.log` |
-| `npm_build` | passed | 11.604 | `C:\07 DESARROLLO\apps\CumpleFactura\tests\regulatory\evidence\20260628-212017-npm_build.log` |
-| `ui_contract` | passed | 3.945 | `C:\07 DESARROLLO\apps\CumpleFactura\tests\regulatory\evidence\20260628-212017-ui_contract.log` |
-| `core_e2e` | passed | 6.679 | `C:\07 DESARROLLO\apps\CumpleFactura\tests\regulatory\evidence\20260628-212017-core_e2e.log` |
-| `browser_smoke` | passed | 18.709 | `C:\07 DESARROLLO\apps\CumpleFactura\tests\regulatory\evidence\20260628-212017-browser_smoke.log` |
-| `secret_scan` | passed | 4.065 | `C:\07 DESARROLLO\apps\CumpleFactura\tests\regulatory\evidence\20260628-212017-secret_scan.log` |
-| `external_acceptance` | passed | 3.654 | `C:\07 DESARROLLO\apps\CumpleFactura\tests\regulatory\evidence\20260628-212017-external_acceptance.log` |
-| `contapro_sidecar_import` | passed | 4.163 | `C:\07 DESARROLLO\apps\CumpleFactura\tests\regulatory\evidence\20260628-212017-contapro_sidecar_import.log` |
-| `evidence_matrix` | passed | 3.544 | `C:\07 DESARROLLO\apps\CumpleFactura\tests\regulatory\evidence\20260628-212017-evidence_matrix.log` |
-| `verifactu_xsd_fixture` | passed | 3.27 | `C:\07 DESARROLLO\apps\CumpleFactura\tests\regulatory\evidence\20260628-212017-verifactu_xsd_fixture.log` |
-| `tauri_build` | passed | 87.408 | `C:\07 DESARROLLO\apps\CumpleFactura\tests\regulatory\evidence\20260628-212017-tauri_build.log` |
-| `tauri_desktop_e2e` | passed | 14.654 | `C:\07 DESARROLLO\apps\CumpleFactura\tests\regulatory\evidence\20260628-212017-tauri_desktop_e2e.log` |
-| `external_readiness` | passed | 4.176 | `C:\07 DESARROLLO\apps\CumpleFactura\tests\regulatory\evidence\20260628-212017-external_readiness.log` |
-| `evidence_ledger` | passed | 3.233 | `C:\07 DESARROLLO\apps\CumpleFactura\tests\regulatory\evidence\20260628-212017-evidence_ledger.log` |
+| `cargo_fmt_check` | passed | 0.258 | `C:\Users\bilel\Desktop\BDR\cumplefactura\tests\regulatory\evidence\20261028-124731-cargo_fmt_check.log` |
+| `cargo_test` | passed | 27.683 | `C:\Users\bilel\Desktop\BDR\cumplefactura\tests\regulatory\evidence\20261028-124731-cargo_test.log` |
+| `npm_build` | passed | 5.104 | `C:\Users\bilel\Desktop\BDR\cumplefactura\tests\regulatory\evidence\20261028-124731-npm_build.log` |
+| `ui_contract` | passed | 1.104 | `C:\Users\bilel\Desktop\BDR\cumplefactura\tests\regulatory\evidence\20261028-124731-ui_contract.log` |
+| `core_e2e` | passed | 1.914 | `C:\Users\bilel\Desktop\BDR\cumplefactura\tests\regulatory\evidence\20261028-124731-core_e2e.log` |
+| `browser_smoke` | failed | 2.503 | `C:\Users\bilel\Desktop\BDR\cumplefactura\tests\regulatory\evidence\20261028-124731-browser_smoke.log` |
+| `secret_scan` | passed | 0.811 | `C:\Users\bilel\Desktop\BDR\cumplefactura\tests\regulatory\evidence\20261028-124731-secret_scan.log` |
+| `external_acceptance` | passed | 0.524 | `C:\Users\bilel\Desktop\BDR\cumplefactura\tests\regulatory\evidence\20261028-124731-external_acceptance.log` |
+| `contapro_sidecar_import` | failed | 0.491 | `C:\Users\bilel\Desktop\BDR\cumplefactura\tests\regulatory\evidence\20261028-124731-contapro_sidecar_import.log` |
+| `evidence_matrix` | failed | 0.418 | `C:\Users\bilel\Desktop\BDR\cumplefactura\tests\regulatory\evidence\20261028-124731-evidence_matrix.log` |
+| `verifactu_xsd_fixture` | passed | 0.63 | `C:\Users\bilel\Desktop\BDR\cumplefactura\tests\regulatory\evidence\20261028-124731-verifactu_xsd_fixture.log` |
+| `tauri_build` | passed | 117.032 | `C:\Users\bilel\Desktop\BDR\cumplefactura\tests\regulatory\evidence\20261028-124731-tauri_build.log` |
+| `tauri_desktop_e2e` | failed | 6.516 | `C:\Users\bilel\Desktop\BDR\cumplefactura\tests\regulatory\evidence\20261028-124731-tauri_desktop_e2e.log` |
+| `external_readiness` | passed | 0.665 | `C:\Users\bilel\Desktop\BDR\cumplefactura\tests\regulatory\evidence\20261028-124731-external_readiness.log` |
+| `evidence_ledger` | failed | 0.391 | `C:\Users\bilel\Desktop\BDR\cumplefactura\tests\regulatory\evidence\20261028-124731-evidence_ledger.log` |
 
 ## Live limits
 

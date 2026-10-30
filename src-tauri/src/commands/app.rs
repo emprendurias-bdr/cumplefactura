@@ -1,8 +1,11 @@
+//! Paths seguros de la app (data dir / export) vía APIs Tauri — sin hardcode de usuario.
+
 use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
+/// Defaults de rutas (backup, PDF, XML, JSON, CSV, auditoría) con stamp temporal.
 #[derive(Debug, Clone, Serialize)]
 pub struct AppDefaults {
     pub app_data_dir: String,
@@ -19,6 +22,7 @@ pub struct AppDefaults {
     pub notes: Vec<String>,
 }
 
+/// Resuelve y crea la carpeta export; devuelve paths por defecto para la UI.
 #[tauri::command]
 pub fn app_defaults_get(app: AppHandle) -> Result<AppDefaults, String> {
     let app_data_dir = app

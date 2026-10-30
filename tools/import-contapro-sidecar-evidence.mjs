@@ -1,3 +1,4 @@
+// Import ContaPro sidecar readiness into CumpleFactura evidence (no secrets/network).
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";

@@ -1,7 +1,12 @@
+//! Generación mínima de PDF de factura (Helvetica Type1, sin plantillas externas).
+//!
+//! Salida local para el usuario; no es el artefacto fiscal (huella/XML viven aparte).
+
 use crate::db::InvoicePdfData;
 use std::fs;
 use std::path::PathBuf;
 
+/// Escribe un PDF A4 nuevo con cabecera, líneas, totales y huella fiscal (si existe).
 pub fn write_invoice_pdf(target_path: &str, invoice: &InvoicePdfData) -> Result<(), String> {
     let path = PathBuf::from(target_path);
     if path.exists() {
@@ -68,6 +73,7 @@ pub fn write_invoice_pdf(target_path: &str, invoice: &InvoicePdfData) -> Result<
     fs::write(path, pdf).map_err(|err| format!("PDF write error: {err}"))
 }
 
+/// Ensambla objetos PDF 1.4 (Catalog/Pages/Page/Font/Contents) alrededor del stream de texto.
 fn build_pdf(content: &str) -> Vec<u8> {
     let objects = vec![
         "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
@@ -101,6 +107,7 @@ fn build_pdf(content: &str) -> Vec<u8> {
     bytes
 }
 
+/// Escapa `( ) \` para literales PDF.
 fn escape(value: &str) -> String {
     value
         .replace('\\', "\\\\")
@@ -108,6 +115,7 @@ fn escape(value: &str) -> String {
         .replace(')', "\\)")
 }
 
+/// Formatea céntimos como importe decimal con 2 decimales.
 fn cents(value: i64) -> String {
     format!("{:.2} EUR", value as f64 / 100.0)
 }

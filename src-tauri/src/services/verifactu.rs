@@ -1,3 +1,10 @@
+//! Generación y validación local de XML VERI*FACTU (RegistroAlta / RegistroAnulacion).
+//!
+//! - Construye XML según namespaces AEAT (`SuministroLR` + `SuministroInformacion`).
+//! - Calcula huellas SHA-256 del material de registro (encadenado con factura previa).
+//! - Valida contra XSD bundled vía `tools/validate-verifactu-xsd.ps1` (Windows).
+//! No firma XAdES ni envía a AEAT; eso vive en los módulos sidecar / transport.
+
 use crate::db::{InvoicePdfData, PreviousInvoiceLink};
 use chrono::{DateTime, Datelike};
 use sha2::{Digest, Sha256};
@@ -10,6 +17,7 @@ const NS_SF_LR: &str = "https://www2.agenciatributaria.gob.es/static_files/commo
 const NS_SF: &str = "https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd";
 const NS_DS: &str = "http://www.w3.org/2000/09/xmldsig#";
 
+/// Rutas al script PowerShell y al directorio `resources/xsd/verifactu`.
 #[derive(Debug, Clone)]
 pub struct VerifactuXsdAssets {
     pub script_path: PathBuf,
@@ -17,6 +25,7 @@ pub struct VerifactuXsdAssets {
 }
 
 impl VerifactuXsdAssets {
+    /// Comprueba que existan el script, el dir de schemas y `SuministroLR.xsd`.
     pub fn new(script_path: PathBuf, schema_dir: PathBuf) -> Result<Self, String> {
         if !script_path.exists() {
             return Err(format!(
@@ -45,6 +54,7 @@ impl VerifactuXsdAssets {
     }
 }
 
+/// Genera XML Alta y lo escribe en un path nuevo (sin validar XSD).
 pub fn write_verifactu_xml_draft(
     target_path: &str,
     invoice: &InvoicePdfData,
@@ -54,6 +64,7 @@ pub fn write_verifactu_xml_draft(
     write_xml(target_path, xml)
 }
 
+/// Persistencia fail-safe: no sobrescribe; crea padres si faltan.
 fn write_xml(target_path: &str, xml: String) -> Result<(), String> {
     let path = PathBuf::from(target_path);
     if path.exists() {
@@ -66,6 +77,7 @@ fn write_xml(target_path: &str, xml: String) -> Result<(), String> {
     fs::write(path, xml).map_err(|err| format!("XML write error: {err}"))
 }
 
+/// Alta + validación XSD; si falla, borra el XML escrito.
 pub fn write_verifactu_xml_draft_validated(
     target_path: &str,
     invoice: &InvoicePdfData,
@@ -81,6 +93,7 @@ pub fn write_verifactu_xml_draft_validated(
     Ok(())
 }
 
+/// Anulación + validación XSD (requiere enlace a registro previo).
 pub fn write_verifactu_anulacion_xml_draft_validated(
     target_path: &str,
     invoice: &InvoicePdfData,
@@ -98,6 +111,7 @@ pub fn write_verifactu_anulacion_xml_draft_validated(
     Ok(())
 }
 
+/// Invoca el validador PowerShell local contra el XSD bundled.
 pub fn validate_verifactu_xml_file(path: &Path, assets: &VerifactuXsdAssets) -> Result<(), String> {
     if !path.exists() {
         return Err(format!("VERI*FACTU XML not found: {}", path.display()));
@@ -127,6 +141,7 @@ pub fn validate_verifactu_xml_file(path: &Path, assets: &VerifactuXsdAssets) -> 
     ))
 }
 
+/// Resuelve assets en árbol de desarrollo (`tools/` + `resources/xsd/verifactu`).
 pub fn dev_verifactu_xsd_assets() -> Result<VerifactuXsdAssets, String> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let app_root = manifest_dir
@@ -138,6 +153,7 @@ pub fn dev_verifactu_xsd_assets() -> Result<VerifactuXsdAssets, String> {
     )
 }
 
+/// Serializa `RegFactuSistemaFacturacion` con un `RegistroAlta` a partir de la factura emitida.
 pub fn build_verifactu_xml_draft(
     invoice: &InvoicePdfData,
     previous: Option<&PreviousInvoiceLink>,
@@ -233,6 +249,7 @@ pub fn build_verifactu_xml_draft(
     Ok(xml)
 }
 
+/// Serializa un `RegistroAnulacion` enlazado a la cadena previa.
 pub fn build_verifactu_anulacion_xml_draft(
     invoice: &InvoicePdfData,
     previous: &PreviousInvoiceLink,
@@ -306,6 +323,7 @@ pub fn build_verifactu_anulacion_xml_draft(
     Ok(xml)
 }
 
+/// Huella Alta desde datos de factura + enlace previo (wrapper de dominio).
 pub fn calculate_invoice_registro_alta_hash(
     invoice: &InvoicePdfData,
     previous: Option<&PreviousInvoiceLink>,
@@ -330,6 +348,7 @@ pub fn calculate_invoice_registro_alta_hash(
 }
 
 #[allow(dead_code)]
+/// Huella Alta para factura ya emitida (tipo de factura inferido del kind).
 pub fn calculate_issued_invoice_registro_alta_hash(
     issuer_tax_id: &str,
     series: &str,
@@ -351,6 +370,7 @@ pub fn calculate_issued_invoice_registro_alta_hash(
     )
 }
 
+/// Igual que issued, forzando el `TipoFactura` AEAT explícito.
 pub fn calculate_issued_invoice_registro_alta_hash_with_type(
     issuer_tax_id: &str,
     series: &str,
@@ -374,6 +394,7 @@ pub fn calculate_issued_invoice_registro_alta_hash_with_type(
     ))
 }
 
+/// SHA-256 del material canónico de RegistroAlta (núcleo del encadenado).
 pub fn calculate_registro_alta_hash(
     issuer_tax_id: &str,
     invoice_number: &str,
@@ -398,6 +419,7 @@ pub fn calculate_registro_alta_hash(
     hex::encode(digest).to_uppercase()
 }
 
+/// Huella Anulación desde factura + previo.
 pub fn calculate_invoice_registro_anulacion_hash(
     invoice: &InvoicePdfData,
     previous_hash: &str,
@@ -420,6 +442,7 @@ pub fn calculate_invoice_registro_anulacion_hash(
     )
 }
 
+/// Huella Anulación para factura emitida.
 pub fn calculate_issued_invoice_registro_anulacion_hash(
     issuer_tax_id: &str,
     series: &str,
@@ -438,6 +461,7 @@ pub fn calculate_issued_invoice_registro_anulacion_hash(
     ))
 }
 
+/// SHA-256 del material canónico de RegistroAnulacion.
 pub fn calculate_registro_anulacion_hash(
     issuer_tax_id: &str,
     invoice_number: &str,
@@ -456,6 +480,7 @@ pub fn calculate_registro_anulacion_hash(
     hex::encode(digest).to_uppercase()
 }
 
+/// Cadena canónica (campos ordenados) que se hashea en anulación.
 pub fn registro_anulacion_hash_material(
     issuer_tax_id: &str,
     invoice_number: &str,
@@ -473,6 +498,7 @@ pub fn registro_anulacion_hash_material(
     )
 }
 
+/// Cadena canónica (campos ordenados) que se hashea en alta.
 pub fn registro_alta_hash_material(
     issuer_tax_id: &str,
     invoice_number: &str,
@@ -496,6 +522,7 @@ pub fn registro_alta_hash_material(
     )
 }
 
+/// Bloque Desglose/Impuesto del XML Alta.
 fn push_tax_breakdown(xml: &mut String, invoice: &InvoicePdfData) {
     let mut groups: BTreeMap<i64, (i64, i64)> = BTreeMap::new();
     for line in &invoice.lines {
@@ -518,6 +545,7 @@ fn push_tax_breakdown(xml: &mut String, invoice: &InvoicePdfData) {
     xml.push_str("      </sf:Desglose>\n");
 }
 
+/// Bloque FacturasRectificadas / TipoRectificativa si aplica.
 fn push_rectification_info(xml: &mut String, invoice: &InvoicePdfData) -> Result<(), String> {
     if invoice.kind != "Rectifying" {
         return Ok(());
@@ -559,6 +587,7 @@ fn push_rectification_info(xml: &mut String, invoice: &InvoicePdfData) -> Result
     Ok(())
 }
 
+/// Bloque SistemaInformatico (SIF local CumpleFactura).
 fn push_system_info(xml: &mut String, invoice: &InvoicePdfData) {
     xml.push_str("      <sf:SistemaInformatico>\n");
     push_text(xml, 8, "sf:NombreRazon", &invoice.company_legal_name);
@@ -578,6 +607,7 @@ fn push_system_info(xml: &mut String, invoice: &InvoicePdfData) {
     xml.push_str("      </sf:SistemaInformatico>\n");
 }
 
+/// Emite un elemento XML de texto escapado con indentación.
 fn push_text(xml: &mut String, indent: usize, tag: &str, value: &str) {
     xml.push_str(&" ".repeat(indent));
     xml.push('<');
@@ -603,6 +633,7 @@ fn operation_description(invoice: &InvoicePdfData) -> String {
     text.chars().take(500).collect()
 }
 
+/// Convierte RFC3339 / ISO a fecha AEAT `dd-mm-yyyy`.
 fn aeat_date(value: &str) -> Result<String, String> {
     let dt = DateTime::parse_from_rfc3339(value)
         .map_err(|err| format!("invalid issued_at for AEAT date: {err}"))?;
@@ -618,12 +649,14 @@ fn format_invoice_number(series: &str, number: i64) -> String {
     format!("{}-{}", series, number)
 }
 
+/// Importe AEAT con 2 decimales desde céntimos.
 fn money(cents: i64) -> String {
     let sign = if cents < 0 { "-" } else { "" };
     let abs = cents.abs();
     format!("{}{}.{:02}", sign, abs / 100, abs % 100)
 }
 
+/// Tipo impositivo desde basis points (p.ej. 2100 → 21.00).
 fn rate_value(basis_points: i64) -> String {
     let sign = if basis_points < 0 { "-" } else { "" };
     let abs = basis_points.abs();
@@ -634,6 +667,7 @@ fn registro_alta_invoice_type(invoice: &InvoicePdfData) -> Result<&'static str, 
     registro_alta_invoice_type_for_kind(&invoice.kind, invoice.rectification_reason_code.as_deref())
 }
 
+/// Mapea kind interno → TipoFactura AEAT (F1, R1…).
 pub fn registro_alta_invoice_type_for_kind(
     kind: &str,
     rectification_reason_code: Option<&str>,

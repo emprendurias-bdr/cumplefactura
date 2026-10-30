@@ -1,3 +1,4 @@
+// Desktop E2E preflight (real WebDriver opt-in via env flag).
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";

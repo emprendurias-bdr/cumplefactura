@@ -1,3 +1,5 @@
+//! Factura: draft/issue, líneas, totales, rectificativas y payload fiscal placeholder.
+
 use crate::domain::tax::TerritoryFlag;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};

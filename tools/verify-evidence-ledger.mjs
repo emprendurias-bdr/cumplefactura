@@ -1,3 +1,4 @@
+// Evidence ledger: validate latest-evidence-ledger against gate artifacts.
 import { createHash } from "node:crypto";
 import {
   existsSync,

@@ -1,30 +1,75 @@
+// UI contract: parse src/**/*.{ts,tsx} invoke() names vs registered Tauri commands.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const appPath = path.join(root, "src", "App.tsx");
-const sourceText = fs.readFileSync(appPath, "utf8");
-const sourceFile = ts.createSourceFile(appPath, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const srcDir = path.join(root, "src");
+
+function listSourceFiles(dir) {
+  const out = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "_blobs" || entry.name === "node_modules") continue;
+      out.push(...listSourceFiles(full));
+      continue;
+    }
+    if (/\.(tsx?|jsx?)$/.test(entry.name)) out.push(full);
+  }
+  return out;
+}
+
+const sourceFiles = listSourceFiles(srcDir);
+const sourceText = sourceFiles.map((file) => fs.readFileSync(file, "utf8")).join("\n");
 
 const invokedCommands = new Set();
 
-function visit(node) {
-  if (
-    ts.isCallExpression(node) &&
-    ts.isIdentifier(node.expression) &&
-    node.expression.text === "invoke" &&
-    node.arguments.length > 0 &&
-    ts.isStringLiteralLike(node.arguments[0])
-  ) {
-    invokedCommands.add(node.arguments[0].text);
+for (const file of sourceFiles) {
+  const text = fs.readFileSync(file, "utf8");
+  const kind = file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const sourceFile = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, kind);
+  function visit(node) {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "invoke" &&
+      node.arguments.length > 0 &&
+      ts.isStringLiteralLike(node.arguments[0])
+    ) {
+      invokedCommands.add(node.arguments[0].text);
+    }
+    ts.forEachChild(node, visit);
   }
-
-  ts.forEachChild(node, visit);
+  visit(sourceFile);
 }
 
-visit(sourceFile);
+/** Accept bare identifiers or `p.`-prefixed after App section split. */
+function includesGuard(snippet) {
+  if (sourceText.includes(snippet)) return true;
+  const variants = {
+    "disabled={!canDraft}": "disabled={!p.canDraft}",
+    "disabled={!onboardingReady}": "disabled={!p.onboardingReady}",
+    "disabled={!canIssue}": "disabled={!p.canIssue}",
+    "disabled={!canRectify}": "disabled={!p.canRectify}",
+    "disabled={!canExportXml}": "disabled={!p.canExportXml}",
+    "disabled={!xmlResult && !cancelXmlResult}": "disabled={!p.xmlResult && !p.cancelXmlResult}",
+    "disabled={!submission}": "disabled={!p.submission}",
+    "disabled={!submission || !xadesPreflight?.ready}":
+      "disabled={!p.submission || !p.xadesPreflight?.ready}",
+    'disabled={!submission || submission.signature_status !== "signed_xades"}':
+      'disabled={!p.submission || p.submission.signature_status !== "signed_xades"}',
+    "disabled={!submission || !submitPreflight?.ready}":
+      "disabled={!p.submission || !p.submitPreflight?.ready}",
+  };
+  const alt = variants[snippet];
+  return Boolean(alt && sourceText.includes(alt));
+}
+
+function includesText(text) {
+  return sourceText.includes(text);
+}
 
 const checks = [
   ...[
@@ -173,7 +218,7 @@ const checks = [
     "Enviar via sidecar",
   ].map((label) => ({
     id: `label:${label}`,
-    ok: sourceText.includes(label),
+    ok: includesText(label),
     detail: `Visible fiscal workflow label '${label}' exists.`,
   })),
   ...[
@@ -189,7 +234,7 @@ const checks = [
     "disabled={!submission || !submitPreflight?.ready}",
   ].map((snippet) => ({
     id: `guard:${snippet}`,
-    ok: sourceText.includes(snippet),
+    ok: includesGuard(snippet),
     detail: `UI guard '${snippet}' exists.`,
   })),
   ...[
@@ -210,7 +255,7 @@ const checks = [
     "homologacion foral sigue bloqueada",
   ].map((text) => ({
     id: `limit:${text}`,
-    ok: sourceText.includes(text),
+    ok: includesText(text),
     detail: `Visible limit '${text}' exists.`,
   })),
 ];
@@ -219,9 +264,11 @@ const failed = checks.filter((check) => !check.ok);
 const summary = {
   app: "CumpleFactura",
   status: failed.length === 0 ? "passed" : "failed",
-  source: appPath,
+  source: srcDir,
+  scanned_files: sourceFiles.map((file) => path.relative(root, file)),
   invoked_commands: [...invokedCommands].sort(),
   checks,
+  failed: failed.map((check) => check.id),
 };
 
 console.log(JSON.stringify(summary, null, 2));

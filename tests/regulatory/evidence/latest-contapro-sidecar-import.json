@@ -1,47 +1,45 @@
 {
   "app": "CumpleFactura",
-  "generated_at": "2026-06-28T19:21:30.264Z",
+  "generated_at": "2026-10-28T10:48:12.200Z",
   "source_project": "contapro-sidecar",
-  "import_status": "passed",
+  "import_status": "missing_source_evidence",
   "external_call_performed_by_importer": false,
   "certificate_parsing_performed_by_importer": false,
   "source_refs": {
-    "sidecar_root": "C:\\07 DESARROLLO\\apps\\contapro\\services\\sidecar",
-    "readiness": "C:\\07 DESARROLLO\\apps\\contapro\\services\\sidecar\\tests\\regulatory\\evidence\\latest-external-readiness.json",
-    "gate": "C:\\07 DESARROLLO\\apps\\contapro\\services\\sidecar\\tests\\regulatory\\evidence\\latest-regulatory-gate.json",
-    "ledger": "C:\\07 DESARROLLO\\apps\\contapro\\services\\sidecar\\tests\\regulatory\\evidence\\latest-evidence-ledger.json",
-    "matrix": "C:\\07 DESARROLLO\\apps\\contapro\\services\\sidecar\\REGULATORY_EVIDENCE_MATRIX.md"
+    "sidecar_root": "C:\\Users\\bilel\\Desktop\\BDR\\contapro\\services\\sidecar",
+    "readiness": "C:\\Users\\bilel\\Desktop\\BDR\\contapro\\services\\sidecar\\tests\\regulatory\\evidence\\latest-external-readiness.json",
+    "gate": "C:\\Users\\bilel\\Desktop\\BDR\\contapro\\services\\sidecar\\tests\\regulatory\\evidence\\latest-regulatory-gate.json",
+    "ledger": "C:\\Users\\bilel\\Desktop\\BDR\\contapro\\services\\sidecar\\tests\\regulatory\\evidence\\latest-evidence-ledger.json",
+    "matrix": "C:\\Users\\bilel\\Desktop\\BDR\\contapro\\services\\sidecar\\REGULATORY_EVIDENCE_MATRIX.md"
   },
   "source_status": {
-    "readiness": "blocked",
-    "gate": "passed",
-    "ledger": "passed"
+    "readiness": "missing",
+    "gate": "missing",
+    "ledger": "missing"
   },
   "channels": [
     {
       "id": "verifactu",
-      "status": "ready",
+      "status": "missing",
       "blockers": [],
-      "mvp_importable": true,
-      "acceptance_status": "accepted",
-      "acceptance_validation_status": "passed",
-      "acceptance_manifest": "C:\\07 DESARROLLO\\apps\\contapro\\services\\sidecar\\tests\\regulatory\\evidence\\verifactu\\acceptance-manifest.json"
+      "mvp_importable": false,
+      "acceptance_status": "missing",
+      "acceptance_validation_status": "missing",
+      "acceptance_manifest": "C:\\Users\\bilel\\Desktop\\BDR\\contapro\\services\\sidecar\\tests\\regulatory\\evidence\\verifactu\\acceptance-manifest.json"
     },
     {
       "id": "sii",
-      "status": "ready",
+      "status": "missing",
       "blockers": [],
-      "mvp_importable": true,
-      "acceptance_status": "accepted",
-      "acceptance_validation_status": "passed",
-      "acceptance_manifest": "C:\\07 DESARROLLO\\apps\\contapro\\services\\sidecar\\tests\\regulatory\\evidence\\sii\\acceptance-manifest.json"
+      "mvp_importable": false,
+      "acceptance_status": "missing",
+      "acceptance_validation_status": "missing",
+      "acceptance_manifest": "C:\\Users\\bilel\\Desktop\\BDR\\contapro\\services\\sidecar\\tests\\regulatory\\evidence\\sii\\acceptance-manifest.json"
     },
     {
       "id": "face",
-      "status": "blocked",
-      "blockers": [
-        "face_acceptance_manifest_validated"
-      ],
+      "status": "missing",
+      "blockers": [],
       "mvp_importable": false,
       "acceptance_status": "missing",
       "acceptance_validation_status": "missing",
@@ -49,29 +47,22 @@
     },
     {
       "id": "ticketbai",
-      "status": "blocked",
-      "blockers": [
-        "ticketbai_sidecar_enable_real_ticketbai_submission_enabled",
-        "ticketbai_acceptance_manifest_validated"
-      ],
+      "status": "missing",
+      "blockers": [],
       "mvp_importable": false,
       "acceptance_status": "missing",
       "acceptance_validation_status": "missing",
       "acceptance_manifest": null
     }
   ],
-  "mvp_channels": [
-    "verifactu",
-    "sii"
-  ],
+  "mvp_channels": [],
   "deferred_channels": [
+    "verifactu",
+    "sii",
     "face",
     "ticketbai"
   ],
-  "imported_scope": [
-    "VERIFACTU accepted sidecar readiness for MVP",
-    "SII accepted sidecar readiness for MVP"
-  ],
+  "imported_scope": [],
   "deferred_scope": [
     "FACe remains blocked by external SP/certificate registration evidence.",
     "TicketBAI remains blocked by foral signing policy, software registration and acceptance evidence."

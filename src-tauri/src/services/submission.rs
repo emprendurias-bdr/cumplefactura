@@ -1,8 +1,14 @@
+//! Preparación de paquete VERI*FACTU sin firmar ni transmitir.
+//!
+//! Tras validar XSD, materializa metadatos (SHA-256, bytes, estados) para el flujo
+//! submission → XAdES → transporte. No toca red ni certificados.
+
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::Path;
 
+/// Paquete local listo para firmar: XML + huella + estados pendientes.
 #[derive(Debug, Clone, Serialize)]
 pub struct SubmissionPreparation {
     pub invoice_id: String,
@@ -19,6 +25,7 @@ pub struct SubmissionPreparation {
     pub notes: Vec<String>,
 }
 
+/// Lee el XML emitido, calcula SHA-256 y marca firma/transmisión como pendientes.
 pub fn prepare_unsigned_verifactu_package(
     invoice_id: String,
     export_id: String,
@@ -52,6 +59,7 @@ pub fn prepare_unsigned_verifactu_package(
     })
 }
 
+/// SHA-256 hex mayúsculas del fichero XML.
 fn sha256_file(path: &Path) -> Result<String, String> {
     let bytes = fs::read(path).map_err(|err| format!("VERI*FACTU XML read error: {err}"))?;
     Ok(hex::encode(Sha256::digest(&bytes)).to_uppercase())

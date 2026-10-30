@@ -1,3 +1,4 @@
+// Browser smoke: Playwright against mocked Tauri invoke (local MVP flows).
 import { spawn } from "node:child_process";
 import { createWriteStream, existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -369,6 +370,10 @@ async function clickByRole(page, name) {
   await locator.click();
 }
 
+async function goToSection(page, name) {
+  await clickByRole(page, name);
+}
+
 async function expectTextVisible(page, text) {
   await expect(page.getByText(text).first()).toBeVisible();
 }
@@ -393,6 +398,9 @@ const result = await withServer(async (serverLogPath) => {
 
   await expect(page).toHaveTitle(/CumpleFactura/);
   await expectTextVisible(page, "Facturacion local-first");
+  await expectTextVisible(page, "external_blocked");
+
+  await goToSection(page, "Fiscal");
   await expectTextVisible(page, "Borrador tecnico: XSD local, sin firma ni envio.");
   await expectTextVisible(page, "Frontera final: solo sidecar local con HMAC puede invocar AEAT");
   await expectTextVisible(page, "Canales ContaPro sidecar");
@@ -401,37 +409,56 @@ const result = await withServer(async (serverLogPath) => {
   await expectTextVisible(page, "/sii/submit-preflight");
   await expect(page.getByRole("button", { name: "Preflight TicketBAI sidecar", exact: true })).toBeDisabled();
   await expectTextVisible(page, "homologacion foral sigue bloqueada");
-  const initialVisibleLimits = await page.locator("body").evaluate((body) => ({
+
+  const initialVisibleLimits = {
+    noSignatureOrSend: true,
+    fakeSidecar: true,
+    externalBlocked: true,
+    contaproImport: true,
+  };
+  await goToSection(page, "Fiscal");
+  const fiscalLimits = await page.locator("body").evaluate((body) => ({
     noSignatureOrSend: body.textContent?.includes("sin firma ni envio") ?? false,
     fakeSidecar: body.textContent?.includes("gate usa sidecar falso") ?? false,
-    externalBlocked: body.textContent?.includes("external_blocked") ?? false,
     contaproImport: body.textContent?.includes("Importado de ContaPro") ?? false,
   }));
+  await goToSection(page, "Panel");
+  const panelLimits = await page.locator("body").evaluate((body) => ({
+    externalBlocked: body.textContent?.includes("external_blocked") ?? false,
+  }));
+  Object.assign(initialVisibleLimits, fiscalLimits, panelLimits);
 
+  await goToSection(page, "Panel");
   await clickByRole(page, "Rellenar demo");
   await expectTextVisible(page, "Datos demo cargados");
+
+  await goToSection(page, "Ajustes");
   await clickByRole(page, "Elegir carpeta");
   await expect(page.getByLabel("Carpeta export")).toHaveValue("C:\\CumpleFactura\\Evidence");
 
+  await goToSection(page, "Empresas");
   await clickByRole(page, "Guardar emisor");
   await expect(page.getByLabel("Nombre legal empresa")).toHaveValue("Demo CumpleFactura SL");
-
   await clickByRole(page, "Guardar producto");
   await expect(page.locator(".productRow").getByText("SVC-DEMO - Servicio mensual")).toBeVisible();
   await clickByRole(page, "Usar en linea");
+  await clickByRole(page, "Guardar serie");
+  await expectTextVisible(page, "General - A-001");
+
+  await goToSection(page, "Facturas");
   await expect(page.getByLabel("Precio EUR linea 1")).toHaveValue("250");
   await expect(page.getByLabel("Descuento linea 1")).toHaveValue("10");
   await expect(page.getByLabel("IRPF linea 1")).toHaveValue("15");
 
-  await clickByRole(page, "Guardar serie");
-  await expectTextVisible(page, "General - A-001");
-
+  await goToSection(page, "Ajustes");
   await clickByRole(page, "Guardar onboarding");
   await expectTextVisible(page, "Completado");
 
+  await goToSection(page, "Clientes");
   await clickByRole(page, "Guardar cliente");
   await expect(page.getByLabel("Nombre cliente")).toHaveValue("Cliente Demo");
 
+  await goToSection(page, "Facturas");
   await page.getByLabel("Descripcion linea 1").fill("Servicio editable con descuento");
   await expect(page.getByLabel("Serie de esta factura")).toHaveValue(/series-/);
   await expectTextVisible(page, "238,50");
@@ -442,6 +469,8 @@ const result = await withServer(async (serverLogPath) => {
 
   await clickByRole(page, "Emitir factura");
   await expectTextVisible(page, "Factura emitida");
+
+  await goToSection(page, "Fiscal");
   await expectTextVisible(page, "Cadena fiscal OK");
   await expectTextVisible(page, "Auditoria fiscal local");
   await clickByRole(page, "Verificar cadena");
@@ -451,11 +480,13 @@ const result = await withServer(async (serverLogPath) => {
   await clickByRole(page, "Exportar auditoria");
   await expectTextVisible(page, "created -");
 
+  await goToSection(page, "Facturas");
   await page.getByLabel("Buscar texto factura").fill("A");
   await page.getByLabel("Filtro estado factura").selectOption("Issued");
   await clickByRole(page, "Buscar facturas");
   await expectTextVisible(page, "1 resultado(s) con filtros actuales.");
 
+  await goToSection(page, "Fiscal");
   await clickByRole(page, "Exportar XML");
   await expectTextVisible(page, "XSD OK");
 

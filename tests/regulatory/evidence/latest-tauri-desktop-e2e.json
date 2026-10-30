@@ -1,29 +1,44 @@
 {
   "app": "CumpleFactura",
-  "generated_at": "2026-10-28T10:55:26.500Z",
+  "generated_at": "2026-06-28T19:23:08.962Z",
   "status": "passed",
-  "mode": "preflight",
-  "release_exe": "C:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\src-tauri\\target\\release\\cumplefactura.exe",
+  "mode": "real",
+  "release_exe": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\src-tauri\\target\\release\\cumplefactura.exe",
   "checks": {
     "release_exe_exists": true,
     "tauri_driver_available": true,
-    "webdriver_available": true
+    "webdriver_available": true,
+    "webdriver_session_created": true,
+    "ui_text_detected": true,
+    "real_rust_commands_executed": true,
+    "verifactu_xml_exported": true,
+    "submission_prepared": true
   },
   "evidence": {
     "tauri_driver_paths": [
-      "C:\\Users\\bilel\\.cargo\\bin\\tauri-driver.exe"
+      "C:\\Users\\Usuario\\.cargo\\bin\\tauri-driver.exe"
     ],
     "chromedriver_paths": [
-      "C:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\node_modules\\.bin\\chromedriver.cmd",
-      "C:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\node_modules\\chromedriver\\lib\\chromedriver\\chromedriver.exe"
+      "C:\\07 DESARROLLO\\apps\\CumpleFactura\\node_modules\\.bin\\chromedriver.cmd",
+      "C:\\07 DESARROLLO\\apps\\CumpleFactura\\node_modules\\chromedriver\\lib\\chromedriver\\chromedriver.exe"
     ],
     "msedgedriver_paths": [
-      "C:\\Users\\bilel\\AppData\\Local\\Temp\\msedgedriver.exe"
+      "C:\\Users\\Usuario\\AppData\\Local\\Temp\\msedgedriver.exe"
     ]
   },
   "limits": [
-    "Preflight mode proves release binary and driver prerequisites only.",
-    "Set CUMPLEFACTURA_TAURI_DESKTOP_E2E_REAL=1 to attempt a live Tauri WebDriver session.",
-    "This verifier performs no AEAT call and uses no secrets."
-  ]
+    "Real mode launches the release executable via tauri-driver and Microsoft Edge WebDriver.",
+    "It executes local UI events that call real Rust/Tauri commands for company, customer, draft, issue, VERI*FACTU XML export and local signature/submission preparation.",
+    "It performs no AEAT call and uses no secrets."
+  ],
+  "driver_log_tail": "",
+  "completed_steps": [
+    "Guardar emisor",
+    "Guardar cliente",
+    "Crear borrador",
+    "Emitir factura",
+    "Exportar XML",
+    "Preparar"
+  ],
+  "screenshot_path": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-tauri-desktop-e2e.png"
 }

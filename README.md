@@ -21,11 +21,11 @@ tools/ → gates regulatory → tests/regulatory/evidence/
 
 | Ruta | Rol |
 |---|---|
-| `src/` | UI monolito React |
+| `src/` | UI React: `App.tsx` (estado y navegacion) + `sections/` por pantalla |
 | `src-tauri/` | Backend Tauri/Rust |
 | `tools/` | Validadores / gate |
 | `tests/regulatory/` | Specs + fixtures + evidencia |
 | `dist/` | Bundle Vite (**generado**) |
-| `docs/` | Planes históricos de sprint |
+| `docs/` | Plan MVP, UX/UI, maquetas y `revisar/` (documentos pendientes de decidir) |
 
 No editar a mano: `dist/`, `src-tauri/gen/`, `tests/regulatory/evidence/*` regenerados, XSD AEAT en `resources/xsd/verifactu/`.

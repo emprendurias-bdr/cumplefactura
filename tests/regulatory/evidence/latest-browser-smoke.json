@@ -1,6 +1,6 @@
 {
   "app": "CumpleFactura",
-  "generated_at": "2026-10-28T10:54:17.549Z",
+  "generated_at": "2026-06-28T19:21:18.272Z",
   "status": "passed",
   "url": "http://127.0.0.1:1421",
   "viewport": "1366x900",
@@ -26,9 +26,9 @@
       }
     }
   },
-  "screenshot_path": "C:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\tests\\regulatory\\evidence\\browser-smoke-2026-10-28T10-54-13-766Z.png",
-  "latest_screenshot_path": "C:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\tests\\regulatory\\evidence\\latest-browser-smoke.png",
-  "server_log_path": "C:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\tests\\regulatory\\evidence\\browser-smoke-vite-2026-10-28T10-54-13-766Z.log",
+  "screenshot_path": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\browser-smoke-2026-06-28T19-21-03-586Z.png",
+  "latest_screenshot_path": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-browser-smoke.png",
+  "server_log_path": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\browser-smoke-vite-2026-06-28T19-21-03-586Z.log",
   "limits": [
     "Browser smoke uses a local Tauri invoke mock.",
     "It proves rendered UI workflow and visible limits only.",

@@ -4,7 +4,7 @@ Guía para la sesión que implemente el rediseño. Diseño: `docs/UX_UI.md`. Maq
 
 ## Antes de empezar
 
-1. Lee `docs/UX_UI.md`, `CLAUDE.md`, `PRODUCT_BRIEF_CUMPLEFACTURA.md`, `MODULE_CONTRACT.md` y `REGULATORY_TEST_PLAN.md`.
+1. Lee `docs/UX_UI.md`, `CLAUDE.md`, `docs/revisar/PRODUCT_BRIEF_CUMPLEFACTURA.md`, `MODULE_CONTRACT.md` y `REGULATORY_TEST_PLAN.md`.
 2. Rama nueva desde `main`; un PR por fase.
 3. **No cambies** la numeración (la asigna Rust al emitir), el encadenado de huellas ni el formato XML sin pasar el gate regulatorio.
 4. Comprobación por fase: `npm run build`, `npm run validate:ui-contract`, `npm run validate:regulatory`, `npm run validate:browser-smoke` y `npm run tauri:dev` revisando claro/oscuro a 1024×700 y 1440×900.

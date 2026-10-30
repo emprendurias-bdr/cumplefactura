@@ -1,11 +1,11 @@
 {
   "app": "CumpleFactura",
   "artifacts": {
-    "audit": "c:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\tests\\regulatory\\evidence\\latest-core-e2e-audit.json",
-    "csv": "c:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\tests\\regulatory\\evidence\\latest-core-e2e-invoices.csv",
-    "json": "c:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\tests\\regulatory\\evidence\\latest-core-e2e-invoice.json",
-    "pdf": "c:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\tests\\regulatory\\evidence\\latest-core-e2e-invoice.pdf",
-    "xml": "c:\\Users\\bilel\\Desktop\\BDR\\cumplefactura\\tests\\regulatory\\evidence\\latest-core-e2e-verifactu.xml"
+    "audit": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-core-e2e-audit.json",
+    "csv": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-core-e2e-invoices.csv",
+    "json": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-core-e2e-invoice.json",
+    "pdf": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-core-e2e-invoice.pdf",
+    "xml": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-core-e2e-verifactu.xml"
   },
   "checks": {
     "aeat_hash_len": 64,
@@ -14,7 +14,7 @@
     "csv_export_created": true,
     "draft_persisted": true,
     "fiscal_chain_valid": true,
-    "fiscal_export_id": "60a5eb58-b0a2-4935-93ae-07f063e318df",
+    "fiscal_export_id": "1c713e46-0169-4dc5-83c2-9c52b276aff5",
     "fiscal_records": 1,
     "invoice_series_preview": "VENDI202607",
     "issued_invoice_persisted": true,
@@ -27,7 +27,7 @@
     "xml_xsd_validated": true
   },
   "flow": "SQLite real -> company/customer -> draft -> reserved sequence -> issued invoice -> AEAT hash -> audit/fiscal chain -> VERI*FACTU XML XSD -> PDF/JSON/CSV/audit export -> prepared_for_signature export",
-  "generated_at": "2026-10-28T10:48:07.791175300+00:00",
+  "generated_at": "2026-06-28T19:20:59.362245100+00:00",
   "limits": [
     "Core E2E uses in-memory SQLite and local files.",
     "It exercises Rust domain/db/services, not the Tauri window event loop.",

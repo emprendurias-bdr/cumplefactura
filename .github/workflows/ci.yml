@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, "claude/**", "codex/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (build + contratos)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # --ignore-scripts: evita descargar chromedriver/edgedriver, que solo
+      # usan los E2E de escritorio locales.
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npm run validate:ui-contract
+      - run: npm run validate:secret-scan
+
+  rust:
+    name: Rust (fmt + tests, Windows)
+    # La validacion XSD VERI*FACTU invoca PowerShell (src/services/verifactu.rs),
+    # asi que los tests del core solo son representativos en Windows.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # tauri::generate_context! embebe ../dist en compilacion.
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: cargo fmt --check
+        working-directory: src-tauri
+      - run: cargo test
+        working-directory: src-tauri
+      - name: Fixture VERI*FACTU contra XSD oficial
+        run: npm run validate:verifactu:xsd

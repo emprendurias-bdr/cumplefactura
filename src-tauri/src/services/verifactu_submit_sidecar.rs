@@ -2,8 +2,10 @@
 //!
 //! - `preflight` → `/verifactu/submit-preflight`: WSDL, vault, flags; **sin** XML crudo ni SOAP.
 //! - `invoke_submit` → `/verifactu/invoke-submit`: XML firmado + HMAC; requiere flag invoke.
+//!
 //! CumpleFactura no abre sockets a dominios AEAT directamente.
 
+use super::sidecar_security::{allowed_local_url, require, sidecar_secret, valid_certificate_ref};
 use crate::services::sidecar_http;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -12,12 +14,9 @@ use std::path::Path;
 
 const ENABLE_SUBMIT_PREFLIGHT_ENV: &str = "CUMPLEFACTURA_ENABLE_VERIFACTU_SUBMIT_SIDECAR_PREFLIGHT";
 const ENABLE_SUBMIT_INVOKE_ENV: &str = "CUMPLEFACTURA_ENABLE_VERIFACTU_SUBMIT_SIDECAR_INVOKE";
-const SIDECAR_SHARED_SECRET_ENV: &str = "CUMPLEFACTURA_SIDECAR_SHARED_SECRET";
-const SIDECAR_SHARED_SECRET_FALLBACK_ENV: &str = "SIDECAR_SHARED_SECRET";
 const DEFAULT_SUBMIT_PREFLIGHT_URL: &str = "http://127.0.0.1:8000/verifactu/submit-preflight";
 const DEFAULT_SUBMIT_INVOKE_URL: &str = "http://127.0.0.1:8000/verifactu/invoke-submit";
 const DEFAULT_ENDPOINT_NAME: &str = "SistemaVerifactuPruebas";
-const CERT_REF_PREFIX: &str = "vault://certs/";
 const SUBMIT_PREFLIGHT_PATH: &str = "/verifactu/submit-preflight";
 const SUBMIT_INVOKE_PATH: &str = "/verifactu/invoke-submit";
 
@@ -28,105 +27,17 @@ const ALLOWED_ENDPOINT_NAMES: [&str; 4] = [
     "SistemaVerifactuSelloPruebas",
 ];
 
-/// Entrada preflight de submit (metadatos del paquete + ref vault + endpoint).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VerifactuSubmitSidecarPreflightRequest {
-    pub invoice_id: String,
-    pub export_id: String,
-    pub xml_path: String,
-    pub xml_sha256: String,
-    pub signature_status: String,
-    pub certificate_secret_ref: String,
-    pub endpoint_name: Option<String>,
-    pub sidecar_url: Option<String>,
-    pub require_soap_enabled: Option<bool>,
-}
-
-/// Estado de readiness del sidecar para submit (WSDL/cert/flags); sin SOAP AEAT aquí.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct VerifactuSubmitSidecarPreflight {
-    pub ready: bool,
-    pub status: String,
-    pub invoice_id: String,
-    pub export_id: String,
-    pub sidecar_url: String,
-    pub sidecar_endpoint: String,
-    pub endpoint_name: String,
-    pub xml_sha256: String,
-    pub xml_bytes: u64,
-    pub certificate_ref_status: String,
-    pub current_signature_status: String,
-    pub wsdl_name: Option<String>,
-    pub wsdl_sha256: Option<String>,
-    pub operation_available: bool,
-    pub endpoint_allowed: bool,
-    pub transport_enabled: bool,
-    pub soap_calls_enabled: bool,
-    pub certificate_loaded: bool,
-    pub certificate_source: Option<String>,
-    pub certificate_days_remaining: Option<i64>,
-    pub sidecar_call_performed: bool,
-    pub external_call_performed: bool,
-    pub blockers: Vec<String>,
-    pub warnings: Vec<String>,
-    pub source_refs: Vec<String>,
-    pub request_contract: Vec<String>,
-}
-
-/// Entrada invoke: XML firmado identificado por path + SHA.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VerifactuSubmitSidecarInvokeRequest {
-    pub invoice_id: String,
-    pub export_id: String,
-    pub xml_path: String,
-    pub xml_sha256: String,
-    pub signature_status: String,
-    pub certificate_secret_ref: String,
-    pub endpoint_name: Option<String>,
-    pub sidecar_url: Option<String>,
-    pub timeout_seconds: Option<f64>,
-}
-
-/// Resultado del invoke-submit (CSV/estado registro o error devolverlos por el sidecar).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct VerifactuSubmitSidecarInvocation {
-    pub invoice_id: String,
-    pub source_export_id: String,
-    pub export_id: String,
-    pub provider: String,
-    pub environment: String,
-    pub payload_version: String,
-    pub xml_path: String,
-    pub xml_sha256: String,
-    pub xml_bytes: u64,
-    pub signature_status: String,
-    pub transmission_status: String,
-    pub sidecar_url: String,
-    pub sidecar_endpoint: String,
-    pub endpoint_name: String,
-    pub wsdl_name: String,
-    pub operation: String,
-    pub status: String,
-    pub csv: Option<String>,
-    pub estado_registro: Option<String>,
-    pub codigo_error: Option<String>,
-    pub descripcion_error: Option<String>,
-    pub transport_mode: String,
-    pub certificate_source: String,
-    pub sidecar_call_performed: bool,
-    pub external_call_performed: bool,
-    pub notes: Vec<String>,
-    pub warnings: Vec<String>,
-}
+pub use super::verifactu_submit_models::{
+    VerifactuSubmitSidecarInvocation, VerifactuSubmitSidecarInvokeRequest,
+    VerifactuSubmitSidecarPreflight, VerifactuSubmitSidecarPreflightRequest,
+};
 
 /// Preflight submit leyendo flags/secret de entorno.
 pub fn preflight(
     request: VerifactuSubmitSidecarPreflightRequest,
 ) -> Result<VerifactuSubmitSidecarPreflight, String> {
     let enabled = std::env::var(ENABLE_SUBMIT_PREFLIGHT_ENV).unwrap_or_default() == "1";
-    let secret = std::env::var(SIDECAR_SHARED_SECRET_ENV)
-        .or_else(|_| std::env::var(SIDECAR_SHARED_SECRET_FALLBACK_ENV))
-        .unwrap_or_default();
+    let secret = sidecar_secret();
     preflight_with_config(request, enabled, secret.as_str())
 }
 
@@ -135,9 +46,7 @@ pub fn invoke_submit(
     request: VerifactuSubmitSidecarInvokeRequest,
 ) -> Result<VerifactuSubmitSidecarInvocation, String> {
     let enabled = std::env::var(ENABLE_SUBMIT_INVOKE_ENV).unwrap_or_default() == "1";
-    let secret = std::env::var(SIDECAR_SHARED_SECRET_ENV)
-        .or_else(|_| std::env::var(SIDECAR_SHARED_SECRET_FALLBACK_ENV))
-        .unwrap_or_default();
+    let secret = sidecar_secret();
     invoke_submit_with_config(request, enabled, secret.as_str())
 }
 
@@ -394,7 +303,7 @@ fn base_result(
         invoice_id: request.invoice_id.clone(),
         export_id: request.export_id.clone(),
         sidecar_url: sidecar_url.to_string(),
-        sidecar_endpoint: "/verifactu/submit-preflight".to_string(),
+        sidecar_endpoint: SUBMIT_PREFLIGHT_PATH.to_string(),
         endpoint_name: endpoint_name.to_string(),
         xml_sha256,
         xml_bytes,
@@ -436,28 +345,17 @@ fn base_result(
     }
 }
 
-fn valid_certificate_ref(value: &str) -> bool {
-    let trimmed = value.trim();
-    trimmed.starts_with(CERT_REF_PREFIX) && trimmed.len() > CERT_REF_PREFIX.len()
-}
-
 /// Whitelist de nombres de endpoint AEAT VERI*FACTU (prod/pruebas).
 fn allowed_endpoint_name(value: &str) -> bool {
     ALLOWED_ENDPOINT_NAMES.contains(&value.trim())
 }
 
 fn allowed_submit_preflight_url(value: &str) -> bool {
-    let trimmed = value.trim();
-    let local =
-        trimmed.starts_with("http://127.0.0.1:") || trimmed.starts_with("http://localhost:");
-    local && trimmed.ends_with(SUBMIT_PREFLIGHT_PATH)
+    allowed_local_url(value, SUBMIT_PREFLIGHT_PATH)
 }
 
 fn allowed_submit_invoke_url(value: &str) -> bool {
-    let trimmed = value.trim();
-    let local =
-        trimmed.starts_with("http://127.0.0.1:") || trimmed.starts_with("http://localhost:");
-    local && trimmed.ends_with(SUBMIT_INVOKE_PATH)
+    allowed_local_url(value, SUBMIT_INVOKE_PATH)
 }
 
 fn sha256_file(path: &Path) -> Result<String, String> {
@@ -516,14 +414,6 @@ struct SidecarInvokeSubmitResponse {
     transport_mode: String,
     certificate_source: String,
     external_call_performed: bool,
-}
-
-fn require(field: &str, value: &str) -> Result<(), String> {
-    if value.trim().is_empty() {
-        Err(format!("{field} is required"))
-    } else {
-        Ok(())
-    }
 }
 
 #[cfg(test)]

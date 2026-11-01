@@ -46,7 +46,6 @@ pub fn invoice_issue(
         Some(hash) => Some(hash),
         None => db::latest_audit_hash(&conn)?,
     };
-    let actor = input.actor.clone();
     let mut issue_input = input;
     if issue_input.actor.trim().is_empty() {
         return Err("actor is required".to_string());
@@ -54,6 +53,7 @@ pub fn invoice_issue(
     if issue_input.issued_at.trim().is_empty() {
         return Err("issued_at is required".to_string());
     }
+    let actor = issue_input.actor.clone();
     Invoice::draft(issue_input.draft.clone())?;
     let number = db::reserve_invoice_number(
         &mut conn,

@@ -29,7 +29,7 @@ pub struct FiscalCompanyChainHead {
     pub last_hash: String,
 }
 
-/// Incidencia detectada en un registro (severityidad + código estable).
+/// Incidencia detectada en un registro (severidad + código estable).
 #[derive(Debug, Clone, Serialize)]
 pub struct FiscalChainIssue {
     pub record_id: String,

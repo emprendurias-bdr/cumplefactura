@@ -1,5 +1,6 @@
 //! Settings de app: carpeta export, flags territoriales, onboarding.
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,7 +24,7 @@ impl Default for AppSettings {
             export_dir: None,
             default_territory_flags: default_flags(),
             onboarding_completed: false,
-            updated_at: chrono::Utc::now().to_rfc3339(),
+            updated_at: Utc::now().to_rfc3339(),
         }
     }
 }

@@ -3,56 +3,34 @@
 //! - Construye XML según namespaces AEAT (`SuministroLR` + `SuministroInformacion`).
 //! - Calcula huellas SHA-256 del material de registro (encadenado con factura previa).
 //! - Valida contra XSD bundled vía `tools/validate-verifactu-xsd.ps1` (Windows).
+//!
 //! No firma XAdES ni envía a AEAT; eso vive en los módulos sidecar / transport.
 
 use crate::db::{InvoicePdfData, PreviousInvoiceLink};
+pub use crate::services::verifactu_xsd::{
+    dev_verifactu_xsd_assets, validate_verifactu_xml_file, VerifactuXsdAssets,
+};
 use chrono::{DateTime, Datelike};
-use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 
 const NS_SF_LR: &str = "https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroLR.xsd";
 const NS_SF: &str = "https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroInformacion.xsd";
 const NS_DS: &str = "http://www.w3.org/2000/09/xmldsig#";
 
-/// Rutas al script PowerShell y al directorio `resources/xsd/verifactu`.
-#[derive(Debug, Clone)]
-pub struct VerifactuXsdAssets {
-    pub script_path: PathBuf,
-    pub schema_dir: PathBuf,
-}
+#[path = "verifactu_hash.rs"]
+mod verifactu_hash;
 
-impl VerifactuXsdAssets {
-    /// Comprueba que existan el script, el dir de schemas y `SuministroLR.xsd`.
-    pub fn new(script_path: PathBuf, schema_dir: PathBuf) -> Result<Self, String> {
-        if !script_path.exists() {
-            return Err(format!(
-                "VERI*FACTU XSD validator script not found: {}",
-                script_path.display()
-            ));
-        }
-        if !schema_dir.exists() {
-            return Err(format!(
-                "VERI*FACTU XSD schema directory not found: {}",
-                schema_dir.display()
-            ));
-        }
-        let root_schema = schema_dir.join("SuministroLR.xsd");
-        if !root_schema.exists() {
-            return Err(format!(
-                "VERI*FACTU XSD root schema not found: {}",
-                root_schema.display()
-            ));
-        }
-
-        Ok(Self {
-            script_path,
-            schema_dir,
-        })
-    }
-}
+#[allow(unused_imports)]
+pub use verifactu_hash::{
+    calculate_invoice_registro_alta_hash, calculate_invoice_registro_anulacion_hash,
+    calculate_issued_invoice_registro_alta_hash,
+    calculate_issued_invoice_registro_alta_hash_with_type,
+    calculate_issued_invoice_registro_anulacion_hash, calculate_registro_alta_hash,
+    calculate_registro_anulacion_hash, registro_alta_hash_material,
+    registro_anulacion_hash_material,
+};
 
 /// Genera XML Alta y lo escribe en un path nuevo (sin validar XSD).
 pub fn write_verifactu_xml_draft(
@@ -85,12 +63,7 @@ pub fn write_verifactu_xml_draft_validated(
     assets: &VerifactuXsdAssets,
 ) -> Result<(), String> {
     write_verifactu_xml_draft(target_path, invoice, previous)?;
-    let path = PathBuf::from(target_path);
-    if let Err(err) = validate_verifactu_xml_file(&path, assets) {
-        let _ = fs::remove_file(&path);
-        return Err(err);
-    }
-    Ok(())
+    validate_written_xml(target_path, assets)
 }
 
 /// Anulación + validación XSD (requiere enlace a registro previo).
@@ -103,54 +76,16 @@ pub fn write_verifactu_anulacion_xml_draft_validated(
 ) -> Result<(), String> {
     let xml = build_verifactu_anulacion_xml_draft(invoice, previous, generated_at)?;
     write_xml(target_path, xml)?;
+    validate_written_xml(target_path, assets)
+}
+
+fn validate_written_xml(target_path: &str, assets: &VerifactuXsdAssets) -> Result<(), String> {
     let path = PathBuf::from(target_path);
     if let Err(err) = validate_verifactu_xml_file(&path, assets) {
         let _ = fs::remove_file(&path);
         return Err(err);
     }
     Ok(())
-}
-
-/// Invoca el validador PowerShell local contra el XSD bundled.
-pub fn validate_verifactu_xml_file(path: &Path, assets: &VerifactuXsdAssets) -> Result<(), String> {
-    if !path.exists() {
-        return Err(format!("VERI*FACTU XML not found: {}", path.display()));
-    }
-
-    let output = Command::new("powershell")
-        .arg("-NoProfile")
-        .arg("-ExecutionPolicy")
-        .arg("Bypass")
-        .arg("-File")
-        .arg(&assets.script_path)
-        .arg("-XmlPath")
-        .arg(path)
-        .arg("-SchemaDir")
-        .arg(&assets.schema_dir)
-        .output()
-        .map_err(|err| format!("VERI*FACTU XSD validator error: {err}"))?;
-
-    if output.status.success() {
-        return Ok(());
-    }
-
-    Err(format!(
-        "VERI*FACTU XSD validation failed\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    ))
-}
-
-/// Resuelve assets en árbol de desarrollo (`tools/` + `resources/xsd/verifactu`).
-pub fn dev_verifactu_xsd_assets() -> Result<VerifactuXsdAssets, String> {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let app_root = manifest_dir
-        .parent()
-        .ok_or_else(|| "cannot resolve CumpleFactura app root".to_string())?;
-    VerifactuXsdAssets::new(
-        app_root.join("tools").join("validate-verifactu-xsd.ps1"),
-        manifest_dir.join("resources").join("xsd").join("verifactu"),
-    )
 }
 
 /// Serializa `RegFactuSistemaFacturacion` con un `RegistroAlta` a partir de la factura emitida.
@@ -324,205 +259,6 @@ pub fn build_verifactu_anulacion_xml_draft(
 }
 
 /// Huella Alta desde datos de factura + enlace previo (wrapper de dominio).
-pub fn calculate_invoice_registro_alta_hash(
-    invoice: &InvoicePdfData,
-    previous: Option<&PreviousInvoiceLink>,
-) -> Result<String, String> {
-    let number = invoice
-        .number
-        .ok_or_else(|| "VERI*FACTU hash requires an issued invoice number".to_string())?;
-    let issued_at = invoice
-        .issued_at
-        .as_deref()
-        .ok_or_else(|| "VERI*FACTU hash requires issued_at".to_string())?;
-    calculate_issued_invoice_registro_alta_hash_with_type(
-        &invoice.company_tax_id,
-        &invoice.series,
-        number,
-        issued_at,
-        invoice.tax_cents,
-        invoice.total_cents,
-        registro_alta_invoice_type(invoice)?,
-        previous.map(|item| item.fiscal_hash.as_str()),
-    )
-}
-
-#[allow(dead_code)]
-/// Huella Alta para factura ya emitida (tipo de factura inferido del kind).
-pub fn calculate_issued_invoice_registro_alta_hash(
-    issuer_tax_id: &str,
-    series: &str,
-    number: i64,
-    issued_at: &str,
-    tax_cents: i64,
-    total_cents: i64,
-    previous_hash: Option<&str>,
-) -> Result<String, String> {
-    calculate_issued_invoice_registro_alta_hash_with_type(
-        issuer_tax_id,
-        series,
-        number,
-        issued_at,
-        tax_cents,
-        total_cents,
-        "F1",
-        previous_hash,
-    )
-}
-
-/// Igual que issued, forzando el `TipoFactura` AEAT explícito.
-pub fn calculate_issued_invoice_registro_alta_hash_with_type(
-    issuer_tax_id: &str,
-    series: &str,
-    number: i64,
-    issued_at: &str,
-    tax_cents: i64,
-    total_cents: i64,
-    invoice_type: &str,
-    previous_hash: Option<&str>,
-) -> Result<String, String> {
-    let expedition_date = aeat_date(issued_at)?;
-    Ok(calculate_registro_alta_hash(
-        issuer_tax_id,
-        &format_invoice_number(series, number),
-        &expedition_date,
-        invoice_type,
-        &money(tax_cents),
-        &money(total_cents),
-        previous_hash,
-        issued_at,
-    ))
-}
-
-/// SHA-256 del material canónico de RegistroAlta (núcleo del encadenado).
-pub fn calculate_registro_alta_hash(
-    issuer_tax_id: &str,
-    invoice_number: &str,
-    expedition_date: &str,
-    invoice_type: &str,
-    tax_total: &str,
-    invoice_total: &str,
-    previous_hash: Option<&str>,
-    generated_at: &str,
-) -> String {
-    let material = registro_alta_hash_material(
-        issuer_tax_id,
-        invoice_number,
-        expedition_date,
-        invoice_type,
-        tax_total,
-        invoice_total,
-        previous_hash,
-        generated_at,
-    );
-    let digest = Sha256::digest(material.as_bytes());
-    hex::encode(digest).to_uppercase()
-}
-
-/// Huella Anulación desde factura + previo.
-pub fn calculate_invoice_registro_anulacion_hash(
-    invoice: &InvoicePdfData,
-    previous_hash: &str,
-    generated_at: &str,
-) -> Result<String, String> {
-    let number = invoice
-        .number
-        .ok_or_else(|| "VERI*FACTU anulacion hash requires an issued invoice number".to_string())?;
-    let issued_at = invoice
-        .issued_at
-        .as_deref()
-        .ok_or_else(|| "VERI*FACTU anulacion hash requires issued_at".to_string())?;
-    calculate_issued_invoice_registro_anulacion_hash(
-        &invoice.company_tax_id,
-        &invoice.series,
-        number,
-        issued_at,
-        previous_hash,
-        generated_at,
-    )
-}
-
-/// Huella Anulación para factura emitida.
-pub fn calculate_issued_invoice_registro_anulacion_hash(
-    issuer_tax_id: &str,
-    series: &str,
-    number: i64,
-    issued_at: &str,
-    previous_hash: &str,
-    generated_at: &str,
-) -> Result<String, String> {
-    let expedition_date = aeat_date(issued_at)?;
-    Ok(calculate_registro_anulacion_hash(
-        issuer_tax_id,
-        &format_invoice_number(series, number),
-        &expedition_date,
-        previous_hash,
-        generated_at,
-    ))
-}
-
-/// SHA-256 del material canónico de RegistroAnulacion.
-pub fn calculate_registro_anulacion_hash(
-    issuer_tax_id: &str,
-    invoice_number: &str,
-    expedition_date: &str,
-    previous_hash: &str,
-    generated_at: &str,
-) -> String {
-    let material = registro_anulacion_hash_material(
-        issuer_tax_id,
-        invoice_number,
-        expedition_date,
-        previous_hash,
-        generated_at,
-    );
-    let digest = Sha256::digest(material.as_bytes());
-    hex::encode(digest).to_uppercase()
-}
-
-/// Cadena canónica (campos ordenados) que se hashea en anulación.
-pub fn registro_anulacion_hash_material(
-    issuer_tax_id: &str,
-    invoice_number: &str,
-    expedition_date: &str,
-    previous_hash: &str,
-    generated_at: &str,
-) -> String {
-    format!(
-        "IDEmisorFacturaAnulada={}&NumSerieFacturaAnulada={}&FechaExpedicionFacturaAnulada={}&Huella={}&FechaHoraHusoGenRegistro={}",
-        issuer_tax_id.trim(),
-        invoice_number.trim(),
-        expedition_date.trim(),
-        previous_hash.trim().to_uppercase(),
-        generated_at.trim()
-    )
-}
-
-/// Cadena canónica (campos ordenados) que se hashea en alta.
-pub fn registro_alta_hash_material(
-    issuer_tax_id: &str,
-    invoice_number: &str,
-    expedition_date: &str,
-    invoice_type: &str,
-    tax_total: &str,
-    invoice_total: &str,
-    previous_hash: Option<&str>,
-    generated_at: &str,
-) -> String {
-    format!(
-        "IDEmisorFactura={}&NumSerieFactura={}&FechaExpedicionFactura={}&TipoFactura={}&CuotaTotal={}&ImporteTotal={}&Huella={}&FechaHoraHusoGenRegistro={}",
-        issuer_tax_id.trim(),
-        invoice_number.trim(),
-        expedition_date.trim(),
-        invoice_type.trim(),
-        tax_total.trim(),
-        invoice_total.trim(),
-        previous_hash.unwrap_or("").trim().to_uppercase(),
-        generated_at.trim()
-    )
-}
-
-/// Bloque Desglose/Impuesto del XML Alta.
 fn push_tax_breakdown(xml: &mut String, invoice: &InvoicePdfData) {
     let mut groups: BTreeMap<i64, (i64, i64)> = BTreeMap::new();
     for line in &invoice.lines {

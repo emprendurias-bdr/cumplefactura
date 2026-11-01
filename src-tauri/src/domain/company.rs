@@ -76,28 +76,31 @@ pub struct Company {
 
 impl CompanyInput {
     pub fn validate(&self) -> Result<(), String> {
-        require("legal_name", &self.legal_name)?;
-        require("tax_id", &self.tax_id)?;
-        require("address", &self.address)?;
-        require("postal_code", &self.postal_code)?;
-        require("municipality", &self.municipality)?;
-        require("province", &self.province)?;
-        require("country_code", &self.country_code)?;
-        Ok(())
+        validate_company_fields(
+            None,
+            &self.legal_name,
+            &self.tax_id,
+            &self.address,
+            &self.postal_code,
+            &self.municipality,
+            &self.province,
+            &self.country_code,
+        )
     }
 }
 
 impl CompanyUpdateInput {
     pub fn validate(&self) -> Result<(), String> {
-        require("id", &self.id)?;
-        require("legal_name", &self.legal_name)?;
-        require("tax_id", &self.tax_id)?;
-        require("address", &self.address)?;
-        require("postal_code", &self.postal_code)?;
-        require("municipality", &self.municipality)?;
-        require("province", &self.province)?;
-        require("country_code", &self.country_code)?;
-        Ok(())
+        validate_company_fields(
+            Some(&self.id),
+            &self.legal_name,
+            &self.tax_id,
+            &self.address,
+            &self.postal_code,
+            &self.municipality,
+            &self.province,
+            &self.country_code,
+        )
     }
 
     pub fn normalized_default_series(&self) -> String {
@@ -195,6 +198,29 @@ pub fn format_invoice_number(
 ) -> String {
     let width = usize::try_from(padding).unwrap_or(1);
     format!("{resolved_series}{separator}{number:0width$}")
+}
+
+fn validate_company_fields(
+    id: Option<&str>,
+    legal_name: &str,
+    tax_id: &str,
+    address: &str,
+    postal_code: &str,
+    municipality: &str,
+    province: &str,
+    country_code: &str,
+) -> Result<(), String> {
+    if let Some(id) = id {
+        require("id", id)?;
+    }
+    require("legal_name", legal_name)?;
+    require("tax_id", tax_id)?;
+    require("address", address)?;
+    require("postal_code", postal_code)?;
+    require("municipality", municipality)?;
+    require("province", province)?;
+    require("country_code", country_code)?;
+    Ok(())
 }
 
 fn require(field: &str, value: &str) -> Result<(), String> {

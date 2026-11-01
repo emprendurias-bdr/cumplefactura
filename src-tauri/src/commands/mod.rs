@@ -7,6 +7,7 @@ pub mod app;
 pub mod company;
 pub mod customers;
 pub mod fiscal;
+mod fiscal_assets;
 pub mod invoices;
 pub mod products;
 pub mod settings;

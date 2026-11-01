@@ -5,6 +5,7 @@
 
 use crate::db::{AuditSummary, FiscalRecordSummary, InvoicePdfData, InvoiceSummary};
 use crate::services::fiscal_chain::FiscalChainVerification;
+use chrono::Utc;
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
@@ -65,7 +66,7 @@ pub fn write_fiscal_audit_json(
     chain_verification: FiscalChainVerification,
 ) -> Result<(), String> {
     let payload = FiscalAuditExport {
-        generated_at: chrono::Utc::now().to_rfc3339(),
+        generated_at: Utc::now().to_rfc3339(),
         invoices,
         audit_events,
         fiscal_records,

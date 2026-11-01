@@ -2,24 +2,23 @@
 //!
 //! - `imported_sidecar_capabilities`: lee evidencia local ContaPro (sin red); marca mvp vs diferido.
 //! - `sii_preflight` / `ticketbai_preflight`: POST HMAC loopback si flags ON; FACe no se invoca aquí.
+//!
 //! Fail-closed: sin secretos, sin SOAP AEAT/foral desde este proceso.
 
+use super::sidecar_security::{allowed_local_url, require, sidecar_secret, valid_certificate_ref};
 use crate::services::sidecar_http;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const ENABLE_SII_PREFLIGHT_ENV: &str = "CUMPLEFACTURA_ENABLE_SII_SUBMIT_SIDECAR_PREFLIGHT";
 const ENABLE_TICKETBAI_PREFLIGHT_ENV: &str =
     "CUMPLEFACTURA_ENABLE_TICKETBAI_SUBMIT_SIDECAR_PREFLIGHT";
-const SIDECAR_SHARED_SECRET_ENV: &str = "CUMPLEFACTURA_SIDECAR_SHARED_SECRET";
-const SIDECAR_SHARED_SECRET_FALLBACK_ENV: &str = "SIDECAR_SHARED_SECRET";
 const DEFAULT_SII_PREFLIGHT_URL: &str = "http://127.0.0.1:8000/sii/submit-preflight";
 const DEFAULT_TICKETBAI_PREFLIGHT_URL: &str = "http://127.0.0.1:8000/ticketbai/submit-preflight";
 const SII_PREFLIGHT_PATH: &str = "/sii/submit-preflight";
 const TICKETBAI_PREFLIGHT_PATH: &str = "/ticketbai/submit-preflight";
-const CERT_REF_PREFIX: &str = "vault://certs/";
 
 /// Estado importado de un canal (VERI*FACTU/SII/FACe/TicketBAI) desde evidencia ContaPro.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -218,7 +217,7 @@ pub fn sii_preflight(request: SiiSidecarPreflightRequest) -> Result<SiiSidecarPr
             .blockers
             .push("certificate_secret_ref_must_use_vault_certs_prefix".to_string());
     }
-    if !allowed_url(&sidecar_url, SII_PREFLIGHT_PATH) {
+    if !allowed_local_url(&sidecar_url, SII_PREFLIGHT_PATH) {
         result
             .blockers
             .push("sidecar_url_must_be_local_sii_submit_preflight".to_string());
@@ -296,7 +295,7 @@ pub fn ticketbai_preflight(
             .blockers
             .push("ticketbai_https_endpoint_required".to_string());
     }
-    if !allowed_url(&sidecar_url, TICKETBAI_PREFLIGHT_PATH) {
+    if !allowed_local_url(&sidecar_url, TICKETBAI_PREFLIGHT_PATH) {
         result
             .blockers
             .push("sidecar_url_must_be_local_ticketbai_submit_preflight".to_string());
@@ -351,11 +350,7 @@ pub fn ticketbai_preflight(
 }
 
 /// Construye un `ImportedSidecarChannel` a partir de JSON de readiness/gate + manifiestos.
-fn import_channel(
-    readiness: Option<&Value>,
-    channel: &str,
-    root: &PathBuf,
-) -> ImportedSidecarChannel {
+fn import_channel(readiness: Option<&Value>, channel: &str, root: &Path) -> ImportedSidecarChannel {
     let section = readiness
         .and_then(|value| value.get("sections"))
         .and_then(Value::as_array)
@@ -386,7 +381,7 @@ fn import_channel(
         })
         .unwrap_or_default();
     let manifest_path = acceptance_manifest_path(root, channel);
-    let manifest = manifest_path.as_ref().and_then(read_json);
+    let manifest = manifest_path.as_ref().and_then(|path| read_json(path));
     let acceptance_status = manifest
         .as_ref()
         .and_then(|value| value.get("status"))
@@ -430,7 +425,7 @@ fn import_channel(
     }
 }
 
-fn acceptance_manifest_path(root: &PathBuf, channel: &str) -> Option<PathBuf> {
+fn acceptance_manifest_path(root: &Path, channel: &str) -> Option<PathBuf> {
     match channel {
         "verifactu" | "sii" => Some(
             root.join("tests")
@@ -539,25 +534,10 @@ fn sidecar_root() -> PathBuf {
         .join("sidecar")
 }
 
-fn read_json(path: &PathBuf) -> Option<Value> {
+fn read_json(path: &Path) -> Option<Value> {
     fs::read_to_string(path)
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
-}
-
-fn valid_certificate_ref(value: &str) -> bool {
-    let trimmed = value.trim();
-    trimmed.starts_with(CERT_REF_PREFIX) && trimmed.len() > CERT_REF_PREFIX.len()
-}
-
-fn sidecar_secret() -> String {
-    std::env::var(SIDECAR_SHARED_SECRET_ENV)
-        .or_else(|_| std::env::var(SIDECAR_SHARED_SECRET_FALLBACK_ENV))
-        .unwrap_or_default()
-}
-
-fn allowed_url(value: &str, expected_path: &str) -> bool {
-    sidecar_http::parse_local_http_url(value, expected_path).is_ok()
 }
 
 #[derive(Serialize)]
@@ -620,14 +600,6 @@ struct TicketBaiSidecarResponse {
     blockers: Vec<String>,
     warnings: Vec<String>,
     external_call_performed: bool,
-}
-
-fn require(field: &str, value: &str) -> Result<(), String> {
-    if value.trim().is_empty() {
-        Err(format!("{field} is required"))
-    } else {
-        Ok(())
-    }
 }
 
 #[cfg(test)]

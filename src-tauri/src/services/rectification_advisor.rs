@@ -60,13 +60,13 @@ pub fn advise(input: RectificationAdviceInput) -> RectificationAdvice {
         ),
     };
 
-    let method = input.method_preference.unwrap_or_else(|| {
-        if input.replaces_full_invoice {
+    let method = input
+        .method_preference
+        .unwrap_or(if input.replaces_full_invoice {
             RectificationMethod::S
         } else {
             RectificationMethod::I
-        }
-    });
+        });
     let method_note = match &method {
         RectificationMethod::S => "Metodo S: sustitutiva; el XML incluye ImporteRectificacion.",
         RectificationMethod::I => "Metodo I: incremental; el XML expresa el ajuste.",

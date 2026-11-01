@@ -89,13 +89,13 @@ pub fn preflight_with_flag(
         .endpoint_url
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| DEFAULT_TEST_ENDPOINT.to_string());
-    let endpoint_name = allowed_endpoint_name(&endpoint_url);
+    let resolved_endpoint_name = allowed_endpoint_name(&endpoint_url);
 
     let mut blockers = Vec::new();
     if actual_sha256 != expected_sha256 {
         blockers.push("xml_sha256_mismatch".to_string());
     }
-    if endpoint_name.is_none() {
+    if resolved_endpoint_name.is_none() {
         blockers.push("endpoint_not_in_local_aeat_wsdl_allowlist".to_string());
     }
     if request.signature_status != "signed_xades" {
@@ -111,7 +111,7 @@ pub fn preflight_with_flag(
         status: if ready { "ready" } else { "blocked" }.to_string(),
         invoice_id: request.invoice_id,
         export_id: request.export_id,
-        endpoint_name: endpoint_name.unwrap_or("unknown").to_string(),
+        endpoint_name: resolved_endpoint_name.unwrap_or("unknown").to_string(),
         endpoint_url,
         xml_sha256: actual_sha256,
         xml_bytes: metadata.len(),

@@ -1,8 +1,9 @@
 //! Paths seguros de la app (data dir / export) vía APIs Tauri — sin hardcode de usuario.
 
+use chrono::Utc;
 use serde::Serialize;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 /// Defaults de rutas (backup, PDF, XML, JSON, CSV, auditoría) con stamp temporal.
@@ -32,7 +33,7 @@ pub fn app_defaults_get(app: AppHandle) -> Result<AppDefaults, String> {
     let export_dir = resolve_export_dir(&app, &app_data_dir)?;
     fs::create_dir_all(&export_dir).map_err(|err| format!("cannot create export dir: {err}"))?;
 
-    let stamp = chrono::Utc::now().format("%Y%m%d-%H%M%S").to_string();
+    let stamp = Utc::now().format("%Y%m%d-%H%M%S").to_string();
     Ok(AppDefaults {
         app_data_dir: path_string(app_data_dir),
         export_dir: path_string(export_dir.clone()),
@@ -60,7 +61,7 @@ pub fn app_defaults_get(app: AppHandle) -> Result<AppDefaults, String> {
         default_audit_export_path: path_string(
             export_dir.join(format!("cumplefactura-auditoria-{stamp}.json")),
         ),
-        generated_at: chrono::Utc::now().to_rfc3339(),
+        generated_at: Utc::now().to_rfc3339(),
         notes: vec![
             "Default export paths are resolved from the local app/document directory.".to_string(),
             "No user-specific absolute path is hardcoded in the UI.".to_string(),
@@ -68,7 +69,7 @@ pub fn app_defaults_get(app: AppHandle) -> Result<AppDefaults, String> {
     })
 }
 
-fn resolve_export_dir(app: &AppHandle, app_data_dir: &PathBuf) -> Result<PathBuf, String> {
+fn resolve_export_dir(app: &AppHandle, app_data_dir: &Path) -> Result<PathBuf, String> {
     match app.path().document_dir() {
         Ok(document_dir) => Ok(document_dir.join("CumpleFactura")),
         Err(_) => Ok(app_data_dir.join("exports")),

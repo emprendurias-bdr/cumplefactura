@@ -4,6 +4,7 @@
 //! solo si `CUMPLEFACTURA_ENABLE_REAL_XADES_SIDECAR=1`. No abre AEAT; el certificado es
 //! referencia `vault://certs/...`, nunca materializado aquí.
 
+use super::sidecar_security::{allowed_local_url, require, sidecar_secret, valid_certificate_ref};
 use crate::services::sidecar_http;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -11,11 +12,8 @@ use std::fs;
 use std::path::Path;
 
 const ENABLE_REAL_XADES_ENV: &str = "CUMPLEFACTURA_ENABLE_REAL_XADES_SIDECAR";
-const SIDECAR_SHARED_SECRET_ENV: &str = "CUMPLEFACTURA_SIDECAR_SHARED_SECRET";
-const SIDECAR_SHARED_SECRET_FALLBACK_ENV: &str = "SIDECAR_SHARED_SECRET";
 const DEFAULT_SIDECAR_SIGN_XML_URL: &str = "http://127.0.0.1:8000/verifactu/sign-xml";
 const SIGN_XML_PATH: &str = "/verifactu/sign-xml";
-const CERT_REF_PREFIX: &str = "vault://certs/";
 const SIGNATURE_MODE_REAL_XADES: &str = "xades_bes_local";
 
 /// Entrada del preflight de firma (XML + SHA + estado + ref vault).
@@ -101,9 +99,7 @@ pub fn preflight(request: XadesSidecarPreflightRequest) -> Result<XadesSidecarPr
 /// Firma el XML exacto (mismo SHA) vía sidecar; requiere secret HMAC + flag.
 pub fn sign_exact_xml(request: XadesSidecarSignRequest) -> Result<XadesSidecarSignature, String> {
     let enabled = std::env::var(ENABLE_REAL_XADES_ENV).unwrap_or_default() == "1";
-    let secret = std::env::var(SIDECAR_SHARED_SECRET_ENV)
-        .or_else(|_| std::env::var(SIDECAR_SHARED_SECRET_FALLBACK_ENV))
-        .unwrap_or_default();
+    let secret = sidecar_secret();
     sign_exact_xml_with_config(request, enabled, secret.as_str())
 }
 
@@ -274,7 +270,7 @@ pub fn preflight_with_flag(
         invoice_id: request.invoice_id,
         export_id: request.export_id,
         sidecar_url,
-        sidecar_endpoint: "/verifactu/sign-xml".to_string(),
+        sidecar_endpoint: SIGN_XML_PATH.to_string(),
         xml_sha256: actual_sha256,
         xml_bytes: metadata.len(),
         certificate_ref_status: if valid_certificate_ref(&request.certificate_secret_ref) {
@@ -308,17 +304,9 @@ pub fn preflight_with_flag(
 }
 
 /// Solo acepta refs `vault://certs/...` (sin secretos embebidos).
-fn valid_certificate_ref(value: &str) -> bool {
-    let trimmed = value.trim();
-    trimmed.starts_with(CERT_REF_PREFIX) && trimmed.len() > CERT_REF_PREFIX.len()
-}
-
 /// URL debe ser loopback y terminar en `/verifactu/sign-xml`.
 fn allowed_sidecar_sign_xml_url(value: &str) -> bool {
-    let trimmed = value.trim();
-    let local =
-        trimmed.starts_with("http://127.0.0.1:") || trimmed.starts_with("http://localhost:");
-    local && trimmed.ends_with("/verifactu/sign-xml")
+    allowed_local_url(value, SIGN_XML_PATH)
 }
 
 fn sha256_file(path: &Path) -> Result<String, String> {
@@ -345,14 +333,6 @@ struct SidecarSignXmlResponse {
     signature_mode: String,
     certificate_source: Option<String>,
     external_call_performed: bool,
-}
-
-fn require(field: &str, value: &str) -> Result<(), String> {
-    if value.trim().is_empty() {
-        Err(format!("{field} is required"))
-    } else {
-        Ok(())
-    }
 }
 
 #[cfg(test)]

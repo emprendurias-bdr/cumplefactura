@@ -23,23 +23,17 @@ Fuente: C:\03 LEGISLACION\docs\estudios\ESTUDIO_VERIFACTU_RRSIF_CUMPLEFACTURA_20
 | hash_chain.spec | Huella/cadena estable y sensible a cambios. |
 | rectification_flow.spec | Flujo de rectificativa/anulacion sin borrado. |
 | rectification_advisor.spec | Mapeo tecnico de escenario declarado a `R1-R5` y metodo `I/S`, con limite de no asesor juridico. |
-| aeat_transport_preflight.spec | Preflight de transporte AEAT: endpoint WSDL permitido, hash XML, XAdES requerido y flag runtime. |
-| xades_sidecar_preflight.spec | Preflight XAdES exact-XML: endpoint sidecar local, hash XML, vault ref y flag runtime. |
-| xades_sidecar_sign.spec | Firma XAdES exact-XML: HMAC contra sidecar local, modo XAdES real obligatorio, XML firmado local y export `signed_xades`. |
-| verifactu_submit_sidecar_preflight.spec | Readiness de envio VERI*FACTU via sidecar: HMAC local, WSDL/vault/flags, sin XML bruto ni SOAP AEAT. |
-| verifactu_submit_sidecar_invoke.spec | Frontera final de envio: XML firmado a sidecar local `/verifactu/invoke-submit`, HMAC, respuesta redacted y gate sin AEAT real. |
-| contapro_sidecar_import.spec | Import local redacted de readiness ContaPro sidecar: MVP solo VERI*FACTU/SII con manifiesto accepted/passed; FACe/TicketBAI diferidos, sin red ni secretos. |
-| sii_sidecar_preflight.spec | Frontera SII `/sii/submit-preflight`: flag/HMAC/vault obligatorios; sin facturas ni SOAP AEAT en gate. |
-| ticketbai_sidecar_preflight.spec | Frontera TicketBAI diferida: no importable MVP; sin envio foral en gate. |
-| ui_contract.spec | Contrato estatico de UI: comandos Tauri fiscales, botones, guards y limites visibles. |
+| verifactu_sidecar_submission.spec | Envio VERI*FACTU sin firma por el sidecar local: exportacion `xml_exported`, HMAC por sesion, orden fail-closed, TLS mutuo, respuesta AEAT guardada y sin reenvio de un XML aceptado. |
+| ui_contract.spec | Contrato estatico de UI: comandos Tauri fiscales (invocados = registrados), botones, guards y limites visibles. |
 | evidence_matrix.spec | Matriz de promesas: cada promesa debe tener fuente local, evidencia ejecutable y limite vivo. |
 | evidence_ledger.spec | Ledger SHA256: fuentes normativas locales, artefactos del repo, fixtures, evidencias generadas y logs del gate. |
 | external_acceptance.spec | Entrada de aceptacion externa: manifiesto redacted, hashes SHA256, artefactos referenciados y sin secretos/XML bruto. |
-| external_readiness.spec | Auditoria de readiness externa: driver Tauri, sidecar gate/ledger, flags, vault, certificado y evidencia de aceptacion. |
-| core_e2e.spec | Nucleo real Rust/SQLite: emisor, cliente, borrador, emision, huella AEAT, cadena fiscal, XML XSD, PDF y paquete de firma/envio. |
-| browser_smoke.spec | Navegador real: carga UI, crea emisor/cliente/borrador, emite factura, exporta XML y prepara firma/envio con mock Tauri local. |
+| external_readiness.spec | Auditoria de readiness externa: driver Tauri, sidecar compilado con smoke verde, vault, certificado, permiso AEAT y evidencia de aceptacion. |
+| core_e2e.spec | Nucleo real Rust/SQLite: emisor, cliente, borrador, emision, huella AEAT, cadena fiscal, XML XSD, PDF y exportacion `xml_exported` lista para el sidecar. |
+| browser_smoke.spec | Navegador real: carga UI, crea emisor/cliente/borrador, emite factura, exporta XML, hace preflight y envia con mock Tauri local. |
 | secret_scan.spec | Escaneo local redacted antes de ledger; cero secretos/material sensible en repo. |
-| tauri_desktop_e2e.spec | Release desktop + drivers; WebDriver real opt-in para ventana Tauri. |
+| tauri_desktop_e2e.spec | Release desktop + drivers; WebDriver real opt-in para ventana Tauri, termina con un preflight que lanza el sidecar real. |
+| sidecar_smoke.spec | Binario real del sidecar sin `--allow-aeat`: handshake, HMAC, envio y produccion bloqueados, salida al cerrar stdin. |
 | territory_flags.spec | AEAT, SII, TicketBAI/Batuz, Navarra HTN separados por flags. |
 | audit_export.spec | Export inspeccion por periodo/serie reproducible. |
 | fiscal_audit_screen.spec | Pantalla local de auditoria fiscal: verifica cadena, muestra incidencias/hash final y exporta informe JSON. |
@@ -52,6 +46,8 @@ Fuente: C:\03 LEGISLACION\docs\estudios\ESTUDIO_VERIFACTU_RRSIF_CUMPLEFACTURA_20
 - TicketBAI/Batuz completo por todos los territorios.
 - Navarra HTN automatizado.
 - Presentacion real AEAT sin entorno autorizado.
+- Modo No VERI*FACTU (registros firmados con XAdES sin remision).
+- SII, TicketBAI y FACe.
 ## Specs creadas
 
 Ruta: `tests/regulatory/`
@@ -60,13 +56,11 @@ Ruta: `tests/regulatory/`
 - `append_only.spec.md`
 - `hash_chain.spec.md`
 - `verifactu_xsd_contract.spec.md`
-- `xades_sidecar_preflight.spec.md`
-- `services::xades_sidecar::sign_exact_xml_*` en `cargo test`
-- `services::verifactu_submit_sidecar::*` en `cargo test`
-- `verifactu_submit_sidecar_invoke` cableado en UI y contrato estatico
+- `verifactu_sidecar_submission.spec.md`
+- `services::verifactu_submit::*`, `services::sidecar_process::*` y `cargo test -p cumplefactura-sidecar`
+- `tools/verify-sidecar-smoke.mjs` y `tools/homolog-verifactu.mjs` (manual)
 - `rectification_flow.spec.md`
 - `services::rectification_advisor::*` en `cargo test`
-- `services::aeat_transport::*` en `cargo test`
 - `tools/verify-ui-contract.mjs`
 - `tools/verify-regulatory-evidence.mjs`
 - `tools/verify-evidence-ledger.mjs`
@@ -90,11 +84,6 @@ Ruta: `tests/regulatory/`
 - `commands::settings::app_settings_update`
 - `db::tests::persists_app_settings_for_onboarding`
 - `@tauri-apps/plugin-dialog` cableado en UI y capability `dialog:allow-open`/`dialog:allow-save`
-- `tools/import-contapro-sidecar-evidence.mjs`
-- `commands::fiscal::fiscal_sidecar_capabilities_get`
-- `commands::fiscal::sii_submit_sidecar_preflight`
-- `commands::fiscal::ticketbai_submit_sidecar_preflight`
-- `services::sidecar_channels::*` en `cargo test`
 - `commands::products::product_upsert`
 - `commands::products::product_list`
 - `db::tests::upserts_and_lists_company_products`

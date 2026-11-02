@@ -5,13 +5,13 @@
 - Export is deterministic: same DB state gives same package hash.
 - Export includes app version and schema version.
 - Export excludes secrets/private keys.
-- VERI*FACTU submission preparation validates XML, computes SHA256, records `fiscal_exports` and marks `prepared_for_signature`.
-- Prepared package states explicitly that XAdES/signature and network submission are pending.
+- VERI*FACTU XML export validates the XSD, computes SHA256 and records `fiscal_exports` as `xml_exported`.
+- Submission state is explicit: `not_submitted` until the sidecar returns an AEAT answer stored in `verifactu_submissions`.
 
 ## Reject
 - Non-deterministic timestamps during export.
 - Missing audit events for issued invoices.
-- Claiming signed/submitted status without certificate-backed signature or AEAT transport evidence.
+- Claiming submitted status without an AEAT answer (CSV and states) stored in `verifactu_submissions`.
 
 ## Current executable coverage
-- Rust `services::submission` test prepares unsigned package with SHA256 and `pending_xades` / `not_submitted`.
+- Rust `services::verifactu_submit::record_xml_export` (core E2E) and `db::tests::fiscal_export_and_aeat_submission_are_recorded_once`.

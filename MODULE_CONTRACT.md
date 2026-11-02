@@ -1,8 +1,8 @@
 # CumpleFactura - Module contract
 
 Estado: pre-MVP fiscal verificable
-Fecha: 2026-06-04
-Stack: Tauri 2 + React + TypeScript + Rust + SQLite
+Fecha: 2026-11-02
+Stack: Tauri 2 + React + TypeScript + Rust + SQLite; sidecar Rust `cumplefactura-sidecar` para la AEAT
 
 ## Principios
 
@@ -11,14 +11,15 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite
 - Una factura emitida no se edita: se rectifica, anula o emite evento compensatorio.
 - La auditoria es append-only y cada evento encadena el hash anterior.
 - VERI*FACTU, SII, TicketBAI/Batuz y Navarra HTN son flags separados; no mezclar territorios.
+- Solo el sidecar abre el certificado y habla con la AEAT; la app nunca sale a internet (ver `sidecar/ARQUITECTURA.md`).
 
 ## Comandos Tauri iniciales
 
 | Comando | Entrada | Salida | Estado |
 |---|---|---|---|
-| `app_defaults_get` | - | `AppDefaults` | Resuelve directorio app/export seguro desde Tauri; sin rutas de usuario hardcodeadas |
-| `app_settings_get` | - | `AppSettings` | Lee configuracion local persistida de onboarding, carpeta export y flags fiscales por defecto |
-| `app_settings_update` | `AppSettingsInput` | `AppSettings` | Guarda onboarding local, crea carpeta export si no existe y valida flags soportados |
+| `app_defaults_get` | - | `AppDefaults` | Resuelve carpetas de datos y export desde Tauri; la UI deriva los nombres de fichero |
+| `app_settings_get` | - | `AppSettings` | Lee configuracion local persistida de onboarding, carpeta export, flags fiscales y endpoint VERI*FACTU |
+| `app_settings_update` | `AppSettingsInput` | `AppSettings` | Guarda onboarding local y valida flags soportados y endpoint (4 puertos del WSDL) |
 | `company_create` | `CompanyInput` | `Company` | Persistencia SQLite |
 | `company_update` | `CompanyUpdateInput` | `Company` | Edita datos reales del emisor por ID sin recrear entidad |
 | `company_series_configure` | `InvoiceSeriesConfigInput` | `InvoiceSeriesConfig` | Configura serie por empresa/ejercicio, patron visible y siguiente numero |
@@ -34,18 +35,11 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite
 | `invoice_export_json` | `invoice_id`, `target_path` | `ExportResult` | JSON de factura local |
 | `invoice_export_csv` | `filters`, `target_path` | `ExportResult` | CSV local; filtros aceptados por contrato, MVP exporta todo |
 | `fiscal_audit_export` | `filters`, `target_path` | `ExportResult` | JSON de trazabilidad fiscal local con verificacion de cadena; no certificacion |
-| `fiscal_prepare_verifactu` | `invoice_id` | `FiscalPayload` | Placeholder sin envio real |
-| `fiscal_sidecar_capabilities_get` | - | `ImportedSidecarCapabilities` | Importa evidencia local redacted de ContaPro sidecar; MVP solo VERI*FACTU/SII si tienen manifiesto accepted/passed; sin red ni secretos |
-| `sii_submit_sidecar_preflight` | `SiiSidecarPreflightRequest` | `SiiSidecarPreflight` | Frontera local `/sii/submit-preflight`; requiere flag/HMAC/vault para llamar sidecar; sin SOAP AEAT |
-| `ticketbai_submit_sidecar_preflight` | `TicketBaiSidecarPreflightRequest` | `TicketBaiSidecarPreflight` | Frontera local `/ticketbai/submit-preflight`; requiere flag/HMAC/vault para llamar sidecar; sin envio foral |
-| `verifactu_xml_draft_export` | `invoice_id`, `target_path` | `VerifactuXmlResult` | XML alta borrador, XSD local obligatorio, sin firma/envio |
-| `verifactu_xml_anulacion_draft_export` | `invoice_id`, `target_path` | `VerifactuXmlResult` | XML anulacion, XSD local obligatorio, registro fiscal append-only, factura `Void`, sin firma/envio |
+| `verifactu_xml_draft_export` | `invoice_id`, `target_path` | `VerifactuXmlResult` | XML alta, XSD local obligatorio; registra `fiscal_exports` `xml_exported` y devuelve `export_id` + `xml_sha256`; sin envio |
+| `verifactu_xml_anulacion_draft_export` | `invoice_id`, `target_path` | `VerifactuXmlResult` | XML anulacion, XSD local obligatorio, registro fiscal append-only, factura `Void`, `xml_exported`; sin envio |
 | `fiscal_chain_verify` | - | `FiscalChainVerification` | Recalculo huellas AEAT + enlaces `previous_fiscal_hash` + deteccion tamper |
-| `verifactu_submission_prepare` | `invoice_id`, `xml_path` | `SubmissionPreparation` | Revalida XML, calcula SHA256, registra `fiscal_exports`; sin firma ni envio |
-| `verifactu_xades_sidecar_preflight` | `XadesSidecarPreflightRequest` | `XadesSidecarPreflight` | Comprueba exact XML hash, endpoint local `/verifactu/sign-xml`, ref `vault://certs/...` y flag; sin llamada sidecar |
-| `verifactu_xades_sidecar_sign` | `XadesSidecarSignRequest` | `XadesSidecarSignature` | Revalida XML, llama sidecar local con HMAC, exige modo XAdES real, escribe XML firmado y registra export `signed_xades`; sin envio AEAT |
-| `verifactu_submit_sidecar_preflight` | `VerifactuSubmitSidecarPreflightRequest` | `VerifactuSubmitSidecarPreflight` | Revalida XML firmado, llama sidecar local `/verifactu/submit-preflight` con HMAC y comprueba WSDL/vault/flags; sin SOAP AEAT |
-| `verifactu_submit_sidecar_invoke` | `VerifactuSubmitSidecarInvokeRequest` | `VerifactuSubmitSidecarInvocation` | Envia XML firmado al sidecar local `/verifactu/invoke-submit` con HMAC; registra export `submitted_via_sidecar`; gate con sidecar falso |
+| `verifactu_submit_preflight` | `SubmitInput` (`invoice_id`, `export_id`, `xml_path`, `xml_sha256`, `certificate_ref`) | `SubmitPreflightResponse` | Comprueba que el XML sigue siendo el exportado y pregunta al sidecar (lanzandolo si hace falta) por endpoint, certificado y permiso AEAT; nunca llama a la AEAT |
+| `verifactu_submit` | `SubmitInput` | `VerifactuSubmission` | Envia el XML sin firma al sidecar, que lo remite a la AEAT por TLS mutuo; guarda CSV y estados en `verifactu_submissions` si la AEAT contesta |
 | `company_list` / `customer_list` / `invoice_list` / `audit_list` / `fiscal_record_list` | filtros/paginacion segun lista | listas resumen | Lectura SQLite |
 | `backup_export` | `target_path` | `BackupResult` | Export SQLite con `VACUUM INTO` |
 | `backup_restore` | `source_path` | `BackupRestoreResult` | Preflight `validated-only`; no reemplazo destructivo en MVP |
@@ -76,13 +70,13 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite
 - Cada `Alta` y `Anulacion` fiscal persiste `fiscal_hash` y `previous_fiscal_hash`.
 - `fiscal_chain_verify` debe detectar hash fiscal no recalculable, enlace roto, duplicado, factura alterada y XML de anulacion ausente.
 - `fiscal_audit_export` debe incluir facturas, eventos, registros fiscales y resultado de `fiscal_chain_verify`.
-- `verifactu_submission_prepare` no puede devolver exito si el XML no existe o no pasa XSD local.
-- `verifactu_submit_sidecar_preflight` exige `signed_xades`, endpoint local, secreto HMAC y `vault://certs/...`; no envia XML bruto ni invoca AEAT.
-- `verifactu_submit_sidecar_invoke` exige `signed_xades`, XML con `Signature`, endpoint local, secreto HMAC, `vault://certs/...` y flag propio; nunca llama AEAT directamente desde CumpleFactura.
-- `fiscal_sidecar_capabilities_get` solo lee evidencias locales redacted de ContaPro sidecar; no importa certificados, passwords, XML bruto ni claves.
-- `sii_submit_sidecar_preflight` y `ticketbai_submit_sidecar_preflight` quedan bloqueados por defecto si faltan flags `CUMPLEFACTURA_ENABLE_*_SIDECAR_PREFLIGHT`, HMAC o `vault://certs/...`.
-- SII/VERI*FACTU readiness de ContaPro se muestra como evidencia importable MVP solo con manifiesto accepted/passed; FACe/TicketBAI siguen bloqueados por alta externa/homologacion foral.
-- Los paths por defecto de backup/export se obtienen de `app_defaults_get`; no se hardcodea un perfil de Windows en React.
+- Los registros VERI*FACTU se envian sin firma XAdES: RD 1007/2023 art. 16.3 y Orden HAC/1177/2024 arts. 3-5. El modo No VERI*FACTU queda fuera de v1.
+- `verifactu_submit_preflight` y `verifactu_submit` exigen que `export_id` sea una exportacion `xml_exported` de esa factura con ese SHA-256 y que el fichero no haya cambiado.
+- Un XML ya aceptado por la AEAT no se reenvia: `xml_already_accepted_by_aeat` y un indice unico en `verifactu_submissions`.
+- La app comprueba que la respuesta del sidecar trae el mismo SHA-256, que el preflight no salio a internet y que no contiene la referencia del certificado ni el secreto.
+- El sidecar se lanza con un secreto HMAC nuevo por sesion (stdin), solo escucha en `127.0.0.1`, se relanza si muere y se cierra al salir la app.
+- Sin `CUMPLEFACTURA_SIDECAR_ALLOW_AEAT=1` el sidecar no puede llamar a la AEAT; produccion exige `--allow-production`, que v1 no pasa nunca.
+- Las rutas por defecto se derivan de la carpeta export de `app_defaults_get`; no se hardcodea un perfil de Windows en React.
 - La seleccion principal de carpeta export, backup, restore y artefactos fiscales usa dialogo nativo Tauri con filtros de extension; los campos de ruta quedan en solo lectura desde la UI.
 - Restore destructivo queda fuera del MVP: `backup_restore` valida origen y devuelve `destructive_restore_performed=false`.
 - La huella fiscal de `Alta`/`Anulacion` se recalcula con los campos oficiales AEAT cubiertos por los tests.
@@ -90,20 +84,25 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite
 ## Fronteras
 
 - `src-tauri/src/domain/`: reglas puras y DTOs.
-- `src-tauri/src/services/`: auditoria, PDF, cliente fiscal futuro.
-- `src-tauri/src/db/`: migraciones y persistencia local SQLite.
-- `src-tauri/src/services/verifactu.rs`: generacion XML tecnica basada en XSD locales; no firma ni envia.
+- `src-tauri/src/services/`: auditoria, PDF, exportaciones, XML VERI*FACTU, cadena fiscal y cliente del sidecar.
+- `src-tauri/src/db/`: migraciones y persistencia local SQLite, un modulo por entidad.
+- `src-tauri/src/services/verifactu.rs`: generacion XML tecnica basada en XSD locales y huellas AEAT; no envia.
+- `src-tauri/src/services/sidecar_process.rs` y `verifactu_submit.rs`: arranque del sidecar y envio por el canal loopback.
+- `sidecar/`: proceso `cumplefactura-sidecar`, unico con certificado y red hacia la AEAT.
+- `crates/fiscal-contract/`: contrato HTTP compartido (mensajes, HMAC, endpoints, lector HTTP).
 - `src-tauri/src/commands/`: frontera Tauri frontend <-> Rust.
 - `tests/regulatory/`: specs de aceptacion que deben convertirse a Rust/TS.
 - `#[cfg(test)]` en dominio/servicios/db: pruebas ejecutables de totales, hash, persistencia, listados, backup, PDF, XML y append-only.
-- `src-tauri/src/core_e2e.rs`: E2E real del nucleo Rust/SQLite hasta XML VERI*FACTU XSD-validado, PDF y export `prepared_for_signature`.
+- `src-tauri/src/core_e2e.rs`: E2E real del nucleo Rust/SQLite hasta XML VERI*FACTU XSD-validado, PDF y export `xml_exported`.
 - `tools/verify-regulatory-evidence.mjs`: valida que `REGULATORY_EVIDENCE_MATRIX.md` mantenga promesa, fuente, evidencia ejecutable y limite por fila.
 - `tools/verify-evidence-ledger.mjs`: genera ledger SHA256 de fuentes normativas locales, artefactos del repo, fixtures, evidencias y logs del gate.
 - `tools/verify-external-acceptance-evidence.mjs`: valida manifiesto externo redacted, hashes SHA256 y artefactos referenciados; sin manifiesto real registra `not_provided`.
-- `tools/verify-external-readiness.mjs`: audita si existen ejecutable release, driver Tauri, WebDriver, sidecar verde, flags, vault, certificado y aceptacion externa validada para pasar de pre-MVP a entorno real.
-- `tools/verify-browser-smoke.mjs`: valida render real en Chromium del flujo emisor -> cliente -> borrador -> emision -> XML -> preparacion con mock Tauri local.
+- `tools/verify-external-readiness.mjs`: audita si existen ejecutable release, driver Tauri, WebDriver, sidecar compilado y con smoke verde, vault, certificado, permiso AEAT y aceptacion externa validada.
+- `tools/verify-browser-smoke.mjs`: valida render real en Chromium del flujo emisor -> cliente -> borrador -> emision -> XML -> preflight -> envio con mock Tauri local.
+- `tools/verify-sidecar-smoke.mjs`: arranca el sidecar real sin `--allow-aeat` y comprueba handshake, HMAC, bloqueo y cierre.
+- `tools/homolog-verifactu.mjs`: envio manual a la AEAT de pruebas con certificado real; fuera del gate.
 - `tools/verify-secret-scan.mjs`: escaneo local de secretos con evidencias redacted; no imprime valores.
-- `tools/verify-tauri-desktop-e2e.mjs`: evidencia desktop Tauri; preflight por defecto y modo WebDriver real para el gate.
+- `tools/verify-tauri-desktop-e2e.mjs`: evidencia desktop Tauri; preflight por defecto y modo WebDriver real para el gate (Windows y Linux), que termina con un preflight del sidecar.
 
 
 ## UI MVP
@@ -118,7 +117,7 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite
 - Incluye buscador/filtros de facturas por texto, empresa, cliente, año, serie, estado y tipo.
 - Incluye paginacion local de facturas, auditoria y registros fiscales.
 - Incluye pantalla de auditoria fiscal local con estado de cadena, incidencias, hash final por empresa y export JSON.
-- Incluye panel `Canales ContaPro sidecar` con estado importado de VERI*FACTU, SII, FACe y TicketBAI; MVP accionable solo VERI*FACTU/SII.
+- Incluye envio VERI*FACTU en tres pasos: Exportar XML (o anulacion) -> Preflight envio -> Enviar, con referencia `vault://certs/<id>` y entorno elegido en Ajustes.
 - Permite configurar series: `VENDI202601`, `AL-001`, `C-001`, `I-001`.
 - Permite elegir la serie activa de cada factura y editar lineas con cantidad, precio, descuento, IVA e IRPF antes de crear borrador o emitir.
 - Exporta PDF, JSON, CSV, auditoria JSON y XML VERI*FACTU alta/anulacion borrador XSD-validado desde factura emitida.
@@ -135,22 +134,18 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite
 - El test Rust `generated_xml_passes_local_xsd_contract` genera XML desde el servicio y lo valida contra los XSD locales en Windows.
 - Los comandos `verifactu_xml_draft_export` y `verifactu_xml_anulacion_draft_export` usan validacion XSD local antes de devolver exito.
 - Tauri empaqueta el script y XSD como recursos (`tools/` y `xsd/verifactu/`) y el runtime cae al arbol dev si no hay bundle.
-- No es payload fiscal listo para produccion: falta firma XAdES, transporte AEAT y asistente juridico de causa rectificativa por caso.
+- No es payload fiscal listo para produccion hasta completar la homologacion con la AEAT de pruebas y el asistente juridico de causa rectificativa por caso.
 - Verificacion ejecutable: `services::fiscal_chain` recalcula huellas `Alta`/`Anulacion` y valida cadena persistida.
-- Preparacion firma/envio: `services::submission` genera evidencia local `SHA256 + prepared_for_signature`; no realiza XAdES ni red.
-- Frontera XAdES: `services::xades_sidecar` hace preflight y firma exact-XML contra sidecar local `/verifactu/sign-xml`; exige HMAC, flag runtime y modo XAdES real. No envia a AEAT.
-- Frontera envio: `services::verifactu_submit_sidecar` llama solo al preflight local `/verifactu/submit-preflight`; verifica readiness WSDL/vault/flags antes de cualquier `/verifactu/invoke-submit`.
-- Frontera invocacion: `services::verifactu_submit_sidecar::invoke_submit` manda XML firmado solo al sidecar local `/verifactu/invoke-submit`; respuesta redacted y registro `fiscal_exports`.
-- Frontera SII importada: `services::sidecar_channels::sii_preflight` manda solo metadatos `book`, endpoint, vault ref y flag al sidecar local `/sii/submit-preflight`; sin facturas ni SOAP AEAT.
-- Frontera TicketBAI diferida: `services::sidecar_channels::ticketbai_preflight` queda fail-closed y fuera de MVP hasta politica de firma, LicenciaTBAI y aceptacion foral.
+- Envio: `services::verifactu_submit` registra la exportacion (SHA-256), comprueba que el fichero no cambia y habla con el sidecar por `127.0.0.1` con HMAC.
+- Sidecar: `sidecar/src/soap.rs` envuelve el documento `RegFactuSistemaFacturacion` sin modificarlo en SOAP 1.1 (`soapAction=""`) y `sidecar/src/aeat_client.rs` lo envia por TLS mutuo con el PKCS#12 del vault a los puertos `SistemaVerifactu*` del WSDL.
+- La respuesta `RespuestaRegFactuSistemaFacturacion` se reduce a estado, CSV, `EstadoEnvio`, `EstadoRegistro`, error y `TiempoEsperaEnvio`, y se guarda en `verifactu_submissions`.
 
 ## Gate regulatorio
 
 - Comando canonico: `npm run validate:regulatory`.
-- Ejecuta `cargo fmt --check`, `cargo test`, `npm run build`, `npm run validate:ui-contract`, `npm run validate:core-e2e`, `npm run validate:browser-smoke`, `npm run validate:secret-scan`, `npm run validate:evidence-matrix`, `npm run validate:verifactu:xsd`, `npm run tauri:build`, `npm run validate:tauri-desktop-e2e`, `npm run validate:external-acceptance`, `npm run validate:external-readiness` y `npm run validate:evidence-ledger`.
+- Ejecuta `cargo fmt --check` y `cargo test --workspace`, compila el sidecar y pasa `npm run validate:sidecar-smoke`, y despues `npm run build`, `npm run validate:ui-contract`, `npm run validate:core-e2e`, `npm run validate:browser-smoke`, `npm run validate:secret-scan`, `npm run validate:evidence-matrix`, `npm run validate:verifactu:xsd`, `npm run tauri:build`, `npm run validate:tauri-desktop-e2e`, `npm run validate:external-acceptance`, `npm run validate:external-readiness` y `npm run validate:evidence-ledger`.
 - `validate:tauri-desktop-e2e` comprueba prerequisitos/release en modo preflight; el gate lo ejecuta en modo WebDriver real con `CUMPLEFACTURA_TAURI_DESKTOP_E2E_REAL=1`.
-- Evidencia actual: `tests/regulatory/evidence/latest-regulatory-gate.json`, `latest-secret-scan.json/md`, `latest-tauri-desktop-e2e.json/md`, `latest-evidence-ledger.json/md`, `latest-external-acceptance-evidence.json/md`, `latest-external-readiness.json/md` y artefactos core/browser smoke.
-- Import ContaPro sidecar: `npm run validate:contapro-sidecar-import` genera `latest-contapro-sidecar-import.json/md` y se incluye en gate/ledger.
+- Evidencia actual: `tests/regulatory/evidence/latest-regulatory-gate.json`, `latest-sidecar-smoke.json/md`, `latest-secret-scan.json/md`, `latest-tauri-desktop-e2e.json/md`, `latest-evidence-ledger.json/md`, `latest-external-acceptance-evidence.json/md`, `latest-external-readiness.json/md` y artefactos core/browser smoke.
 - Matriz de trazabilidad: `REGULATORY_EVIDENCE_MATRIX.md`.
 
 ## Fuentes regulatorias locales
@@ -162,8 +157,3 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite
 - `C:\03 LEGISLACION\docs\estudios\MATRIZ_AI_ACT_APPS_2026-05-28.md`
 
 No usar este scaffold como garantia de cumplimiento. Es base tecnica para implementar y probar.
-
-
-
-
-

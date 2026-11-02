@@ -9,7 +9,7 @@ Decidir uno a uno: conservar (moverlo a `docs/`), fusionar con otro documento o 
 |---|---|---|
 | `PRODUCT_BRIEF_CUMPLEFACTURA.md` | Alcance del MVP, imprescindibles y fuera de alcance | Es la definicion de producto; CLAUDE.md lo cita |
 | `IDENTITY_ADOPTION.md` | Plan de login comun (Keycloak, tenants) | CLAUDE.md lo cita; decision de arquitectura futura |
-| `README_DEV.md` | Requisitos y comandos de desarrollo en Windows (tauri-driver, edgedriver) | El README nuevo es mucho mas corto y no cubre el E2E de escritorio |
+| `README_DEV.md` | Requisitos y comandos de desarrollo en Windows (tauri-driver, edgedriver) | Describe el flujo antiguo de firma XAdES y la importacion de ContaPro, eliminados en noviembre de 2026; el flujo actual esta en `README.md` y `sidecar/ARQUITECTURA.md`. Conserva los requisitos del E2E de escritorio |
 | `REPLANTEAMIENTO_ARQUITECTURA.md` | Diagnostico de encaje en la suite modular | Decision de arquitectura sin otra copia |
 | `cumplefactura.md` | Investigacion de mercado y posicionamiento (ADR-005) | Estrategia de producto sin otra copia |
 

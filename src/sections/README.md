@@ -1,14 +1,12 @@
-# `sections/` — Paneles del sidebar
+# `sections/` — Pantallas del menú
 
-Componentes presentacionales cableados desde `App.tsx` (`section === …`).
+Cada sección recibe el `Model` tipado de `useCumpleFactura` y solo pinta; no llama a Rust.
 
 | Sección | Contenido |
 |---|---|
-| Panel | Cards + estado pre-MVP |
-| Empresas | Emisor, productos, series |
-| Clientes | Form + listado clientes |
-| Facturas | Editor, emisión, filtros, PDF/JSON/CSV |
-| Fiscal | Auditoría, sidecars, XML/XAdES/AEAT |
-| Ajustes | Onboarding + backup/restore |
-
-Estado e `invoke` viven en `App.tsx`.
+| Panel | Tarjetas y estado pre-MVP |
+| Empresas | Emisor, catálogo de productos, series |
+| Clientes | Formulario y listado |
+| Facturas | Editor de líneas, borrador/emisión/rectificativa, filtros, PDF/JSON/CSV |
+| Fiscal | Auditoría de la cadena, XML VERI\*FACTU y envío: Exportar XML → Preflight envío → Enviar |
+| Ajustes | Onboarding, entorno VERI\*FACTU y copia de seguridad |

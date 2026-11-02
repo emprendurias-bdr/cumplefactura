@@ -1,140 +1,53 @@
-// External readiness: AEAT/sidecar readiness JSON (often blocked).
-import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+// External readiness: ¿qué falta para enviar a la AEAT de verdad? Normalmente "blocked".
+//
+// No hace llamadas de red ni abre certificados: solo comprueba que existan el binario
+// del sidecar, su smoke, el certificado en el vault, las variables de entorno y la
+// evidencia de aceptación externa. Las rutas y referencias se redactan en la evidencia.
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { download as downloadEdgeDriver } from "edgedriver";
+import { commandExists, evidenceDir, pathInfo, readJson, root, windowsDriverCandidates, writeEvidence } from "./lib.mjs";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const evidenceDir = resolve(root, "tests/regulatory/evidence");
-const outputJson = resolve(evidenceDir, "latest-external-readiness.json");
-const outputMd = resolve(evidenceDir, "latest-external-readiness.md");
-const sidecarRoot = resolve(root, "..", "contapro", "services", "sidecar");
-const externalAcceptancePath = resolve(evidenceDir, "latest-external-acceptance-evidence.json");
-const contaproImportPath = resolve(evidenceDir, "latest-contapro-sidecar-import.json");
-const tauriDesktopEvidencePath = resolve(evidenceDir, "latest-tauri-desktop-e2e.json");
-let resolvedEdgeDriverPath = "";
-try {
-  resolvedEdgeDriverPath = await downloadEdgeDriver();
-} catch {
-  resolvedEdgeDriverPath = "";
-}
+const exeSuffix = process.platform === "win32" ? ".exe" : "";
+const releaseExe = resolve(root, `target/release/cumplefactura${exeSuffix}`);
+const releaseSidecar = resolve(root, `target/release/cumplefactura-sidecar${exeSuffix}`);
+const evidence = (name) => resolve(evidenceDir, `latest-${name}.json`);
+const resolvedEdgeDriverPath = await downloadEdgeDriver().catch(() => "");
 
-function localCommandCandidates(command) {
-  const home = process.env.USERPROFILE ?? process.env.HOME ?? "";
-  const candidates = [];
-  if (command === "tauri-driver.exe" && home) {
-    candidates.push(resolve(home, ".cargo/bin/tauri-driver.exe"));
-  }
-  if (command === "chromedriver.exe") {
-    candidates.push(resolve(root, "node_modules/.bin/chromedriver.cmd"));
-    candidates.push(resolve(root, "node_modules/chromedriver/lib/chromedriver/chromedriver.exe"));
-  }
-  if (command === "msedgedriver.exe") {
-    candidates.push(resolve(root, "node_modules/.bin/msedgedriver.cmd"));
-    candidates.push(resolve(root, "node_modules/msedgedriver/bin/msedgedriver.exe"));
-    if (resolvedEdgeDriverPath) candidates.push(resolvedEdgeDriverPath);
-  }
-  return candidates;
-}
-
-function commandExists(command) {
-  const result = spawnSync("where.exe", [command], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const localPaths = localCommandCandidates(command).filter((path) => existsSync(path));
-  const pathHits = result.status === 0
-    ? result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
-    : [];
-  const paths = [...new Set([...pathHits, ...localPaths])];
-  return {
-    ok: paths.length > 0,
-    paths,
-  };
-}
-
-function envSet(name) {
-  const value = process.env[name];
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-function envEnabled(name) {
-  return ["1", "true", "yes", "on"].includes((process.env[name] ?? "").trim().toLowerCase());
-}
-
-function readJson(path) {
-  try {
-    return JSON.parse(readFileSync(path, "utf8"));
-  } catch {
-    return null;
-  }
-}
-
-function pathInfo(path) {
-  if (!path || !existsSync(path)) {
-    return { exists: false };
-  }
-  const stat = statSync(path);
-  return { exists: true, is_file: stat.isFile(), is_dir: stat.isDirectory(), bytes: stat.size };
-}
-
-function blocker(id, detail) {
-  return { id, detail };
-}
+const envEnabled = (name) => ["1", "true", "yes", "on"].includes((process.env[name] ?? "").trim().toLowerCase());
+const envSet = (name) => Boolean((process.env[name] ?? "").trim());
 
 function section(id, title, checks) {
-  const blockers = checks.filter((check) => check.required && !check.ok).map((check) => blocker(check.id, check.detail));
-  const warnings = checks.filter((check) => !check.required && !check.ok).map((check) => blocker(check.id, check.detail));
-  return {
-    id,
-    title,
-    status: blockers.length === 0 ? "ready" : "blocked",
-    checks,
-    blockers,
-    warnings,
-  };
+  const toEntry = (check) => ({ id: check.id, detail: check.detail });
+  const blockers = checks.filter((check) => check.required && !check.ok).map(toEntry);
+  const warnings = checks.filter((check) => !check.required && !check.ok).map(toEntry);
+  return { id, title, status: blockers.length === 0 ? "ready" : "blocked", checks, blockers, warnings };
 }
 
-const tauriDriver = commandExists("tauri-driver.exe");
-const msedgeDriver = commandExists("msedgedriver.exe");
-const chromeDriver = commandExists("chromedriver.exe");
-const tauriExe = resolve(root, "target/release/cumplefactura.exe");
+const tauriDriver = commandExists("tauri-driver.exe", windowsDriverCandidates("tauri-driver.exe"));
+const msedgeDriver = commandExists("msedgedriver.exe", windowsDriverCandidates("msedgedriver.exe", resolvedEdgeDriverPath));
+const tauriDesktopEvidence = readJson(evidence("tauri-desktop-e2e"));
+const sidecarSmoke = readJson(evidence("sidecar-smoke"));
+const externalAcceptance = readJson(evidence("external-acceptance-evidence"));
 
-const sidecarGatePath = resolve(sidecarRoot, "tests/regulatory/evidence/latest-regulatory-gate.json");
-const sidecarLedgerPath = resolve(sidecarRoot, "tests/regulatory/evidence/latest-evidence-ledger.json");
-const sidecarGate = readJson(sidecarGatePath);
-const sidecarLedger = readJson(sidecarLedgerPath);
-const tauriDesktopEvidence = readJson(tauriDesktopEvidencePath);
-const contaproImport = readJson(contaproImportPath);
-
+// Certificado: misma regla que el sidecar (vault://certs/<id>, id [A-Za-z0-9_-]).
 const certRef = process.env.CUMPLEFACTURA_EXTERNAL_CERT_REF ?? "";
-const certRefValid = /^vault:\/\/certs\/[A-Za-z0-9_.-]+$/.test(certRef);
-const certId = certRefValid ? certRef.replace("vault://certs/", "") : "";
-const vaultDir = process.env.SIDECAR_CERT_VAULT_DIR ?? "";
+const certId = /^vault:\/\/certs\/[A-Za-z0-9_-]+$/.test(certRef) ? certRef.slice("vault://certs/".length) : "";
+const vaultDir = process.env.CUMPLEFACTURA_CERT_VAULT_DIR ?? "";
 const vaultInfo = pathInfo(vaultDir);
-const candidateCertPaths = certId && vaultInfo.exists
-  ? [resolve(vaultDir, `${certId}.p12`), resolve(vaultDir, `${certId}.pfx`)]
-  : [];
-const certFileExists = candidateCertPaths.some((path) => existsSync(path));
-const certPasswordEnv = certId ? `SIDECAR_CERT_PASSWORD_${certId.toUpperCase().replace(/[^A-Z0-9]/g, "_")}` : "";
-
-const externalAcceptance = readJson(externalAcceptancePath);
-const externalAcceptanceAccepted =
-  externalAcceptance?.validation_status === "passed" &&
-  externalAcceptance?.status === "accepted" &&
-  externalAcceptance?.provider === "AEAT_VERIFACTU";
-const legacyAcceptanceEvidencePath = process.env.CUMPLEFACTURA_AEAT_ACCEPTANCE_EVIDENCE_PATH ?? "";
-const legacyAcceptanceEvidence = pathInfo(legacyAcceptanceEvidencePath);
+const certFileExists =
+  Boolean(certId && vaultInfo.is_dir) &&
+  ["p12", "pfx"].some((extension) => existsSync(resolve(vaultDir, `${certId}.${extension}`)));
+const certPasswordEnv = certId ? `CUMPLEFACTURA_CERT_PASSWORD_${certId.toUpperCase().replace(/[^A-Z0-9]/g, "_")}` : "";
 
 const sections = [
   section("tauri_desktop_e2e", "Tauri desktop E2E", [
     {
       id: "tauri_release_exe_exists",
-      ok: pathInfo(tauriExe).exists,
+      ok: pathInfo(releaseExe).exists,
       required: true,
       detail: "Release executable must exist before desktop E2E can run.",
-      evidence: tauriExe,
+      evidence: releaseExe,
     },
     {
       id: "tauri_driver_available",
@@ -148,68 +61,45 @@ const sections = [
       ok: msedgeDriver.ok,
       required: true,
       detail: "Microsoft Edge WebDriver is required for Windows Tauri/WebView2 desktop automation.",
-      evidence: { msedgedriver: msedgeDriver.paths, chromedriver: chromeDriver.paths },
+      evidence: msedgeDriver.paths,
     },
     {
       id: "tauri_desktop_e2e_evidence_passed",
       ok: tauriDesktopEvidence?.status === "passed",
       required: true,
       detail: "Latest Tauri desktop E2E verifier evidence must be present and passed.",
-      evidence: tauriDesktopEvidencePath,
+      evidence: evidence("tauri-desktop-e2e"),
     },
   ]),
-  section("real_xades", "Certificate-backed XAdES", [
+  section("sidecar", "VERI*FACTU sidecar", [
     {
-      id: "sidecar_workspace_exists",
-      ok: existsSync(sidecarRoot),
+      id: "sidecar_release_binary_exists",
+      ok: pathInfo(releaseSidecar).exists,
       required: true,
-      detail: "ContaPro sidecar workspace must exist.",
-      evidence: sidecarRoot,
+      detail: "cumplefactura-sidecar must be built next to the release executable (cargo build --workspace --release).",
+      evidence: releaseSidecar,
     },
     {
-      id: "sidecar_gate_passed",
-      ok: sidecarGate?.gate_status === "passed",
+      id: "sidecar_smoke_passed",
+      ok: sidecarSmoke?.status === "passed",
       required: true,
-      detail: "Sidecar regulatory gate must be green before using it for real signing.",
-      evidence: sidecarGatePath,
+      detail: "Latest sidecar smoke (handshake, HMAC, fail-closed, exit on stdin close) must have passed.",
+      evidence: evidence("sidecar-smoke"),
     },
-    {
-      id: "sidecar_ledger_passed",
-      ok: sidecarLedger?.status === "passed",
-      required: true,
-      detail: "Sidecar evidence ledger must be green before using it for real signing.",
-      evidence: sidecarLedgerPath,
-    },
-    {
-      id: "cumplefactura_real_xades_flag",
-      ok: envEnabled("CUMPLEFACTURA_ENABLE_REAL_XADES_SIDECAR"),
-      required: true,
-      detail: "CUMPLEFACTURA_ENABLE_REAL_XADES_SIDECAR must be enabled explicitly.",
-    },
-    {
-      id: "sidecar_real_xades_flag",
-      ok: envEnabled("SIDECAR_ENABLE_REAL_XADES_ENDPOINTS"),
-      required: true,
-      detail: "SIDECAR_ENABLE_REAL_XADES_ENDPOINTS must be enabled explicitly.",
-    },
-    {
-      id: "shared_secret_present",
-      ok: envSet("CUMPLEFACTURA_SIDECAR_SHARED_SECRET") || envSet("SIDECAR_SHARED_SECRET"),
-      required: true,
-      detail: "Shared HMAC secret must be provided by environment, never by prompt or file.",
-    },
+  ]),
+  section("certificate", "Certificate in local vault", [
     {
       id: "certificate_ref_valid",
-      ok: certRefValid,
+      ok: Boolean(certId),
       required: true,
-      detail: "CUMPLEFACTURA_EXTERNAL_CERT_REF must use vault://certs/<id>.",
-      evidence: certRefValid ? "vault://certs/<redacted>" : "missing_or_invalid",
+      detail: "CUMPLEFACTURA_EXTERNAL_CERT_REF must use vault://certs/<id> with [A-Za-z0-9_-].",
+      evidence: certId ? "vault://certs/<redacted>" : "missing_or_invalid",
     },
     {
       id: "vault_dir_exists",
-      ok: vaultInfo.exists && vaultInfo.is_dir,
+      ok: Boolean(vaultInfo.is_dir),
       required: true,
-      detail: "SIDECAR_CERT_VAULT_DIR must point to a mounted local vault directory.",
+      detail: "CUMPLEFACTURA_CERT_VAULT_DIR must point to the local vault directory (the app defaults to <app data>/certs).",
       evidence: vaultDir ? "<redacted path checked>" : "missing",
     },
     {
@@ -221,84 +111,34 @@ const sections = [
     },
     {
       id: "certificate_password_env_present",
-      ok: (certPasswordEnv && envSet(certPasswordEnv)) || envSet("SIDECAR_CERT_PASSWORD"),
+      ok: (certPasswordEnv && envSet(certPasswordEnv)) || envSet("CUMPLEFACTURA_CERT_PASSWORD"),
       required: true,
-      detail: "Certificate password must be supplied by SIDECAR_CERT_PASSWORD_<ID> or SIDECAR_CERT_PASSWORD.",
-      evidence: certPasswordEnv || "SIDECAR_CERT_PASSWORD",
+      detail: "Certificate password must be supplied by CUMPLEFACTURA_CERT_PASSWORD_<ID> or CUMPLEFACTURA_CERT_PASSWORD.",
+      evidence: certPasswordEnv || "CUMPLEFACTURA_CERT_PASSWORD",
     },
   ]),
   section("real_verifactu_submission", "Real VERI*FACTU submission", [
     {
-      id: "cumplefactura_invoke_flag",
-      ok: envEnabled("CUMPLEFACTURA_ENABLE_VERIFACTU_SUBMIT_SIDECAR_INVOKE"),
+      id: "sidecar_allow_aeat_flag",
+      ok: envEnabled("CUMPLEFACTURA_SIDECAR_ALLOW_AEAT"),
       required: true,
-      detail: "CUMPLEFACTURA_ENABLE_VERIFACTU_SUBMIT_SIDECAR_INVOKE must be enabled explicitly.",
-    },
-    {
-      id: "sidecar_transport_flag",
-      ok: envEnabled("SIDECAR_ENABLE_REAL_VERIFACTU_TRANSPORT"),
-      required: true,
-      detail: "SIDECAR_ENABLE_REAL_VERIFACTU_TRANSPORT must be enabled explicitly.",
-    },
-    {
-      id: "sidecar_soap_flag",
-      ok: envEnabled("SIDECAR_ENABLE_REAL_VERIFACTU_SOAP_CALLS"),
-      required: true,
-      detail: "SIDECAR_ENABLE_REAL_VERIFACTU_SOAP_CALLS must be enabled explicitly.",
+      detail: "CUMPLEFACTURA_SIDECAR_ALLOW_AEAT=1 makes the app start the sidecar with --allow-aeat.",
     },
     {
       id: "aeat_acceptance_evidence_validated",
-      ok: externalAcceptanceAccepted,
+      ok:
+        externalAcceptance?.validation_status === "passed" &&
+        externalAcceptance?.status === "accepted" &&
+        externalAcceptance?.provider === "AEAT_VERIFACTU",
       required: true,
-      detail: "External AEAT VERI*FACTU acceptance/homologation must be recorded through the validated redacted manifest intake.",
-      evidence: {
-        latest_external_acceptance: externalAcceptancePath,
-        latest_status: externalAcceptance?.status ?? "missing",
-        legacy_path_present: legacyAcceptanceEvidence.exists && legacyAcceptanceEvidence.is_file,
-      },
-    },
-  ]),
-  section("imported_sidecar_channels", "Imported ContaPro sidecar channels", [
-    {
-      id: "contapro_import_passed",
-      ok: contaproImport?.import_status === "passed",
-      required: true,
-      detail: "ContaPro sidecar readiness evidence must be imported locally.",
-      evidence: contaproImportPath,
-    },
-    {
-      id: "contapro_import_no_external_call",
-      ok: contaproImport?.external_call_performed_by_importer === false,
-      required: true,
-      detail: "Import must not perform AEAT/SII/FACe/foral network calls.",
-    },
-    {
-      id: "contapro_verifactu_imported",
-      ok: contaproImport?.channels?.some((item) => item.id === "verifactu"),
-      required: true,
-      detail: "VERI*FACTU sidecar channel status must be present.",
-    },
-    {
-      id: "contapro_sii_imported",
-      ok: contaproImport?.channels?.some((item) => item.id === "sii"),
-      required: true,
-      detail: "SII sidecar channel status must be present.",
-    },
-    {
-      id: "contapro_ticketbai_imported",
-      ok: contaproImport?.channels?.some((item) => item.id === "ticketbai"),
-      required: true,
-      detail: "TicketBAI sidecar channel status must be present, even if blocked.",
+      detail: "External AEAT VERI*FACTU acceptance must be recorded through the validated redacted manifest intake.",
+      evidence: { latest_external_acceptance: evidence("external-acceptance-evidence"), latest_status: externalAcceptance?.status ?? "missing" },
     },
   ]),
 ];
 
-const blockers = sections.flatMap((item) =>
-  item.blockers.map((entry) => ({ section: item.id, ...entry })),
-);
-const warnings = sections.flatMap((item) =>
-  item.warnings.map((entry) => ({ section: item.id, ...entry })),
-);
+const blockers = sections.flatMap((item) => item.blockers.map((entry) => ({ section: item.id, ...entry })));
+const warnings = sections.flatMap((item) => item.warnings.map((entry) => ({ section: item.id, ...entry })));
 
 const result = {
   app: "CumpleFactura",
@@ -312,17 +152,15 @@ const result = {
     "No secret values are emitted.",
     "Vault paths and certificate refs are redacted in evidence.",
     "This audit performs no network call and no certificate parsing.",
-    "ContaPro sidecar import reads redacted local evidence only.",
+    "The sidecar HMAC secret is generated per session by the app and never stored, so it is not checked here.",
   ],
   limits: [
-    "Blocked is an expected safe status until real cert/vault/flags/evidence exist.",
-    "This audit proves readiness state only; it is not XAdES signing, AEAT transmission, CSV retrieval or homologation.",
-    "External acceptance is considered ready only when the manifest verifier records accepted AEAT_VERIFACTU evidence.",
-    "Imported SII/TicketBAI/FACe status is evidence visibility only; CumpleFactura still requires explicit flags/HMAC/vault before sidecar calls.",
+    "Blocked is an expected safe status until a real certificate, vault, flag and acceptance evidence exist.",
+    "This audit proves readiness state only; it is not AEAT transmission, CSV retrieval or homologation.",
+    "VERI*FACTU records are sent unsigned by design (RD 1007/2023 art. 16.3); AEAT authenticates the TLS client certificate.",
+    "Production endpoints stay blocked: the app never starts the sidecar with --allow-production in v1.",
   ],
 };
-
-writeFileSync(outputJson, `${JSON.stringify(result, null, 2)}\n`);
 
 const md = [
   "# CumpleFactura external readiness",
@@ -340,19 +178,16 @@ const md = [
   "",
   "## Blockers",
   "",
-  ...(blockers.length === 0
-    ? ["- none"]
-    : blockers.map((item) => `- ${item.section}: ${item.id} - ${item.detail}`)),
+  ...(blockers.length === 0 ? ["- none"] : blockers.map((item) => `- ${item.section}: ${item.id} - ${item.detail}`)),
   "",
   "## Limits",
   "",
   ...result.limits.map((limit) => `- ${limit}`),
-  "",
 ];
-writeFileSync(outputMd, md.join("\n"));
+const { jsonPath, mdPath } = writeEvidence("external-readiness", result, md);
 
 console.log("CumpleFactura external readiness OK");
 console.log(`Status: ${result.status}`);
 console.log(`Blockers: ${blockers.length}`);
-console.log(outputJson);
-console.log(outputMd);
+console.log(jsonPath);
+console.log(mdPath);

@@ -1,20 +1,9 @@
 // External acceptance evidence checker (manifest / not_provided safe).
-import { createHash } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { errorCollector, readJson as readJsonFile, root, sha256File, writeEvidence } from "./lib.mjs";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const evidenceDir = resolve(root, "tests/regulatory/evidence");
 const fixturePath = resolve(root, "tests/regulatory/fixtures/external-acceptance-manifest.example.json");
-const outputJson = resolve(evidenceDir, "latest-external-acceptance-evidence.json");
-const outputMd = resolve(evidenceDir, "latest-external-acceptance-evidence.md");
 const manifestEnv = "CUMPLEFACTURA_EXTERNAL_ACCEPTANCE_MANIFEST";
 const manifestPath = process.env[manifestEnv]?.trim() ?? "";
 
@@ -29,30 +18,11 @@ const providers = new Set([
 const environments = new Set(["test", "homologation", "production"]);
 const resultStatuses = new Set(["accepted", "rejected", "pending", "failed"]);
 const hashPattern = /^[a-f0-9]{64}$/i;
-const errors = [];
-const warnings = [];
-
-mkdirSync(evidenceDir, { recursive: true });
-
-function sha256(path) {
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
-}
-
-function fail(message) {
-  errors.push(message);
-}
-
-function warn(message) {
-  warnings.push(message);
-}
+const { errors, fail } = errorCollector();
+const { errors: warnings, fail: warn } = errorCollector();
 
 function readJson(path) {
-  try {
-    return JSON.parse(readFileSync(path, "utf8"));
-  } catch (error) {
-    fail(`Cannot parse manifest JSON: ${error.message}`);
-    return null;
-  }
+  return readJsonFile(path, (message) => fail(`Cannot parse manifest JSON: ${message}`));
 }
 
 function resolveFrom(baseDir, value) {
@@ -142,7 +112,7 @@ function validateEvidenceFiles(manifest, baseDir) {
       return { role, path: declaredPath, exists: true, is_file: false, sha256_matches: false };
     }
 
-    const actualHash = sha256(absolutePath);
+    const actualHash = sha256File(absolutePath);
     if (expectedHash && actualHash !== expectedHash) {
       fail(`Evidence artifact hash mismatch: ${declaredPath}`);
     }
@@ -178,7 +148,7 @@ function validateNormativeSources(manifest) {
       path,
       exists: true,
       bytes: stat.size,
-      sha256: stat.isFile() ? sha256(path) : null,
+      sha256: stat.isFile() ? sha256File(path) : null,
     };
   });
 }
@@ -253,13 +223,11 @@ function validateManifest(path) {
     response_artifact_sha256: responseArtifactSha256,
     evidence_files: evidenceFiles,
     source_normative_paths: normativeSources,
-    manifest_sha256: sha256(absoluteManifestPath),
+    manifest_sha256: sha256File(absoluteManifestPath),
   };
 }
 
 function writeResult(result, exitCode = 0) {
-  writeFileSync(outputJson, `${JSON.stringify(result, null, 2)}\n`);
-
   const md = [
     "# CumpleFactura external acceptance evidence",
     "",
@@ -281,15 +249,14 @@ function writeResult(result, exitCode = 0) {
     "## Limits",
     "",
     ...result.limits.map((limit) => `- ${limit}`),
-    "",
   ];
-  writeFileSync(outputMd, md.join("\n"));
+  const { jsonPath, mdPath } = writeEvidence("external-acceptance-evidence", result, md);
 
   console.log("CumpleFactura external acceptance evidence OK");
   console.log(`Status: ${result.status}`);
   console.log(`Validation: ${result.validation_status}`);
-  console.log(outputJson);
-  console.log(outputMd);
+  console.log(jsonPath);
+  console.log(mdPath);
 
   if (exitCode !== 0) {
     process.exit(exitCode);

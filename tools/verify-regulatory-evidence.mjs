@@ -1,56 +1,10 @@
 // Evidence matrix: regulatory evidence presence/shape for the gate.
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
+import { errorCollector, parseMatrixRows, root } from "./lib.mjs";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const matrixPath = resolve(root, "REGULATORY_EVIDENCE_MATRIX.md");
-
-const matrix = readFileSync(matrixPath, "utf8");
-const errors = [];
-
-function fail(message) {
-  errors.push(message);
-}
-
-function parseMarkdownTable(markdown) {
-  const rows = [];
-  let insideMatrix = false;
-
-  for (const rawLine of markdown.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (line === "## Matrix") {
-      insideMatrix = true;
-      continue;
-    }
-    if (insideMatrix && line.startsWith("## ")) {
-      break;
-    }
-    if (!insideMatrix || !line.startsWith("|")) {
-      continue;
-    }
-    if (/^\|\s*-+/.test(line)) {
-      continue;
-    }
-
-    const cells = line
-      .replace(/^\|/, "")
-      .replace(/\|$/, "")
-      .split("|")
-      .map((cell) => cell.trim());
-
-    if (cells.length === 4 && cells[0] !== "Promise") {
-      rows.push({
-        promise: cells[0],
-        source: cells[1],
-        evidence: cells[2],
-        limit: cells[3],
-      });
-    }
-  }
-
-  return rows;
-}
+const matrix = readFileSync(resolve(root, "REGULATORY_EVIDENCE_MATRIX.md"), "utf8");
+const { errors, fail } = errorCollector();
 
 function backtickTokens(value) {
   return [...value.matchAll(/`([^`]+)`/g)].map((match) => match[1].trim());
@@ -80,7 +34,7 @@ function hasExecutableEvidence(value) {
   return /\b(cargo test|npm run|gate step|tests?|tools\/|services::|db::|domain::)\b/i.test(value);
 }
 
-const rows = parseMarkdownTable(matrix);
+const rows = parseMatrixRows(matrix);
 
 if (rows.length < 10) {
   fail(`Matrix has too few rows (${rows.length}); expected the active promise ledger.`);

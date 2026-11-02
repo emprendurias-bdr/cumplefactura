@@ -1,13 +1,7 @@
 // Secret scan: fail gate if credentials/keys appear in tracked sources.
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, extname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const evidenceDir = resolve(root, "tests/regulatory/evidence");
-const outputJson = resolve(evidenceDir, "latest-secret-scan.json");
-const outputMd = resolve(evidenceDir, "latest-secret-scan.md");
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { basename, extname, join, relative } from "node:path";
+import { root, sha256, writeEvidence } from "./lib.mjs";
 
 const excludedDirs = new Set([
   ".git",
@@ -27,10 +21,6 @@ const contentRules = [
   { id: "env_secret_assignment", pattern: /^\s*[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PRIVATE_KEY)[A-Z0-9_]*\s*=\s*["']?(?!\s*$|changeme|example|placeholder|redacted|<redacted>|dummy)[^\s"']{8,}/im },
 ];
 
-function sha256(value) {
-  return createHash("sha256").update(value).digest("hex");
-}
-
 function isBinary(buffer) {
   return buffer.includes(0);
 }
@@ -49,8 +39,6 @@ function walk(dir, files = []) {
   }
   return files;
 }
-
-mkdirSync(evidenceDir, { recursive: true });
 
 const findings = [];
 const scanned = [];
@@ -103,8 +91,6 @@ const result = {
   ],
 };
 
-writeFileSync(outputJson, `${JSON.stringify(result, null, 2)}\n`, "utf8");
-
 const md = [
   "# CumpleFactura secret scan",
   "",
@@ -122,9 +108,8 @@ const md = [
   "## Limits",
   "",
   ...result.limits.map((limit) => `- ${limit}`),
-  "",
 ];
-writeFileSync(outputMd, md.join("\n"), "utf8");
+const { jsonPath, mdPath } = writeEvidence("secret-scan", result, md);
 
 if (findings.length > 0) {
   console.error("CumpleFactura secret scan FAILED");
@@ -135,5 +120,5 @@ if (findings.length > 0) {
 }
 
 console.log("CumpleFactura secret scan OK");
-console.log(outputJson);
-console.log(outputMd);
+console.log(jsonPath);
+console.log(mdPath);

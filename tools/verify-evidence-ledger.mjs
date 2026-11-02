@@ -1,29 +1,10 @@
 // Evidence ledger: validate latest-evidence-ledger against gate artifacts.
-import { createHash } from "node:crypto";
-import {
-  existsSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import { basename, dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { basename, resolve } from "node:path";
+import { errorCollector, evidenceDir, parseMatrixRows, readJson as readJsonFile, root, sha256File, writeEvidence } from "./lib.mjs";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const evidenceDir = resolve(root, "tests/regulatory/evidence");
 const matrixPath = resolve(root, "REGULATORY_EVIDENCE_MATRIX.md");
-const outputJson = resolve(evidenceDir, "latest-evidence-ledger.json");
-const outputMd = resolve(evidenceDir, "latest-evidence-ledger.md");
-const errors = [];
-
-function fail(message) {
-  errors.push(message);
-}
-
-function sha256(path) {
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
-}
+const { errors, fail } = errorCollector();
 
 function artifact(path, role) {
   if (!existsSync(path)) {
@@ -35,56 +16,12 @@ function artifact(path, role) {
     role,
     path,
     bytes: stat.size,
-    sha256: sha256(path),
+    sha256: sha256File(path),
   };
 }
 
-function parseMarkdownTable(markdown) {
-  const rows = [];
-  let insideMatrix = false;
-
-  for (const rawLine of markdown.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (line === "## Matrix") {
-      insideMatrix = true;
-      continue;
-    }
-    if (insideMatrix && line.startsWith("## ")) {
-      break;
-    }
-    if (!insideMatrix || !line.startsWith("|")) {
-      continue;
-    }
-    if (/^\|\s*-+/.test(line)) {
-      continue;
-    }
-
-    const cells = line
-      .replace(/^\|/, "")
-      .replace(/\|$/, "")
-      .split("|")
-      .map((cell) => cell.trim());
-
-    if (cells.length === 4 && cells[0] !== "Promise") {
-      rows.push({
-        promise: cells[0],
-        source: cells[1],
-        evidence: cells[2],
-        limit: cells[3],
-      });
-    }
-  }
-
-  return rows;
-}
-
 function readJson(path, role) {
-  try {
-    return JSON.parse(readFileSync(path, "utf8"));
-  } catch (error) {
-    fail(`Cannot parse ${role}: ${path} (${error.message})`);
-    return null;
-  }
+  return readJsonFile(path, (message) => fail(`Cannot parse ${role}: ${path} (${message})`));
 }
 
 function collectGateLogs() {
@@ -104,7 +41,7 @@ function collectGateLogs() {
 }
 
 const matrix = readFileSync(matrixPath, "utf8");
-const rows = parseMarkdownTable(matrix);
+const rows = parseMatrixRows(matrix);
 
 if (rows.length < 20) {
   fail(`Matrix has too few rows (${rows.length}); expected at least 20 active promises.`);
@@ -164,7 +101,11 @@ const repoArtifacts = [
   ["secret_scan_verifier", resolve(root, "tools/verify-secret-scan.mjs")],
   ["tauri_desktop_e2e_verifier", resolve(root, "tools/verify-tauri-desktop-e2e.mjs")],
   ["ledger_verifier", resolve(root, "tools/verify-evidence-ledger.mjs")],
-  ["contapro_sidecar_importer", resolve(root, "tools/import-contapro-sidecar-evidence.mjs")],
+  ["sidecar_smoke_verifier", resolve(root, "tools/verify-sidecar-smoke.mjs")],
+  ["sidecar_bundle_tool", resolve(root, "tools/build-sidecar.mjs")],
+  ["tools_lib", resolve(root, "tools/lib.mjs")],
+  ["fiscal_contract_lib", resolve(root, "crates/fiscal-contract/src/lib.rs")],
+  ["sidecar_architecture", resolve(root, "sidecar/ARQUITECTURA.md")],
   ["external_acceptance_verifier", resolve(root, "tools/verify-external-acceptance-evidence.mjs")],
   ["external_readiness_verifier", resolve(root, "tools/verify-external-readiness.mjs")],
   ["core_e2e_test", resolve(root, "src-tauri/src/core_e2e.rs")],
@@ -188,8 +129,8 @@ const evidenceArtifacts = [
   ["latest_tauri_desktop_e2e_md", resolve(evidenceDir, "latest-tauri-desktop-e2e.md")],
   ["latest_external_acceptance_json", resolve(evidenceDir, "latest-external-acceptance-evidence.json")],
   ["latest_external_acceptance_md", resolve(evidenceDir, "latest-external-acceptance-evidence.md")],
-  ["latest_contapro_sidecar_import_json", resolve(evidenceDir, "latest-contapro-sidecar-import.json")],
-  ["latest_contapro_sidecar_import_md", resolve(evidenceDir, "latest-contapro-sidecar-import.md")],
+  ["latest_sidecar_smoke_json", resolve(evidenceDir, "latest-sidecar-smoke.json")],
+  ["latest_sidecar_smoke_md", resolve(evidenceDir, "latest-sidecar-smoke.md")],
   ["latest_external_readiness_json", resolve(evidenceDir, "latest-external-readiness.json")],
   ["latest_external_readiness_md", resolve(evidenceDir, "latest-external-readiness.md")],
 ];
@@ -218,7 +159,7 @@ for (const [key, expected] of [
   ["csv_export_created", true],
   ["audit_export_created", true],
   ["fiscal_chain_valid", true],
-  ["signature_status", "pending_xades"],
+  ["submission_mode", "verifactu_unsigned_mtls"],
   ["transmission_status", "not_submitted"],
 ]) {
   if (coreE2e?.checks?.[key] !== expected) {
@@ -250,7 +191,7 @@ if (!["preflight", "real"].includes(tauriDesktop?.mode)) {
   fail("Tauri desktop E2E evidence must record preflight or real mode.");
 }
 if (tauriDesktop?.mode === "real") {
-  for (const requiredCheck of ["webdriver_session_created", "real_rust_commands_executed", "verifactu_xml_exported", "submission_prepared"]) {
+  for (const requiredCheck of ["webdriver_session_created", "real_rust_commands_executed", "verifactu_xml_exported", "sidecar_preflight_executed"]) {
     if (tauriDesktop?.checks?.[requiredCheck] !== true) {
       fail(`Tauri desktop real E2E check ${requiredCheck} must be true.`);
     }
@@ -276,17 +217,12 @@ if (externalAcceptance?.external_call_performed_by_verifier !== false) {
   fail("External acceptance verifier must not perform external calls.");
 }
 
-const contaproImport = readJson(resolve(evidenceDir, "latest-contapro-sidecar-import.json"), "ContaPro sidecar import evidence");
-if (contaproImport?.import_status !== "passed") {
-  fail("ContaPro sidecar import evidence is not passed.");
+const sidecarSmoke = readJson(resolve(evidenceDir, "latest-sidecar-smoke.json"), "sidecar smoke evidence");
+if (sidecarSmoke?.status !== "passed") {
+  fail("Sidecar smoke evidence is not passed.");
 }
-if (contaproImport?.external_call_performed_by_importer !== false) {
-  fail("ContaPro sidecar import must not perform external calls.");
-}
-for (const requiredChannel of ["verifactu", "sii", "face", "ticketbai"]) {
-  if (!contaproImport?.channels?.some((item) => item.id === requiredChannel)) {
-    fail(`ContaPro sidecar import missing channel: ${requiredChannel}`);
-  }
+if (sidecarSmoke?.external_call_performed !== false) {
+  fail("Sidecar smoke must not perform external calls.");
 }
 
 const ledger = {
@@ -302,7 +238,8 @@ const ledger = {
     "Generated XML/PDF/JSON/PNG evidence artifacts are hashed.",
     "External acceptance manifests are represented by redacted hashes only and are hashed when present.",
     "Secret scan evidence reports only rule ids and paths, never matched values.",
-    "Desktop Tauri E2E evidence records preflight or real mode explicitly; real mode must prove WebDriver session, Rust command flow, XML export and submission preparation.",
+    "Desktop Tauri E2E evidence records preflight or real mode explicitly; real mode must prove WebDriver session, Rust command flow, XML export and a sidecar preflight.",
+    "Sidecar smoke evidence must prove handshake, HMAC rejection, fail-closed submit and exit on stdin close, without external calls.",
     "During a running gate, latest-regulatory-gate.* is written after the ledger; the current run is represented by per-step logs.",
     "Ledger proves local traceability, not external AEAT acceptance or legal sufficiency.",
   ],
@@ -335,13 +272,12 @@ const ledger = {
     "No artifact hash is a legal certification.",
     "No AEAT network transmission, CSV retrieval or external acceptance is performed by this ledger.",
     "External acceptance intake stores and hashes a redacted manifest only; without a supplied manifest it records not_provided.",
-    "Certificate-backed XAdES remains pending unless sidecar runs with a real authorized certificate.",
+    "VERI*FACTU records are unsigned by design (RD 1007/2023 art. 16.3); real mTLS submission needs a certificate and CUMPLEFACTURA_SIDECAR_ALLOW_AEAT=1.",
     "Desktop Tauri standalone default is preflight; regulatory gate enables real WebDriver mode.",
   ],
 };
 
 ledger.status = errors.length === 0 ? "passed" : "failed";
-writeFileSync(outputJson, `${JSON.stringify(ledger, null, 2)}\n`);
 
 const md = [
   "# CumpleFactura evidence ledger",
@@ -374,7 +310,7 @@ for (const group of Object.values(ledger.artifacts)) {
   }
 }
 
-writeFileSync(outputMd, `${md.join("\n")}\n`);
+const { jsonPath, mdPath } = writeEvidence("evidence-ledger", ledger, md);
 
 if (errors.length > 0) {
   console.error("Evidence ledger FAILED");
@@ -387,5 +323,5 @@ if (errors.length > 0) {
 console.log("Evidence ledger OK");
 console.log(`Rows: ${rows.length}`);
 console.log(`Gate logs: ${gateLogs.length}`);
-console.log(outputJson);
-console.log(outputMd);
+console.log(jsonPath);
+console.log(mdPath);

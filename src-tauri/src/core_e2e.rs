@@ -5,7 +5,7 @@ use crate::domain::invoice::{
     Invoice, InvoiceDraftInput, InvoiceIssueInput, InvoiceKind, InvoiceLineInput,
 };
 use crate::domain::tax::TerritoryFlag;
-use crate::services::{audit::AuditEvent, export, fiscal_chain, pdf, submission, verifactu};
+use crate::services::{audit::AuditEvent, export, fiscal_chain, pdf, verifactu, verifactu_submit};
 use rusqlite::Connection;
 use serde_json::json;
 use std::fs;
@@ -204,23 +204,17 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
     )
     .expect("Fiscal audit export");
 
-    let mut package = submission::prepare_unsigned_verifactu_package(
-        issued.id.clone(),
-        "pending".to_string(),
-        xml_path.to_str().expect("xml utf8").to_string(),
-    )
-    .expect("signature package");
-    let export_id = db::insert_fiscal_export(
+    let xml_export = verifactu_submit::record_xml_export(
         &conn,
         &issued.id,
-        &package.provider,
-        &package.environment,
-        &package.payload_version,
-        &package.xml_sha256,
-        "prepared_for_signature",
+        xml_path.to_str().expect("xml utf8"),
     )
     .expect("fiscal export");
-    package.export_id = export_id.clone();
+    let export_id = xml_export.export_id.clone();
+    assert!(
+        db::fiscal_export_matches(&conn, &export_id, &issued.id, &xml_export.xml_sha256)
+            .expect("export lookup")
+    );
 
     let chain = fiscal_chain::verify(&conn).expect("fiscal chain");
     assert!(chain.valid);
@@ -232,9 +226,10 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
     assert!(json_path.exists());
     assert!(csv_path.exists());
     assert!(audit_export_path.exists());
-    assert!(package.xml_bytes > 1000);
-    assert_eq!(package.signature_status, "pending_xades");
-    assert_eq!(package.transmission_status, "not_submitted");
+    assert!(xml_export.xml_bytes > 1000);
+    assert!(!fs::read_to_string(&xml_path)
+        .expect("xml")
+        .contains("Signature"));
     assert_eq!(db::list_companies(&conn).expect("companies").len(), 1);
     assert_eq!(db::list_customers(&conn).expect("customers").len(), 1);
     assert_eq!(db::list_invoices(&conn).expect("invoices").len(), 2);
@@ -258,7 +253,7 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
             "status": "passed",
             "generated_at": chrono::Utc::now().to_rfc3339(),
             "source_workspace": "C:\\03 LEGISLACION",
-            "flow": "SQLite real -> company/customer -> draft -> reserved sequence -> issued invoice -> AEAT hash -> audit/fiscal chain -> VERI*FACTU XML XSD -> PDF/JSON/CSV/audit export -> prepared_for_signature export",
+            "flow": "SQLite real -> company/customer -> draft -> reserved sequence -> issued invoice -> AEAT hash -> audit/fiscal chain -> VERI*FACTU XML XSD -> PDF/JSON/CSV/audit export -> xml_exported (unsigned VERI*FACTU, ready for sidecar)",
             "checks": {
                 "sqlite_real": true,
                 "company_customer_persisted": true,
@@ -274,8 +269,9 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
                 "audit_export_created": true,
                 "invoice_series_preview": series_config.preview,
                 "next_number_preview": db::next_invoice_number_preview(&conn, &company.id, 2026, &series_config.resolved_series).expect("next preview"),
-                "signature_status": package.signature_status,
-                "transmission_status": package.transmission_status,
+                "submission_mode": "verifactu_unsigned_mtls",
+                "transmission_status": "not_submitted",
+                "xml_sha256": xml_export.xml_sha256,
                 "fiscal_export_id": export_id
             },
             "artifacts": {
@@ -288,7 +284,8 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
             "limits": [
                 "Core E2E uses in-memory SQLite and local files.",
                 "It exercises Rust domain/db/services, not the Tauri window event loop.",
-                "It does not perform XAdES signing, SOAP AEAT transport, certificate use, AEAT CSV retrieval or external acceptance."
+                "It does not start the sidecar, use a certificate, call AEAT, retrieve a CSV or prove external acceptance.",
+                "VERI*FACTU records are unsigned by design (RD 1007/2023 art. 16.3); AEAT authenticates the TLS client certificate."
             ]
         });
         fs::write(

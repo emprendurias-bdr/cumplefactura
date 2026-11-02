@@ -17,11 +17,20 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use tauri::Manager;
 
 pub struct AppState {
     pub conn: Mutex<Connection>,
+}
+
+impl AppState {
+    /// Conexión SQLite compartida por los comandos Tauri.
+    pub fn lock(&self) -> Result<MutexGuard<'_, Connection>, String> {
+        self.conn
+            .lock()
+            .map_err(|_| "database lock poisoned".to_string())
+    }
 }
 
 pub struct Migration {
@@ -72,6 +81,11 @@ pub fn migrations() -> Vec<Migration> {
             name: "products_catalog",
             sql: include_str!("migrations/008_products_catalog.sql"),
         },
+        Migration {
+            version: 9,
+            name: "verifactu_submissions",
+            sql: include_str!("migrations/009_verifactu_submissions.sql"),
+        },
     ]
 }
 
@@ -118,6 +132,7 @@ pub fn update_app_settings(
             .filter(|value| !value.is_empty()),
         default_territory_flags: input.default_territory_flags,
         onboarding_completed: input.onboarding_completed,
+        verifactu_endpoint_name: input.verifactu_endpoint_name,
         updated_at: chrono::Utc::now().to_rfc3339(),
     };
     let value =
@@ -1124,6 +1139,71 @@ pub fn insert_fiscal_export(
     Ok(id)
 }
 
+/// `true` si `export_id` es una exportación XML de `invoice_id` con ese hash.
+pub fn fiscal_export_matches(
+    conn: &Connection,
+    export_id: &str,
+    invoice_id: &str,
+    payload_hash: &str,
+) -> Result<bool, String> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM fiscal_exports
+         WHERE id = ?1 AND invoice_id = ?2 AND upper(payload_hash) = upper(?3) AND status = 'xml_exported'",
+        params![export_id, invoice_id, payload_hash],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(|count| count == 1)
+    .map_err(db_error)
+}
+
+/// `true` si la AEAT ya aceptó un XML con este hash.
+pub fn verifactu_xml_already_accepted(conn: &Connection, xml_sha256: &str) -> Result<bool, String> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM verifactu_submissions
+         WHERE upper(xml_sha256) = upper(?1) AND status IN ('accepted', 'accepted_with_errors')",
+        params![xml_sha256],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(|count| count > 0)
+    .map_err(db_error)
+}
+
+/// Respuesta AEAT a guardar como evidencia del envío.
+pub struct VerifactuSubmissionRecord<'a> {
+    pub invoice_id: &'a str,
+    pub fiscal_export_id: &'a str,
+    pub response: &'a fiscal_contract::messages::InvokeSubmitResponse,
+}
+
+pub fn insert_verifactu_submission(
+    conn: &Connection,
+    record: VerifactuSubmissionRecord,
+) -> Result<String, String> {
+    let id = uuid::Uuid::new_v4().to_string();
+    let response = record.response;
+    conn.execute(
+        "INSERT INTO verifactu_submissions (id, invoice_id, fiscal_export_id, endpoint_name, xml_sha256, status, csv, estado_envio, estado_registro, codigo_error, descripcion_error, tiempo_espera_envio_seconds, submitted_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+        params![
+            id,
+            record.invoice_id,
+            record.fiscal_export_id,
+            response.endpoint_name,
+            response.xml_sha256,
+            response.status,
+            response.csv,
+            response.estado_envio,
+            response.estado_registro,
+            response.codigo_error,
+            response.descripcion_error,
+            response.tiempo_espera_envio_seconds.map(|value| value as i64),
+            chrono::Utc::now().to_rfc3339(),
+        ],
+    )
+    .map_err(db_error)?;
+    Ok(id)
+}
+
 pub fn backup_database(conn: &Connection, target_path: &str) -> Result<(), String> {
     let path = PathBuf::from(target_path);
     if path.exists() {
@@ -1891,6 +1971,7 @@ mod tests {
 
         let defaults = get_app_settings(&conn).expect("default settings");
         assert!(!defaults.onboarding_completed);
+        assert_eq!(defaults.verifactu_endpoint_name, "SistemaVerifactuPruebas");
         assert_eq!(
             defaults.default_territory_flags,
             vec!["CommonTerritory", "VeriFactu"]
@@ -1905,6 +1986,7 @@ mod tests {
                     "VeriFactu".to_string(),
                 ],
                 onboarding_completed: true,
+                verifactu_endpoint_name: "SistemaVerifactuSelloPruebas".to_string(),
             },
         )
         .expect("save settings");
@@ -1919,6 +2001,23 @@ mod tests {
             loaded.default_territory_flags,
             saved.default_territory_flags
         );
+        assert_eq!(
+            loaded.verifactu_endpoint_name,
+            "SistemaVerifactuSelloPruebas"
+        );
+
+        let legacy: AppSettings = serde_json::from_str(
+            r#"{"export_dir":null,"default_territory_flags":["VeriFactu"],"onboarding_completed":true,"updated_at":"x"}"#,
+        )
+        .expect("settings saved before the endpoint field still load");
+        assert_eq!(legacy.verifactu_endpoint_name, "SistemaVerifactuPruebas");
+        let invalid = AppSettingsInput {
+            export_dir: None,
+            default_territory_flags: vec!["VeriFactu".to_string()],
+            onboarding_completed: true,
+            verifactu_endpoint_name: "https://otro.example".to_string(),
+        };
+        assert!(update_app_settings(&conn, invalid).is_err());
     }
 
     #[test]
@@ -2315,7 +2414,7 @@ mod tests {
     }
 
     #[test]
-    fn fiscal_export_records_prepared_signature_package() {
+    fn fiscal_export_and_aeat_submission_are_recorded_once() {
         let mut conn = memory_conn();
         let company = company();
         let customer = customer();
@@ -2343,25 +2442,62 @@ mod tests {
         )
         .expect("issued");
 
+        let hash = "A".repeat(64);
         let export_id = insert_fiscal_export(
             &conn,
             &issued.id,
             "AEAT-VERIFACTU",
-            "local-dev",
-            "verifactu-unsigned-v1",
-            &"A".repeat(64),
-            "prepared_for_signature",
+            "local",
+            "verifactu-xml-v1",
+            &hash,
+            "xml_exported",
         )
         .expect("fiscal export");
+        assert!(
+            fiscal_export_matches(&conn, &export_id, &issued.id, &hash.to_lowercase()).unwrap()
+        );
+        assert!(!fiscal_export_matches(&conn, &export_id, &issued.id, &"B".repeat(64)).unwrap());
+        assert!(!fiscal_export_matches(&conn, &export_id, "otra", &hash).unwrap());
 
-        let status: String = conn
-            .query_row(
-                "SELECT status FROM fiscal_exports WHERE id = ?1",
-                params![export_id],
-                |row| row.get(0),
-            )
-            .expect("export status");
-        assert_eq!(status, "prepared_for_signature");
+        let mut response = fiscal_contract::messages::InvokeSubmitResponse {
+            xml_sha256: hash.clone(),
+            endpoint_name: "SistemaVerifactuPruebas".to_string(),
+            operation: "RegFactuSistemaFacturacion".to_string(),
+            status: "rejected".to_string(),
+            http_status: Some(200),
+            csv: None,
+            estado_envio: Some("Incorrecto".to_string()),
+            estado_registro: Some("Incorrecto".to_string()),
+            codigo_error: Some("1100".to_string()),
+            descripcion_error: None,
+            tiempo_espera_envio_seconds: Some(60),
+            soap_fault: None,
+            external_call_performed: true,
+        };
+        fn record<'a>(
+            invoice_id: &'a str,
+            fiscal_export_id: &'a str,
+            response: &'a fiscal_contract::messages::InvokeSubmitResponse,
+        ) -> VerifactuSubmissionRecord<'a> {
+            VerifactuSubmissionRecord {
+                invoice_id,
+                fiscal_export_id,
+                response,
+            }
+        }
+        insert_verifactu_submission(&conn, record(&issued.id, &export_id, &response))
+            .expect("rejected recorded");
+        assert!(!verifactu_xml_already_accepted(&conn, &hash).unwrap());
+
+        response.status = "accepted".to_string();
+        response.csv = Some("A-CSV".to_string());
+        insert_verifactu_submission(&conn, record(&issued.id, &export_id, &response))
+            .expect("accepted recorded");
+        assert!(verifactu_xml_already_accepted(&conn, &hash.to_lowercase()).unwrap());
+        assert!(
+            insert_verifactu_submission(&conn, record(&issued.id, &export_id, &response)).is_err(),
+            "a second acceptance of the same XML must be refused by the unique index"
+        );
     }
 
     #[test]

@@ -1,5 +1,6 @@
 //! Catálogo producto/servicio (SKU, precios, IVA/IRPF/dto).
 
+use super::require;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -95,13 +96,5 @@ fn validate_rate(field: &str, value: i64) -> Result<(), String> {
         Ok(())
     } else {
         Err(format!("{field} must be between 0 and 10000"))
-    }
-}
-
-fn require(field: &str, value: &str) -> Result<(), String> {
-    if value.trim().is_empty() {
-        Err(format!("{field} is required"))
-    } else {
-        Ok(())
     }
 }

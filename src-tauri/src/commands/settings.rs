@@ -9,10 +9,7 @@ use tauri::State;
 /// Lee settings (export dir, flags fiscales, onboarding).
 #[tauri::command]
 pub fn app_settings_get(state: State<'_, AppState>) -> Result<AppSettings, String> {
-    let conn = state
-        .conn
-        .lock()
-        .map_err(|_| "database lock poisoned".to_string())?;
+    let conn = state.lock()?;
     db::get_app_settings(&conn)
 }
 
@@ -26,9 +23,6 @@ pub fn app_settings_update(
         fs::create_dir_all(Path::new(path))
             .map_err(|err| format!("cannot create export dir: {err}"))?;
     }
-    let conn = state
-        .conn
-        .lock()
-        .map_err(|_| "database lock poisoned".to_string())?;
+    let conn = state.lock()?;
     db::update_app_settings(&conn, input)
 }

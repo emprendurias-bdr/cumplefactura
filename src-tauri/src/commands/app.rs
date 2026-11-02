@@ -14,7 +14,6 @@ pub struct AppDefaults {
     pub default_pdf_path: String,
     pub default_verifactu_xml_path: String,
     pub default_cancel_xml_path: String,
-    pub default_signed_xml_path: String,
     pub default_json_export_path: String,
     pub default_csv_export_path: String,
     pub default_audit_export_path: String,
@@ -47,9 +46,6 @@ pub fn app_defaults_get(app: AppHandle) -> Result<AppDefaults, String> {
         ),
         default_cancel_xml_path: path_string(
             export_dir.join(format!("cumplefactura-verifactu-anulacion-{stamp}.xml")),
-        ),
-        default_signed_xml_path: path_string(
-            export_dir.join(format!("cumplefactura-verifactu-firmado-{stamp}.xml")),
         ),
         default_json_export_path: path_string(
             export_dir.join(format!("cumplefactura-factura-{stamp}.json")),

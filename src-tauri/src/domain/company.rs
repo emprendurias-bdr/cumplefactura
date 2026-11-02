@@ -1,5 +1,6 @@
 //! Empresa emisora y series de numeración (resolución de código / preview).
 
+use super::require;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -195,12 +196,4 @@ pub fn format_invoice_number(
 ) -> String {
     let width = usize::try_from(padding).unwrap_or(1);
     format!("{resolved_series}{separator}{number:0width$}")
-}
-
-fn require(field: &str, value: &str) -> Result<(), String> {
-    if value.trim().is_empty() {
-        Err(format!("{field} is required"))
-    } else {
-        Ok(())
-    }
 }

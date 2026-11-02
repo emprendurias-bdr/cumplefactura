@@ -2,6 +2,7 @@
 
 use crate::db::{self, AppState, InvoiceListFilters, InvoiceSummary, ListPagination};
 use crate::domain::invoice::{Invoice, InvoiceDraftInput, InvoiceIssueInput, IssuedInvoice};
+use crate::domain::require;
 use crate::services::audit::AuditEvent;
 use crate::services::pdf;
 use crate::services::verifactu;
@@ -24,10 +25,7 @@ pub fn invoice_draft_create(
     input: InvoiceDraftInput,
 ) -> Result<Invoice, String> {
     let invoice = Invoice::draft(input)?;
-    let mut conn = state
-        .conn
-        .lock()
-        .map_err(|_| "database lock poisoned".to_string())?;
+    let mut conn = state.lock()?;
     db::insert_invoice_draft(&mut conn, &invoice)?;
     Ok(invoice)
 }
@@ -38,22 +36,15 @@ pub fn invoice_issue(
     state: State<'_, AppState>,
     input: InvoiceIssueInput,
 ) -> Result<IssuedInvoice, String> {
-    let mut conn = state
-        .conn
-        .lock()
-        .map_err(|_| "database lock poisoned".to_string())?;
+    let mut conn = state.lock()?;
     let previous_hash = match input.previous_audit_hash.clone() {
         Some(hash) => Some(hash),
         None => db::latest_audit_hash(&conn)?,
     };
     let actor = input.actor.clone();
     let mut issue_input = input;
-    if issue_input.actor.trim().is_empty() {
-        return Err("actor is required".to_string());
-    }
-    if issue_input.issued_at.trim().is_empty() {
-        return Err("issued_at is required".to_string());
-    }
+    require("actor", &issue_input.actor)?;
+    require("issued_at", &issue_input.issued_at)?;
     Invoice::draft(issue_input.draft.clone())?;
     let number = db::reserve_invoice_number(
         &mut conn,
@@ -125,16 +116,9 @@ pub fn invoice_next_number_preview(
     fiscal_year: i32,
     series: String,
 ) -> Result<NextNumberPreview, String> {
-    if company_id.trim().is_empty() {
-        return Err("company_id is required".to_string());
-    }
-    if series.trim().is_empty() {
-        return Err("series is required".to_string());
-    }
-    let conn = state
-        .conn
-        .lock()
-        .map_err(|_| "database lock poisoned".to_string())?;
+    require("company_id", &company_id)?;
+    require("series", &series)?;
+    let conn = state.lock()?;
     let next_number = db::next_invoice_number_preview(&conn, &company_id, fiscal_year, &series)?;
     Ok(NextNumberPreview {
         company_id,
@@ -152,10 +136,7 @@ pub fn invoice_list(
     filters: Option<InvoiceListFilters>,
     pagination: Option<ListPagination>,
 ) -> Result<Vec<InvoiceSummary>, String> {
-    let conn = state
-        .conn
-        .lock()
-        .map_err(|_| "database lock poisoned".to_string())?;
+    let conn = state.lock()?;
     db::list_invoices_filtered_paginated(
         &conn,
         filters.unwrap_or_default(),
@@ -169,16 +150,9 @@ pub fn invoice_export_pdf(
     invoice_id: String,
     target_path: String,
 ) -> Result<String, String> {
-    if invoice_id.trim().is_empty() {
-        return Err("invoice_id is required".to_string());
-    }
-    if target_path.trim().is_empty() {
-        return Err("target_path is required".to_string());
-    }
-    let conn = state
-        .conn
-        .lock()
-        .map_err(|_| "database lock poisoned".to_string())?;
+    require("invoice_id", &invoice_id)?;
+    require("target_path", &target_path)?;
+    let conn = state.lock()?;
     let invoice = db::invoice_pdf_data(&conn, &invoice_id)?;
     pdf::write_invoice_pdf(&target_path, &invoice)?;
     Ok(target_path)

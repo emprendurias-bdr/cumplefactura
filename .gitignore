@@ -28,3 +28,5 @@ __pycache__/
 
 # Binarios del sidecar copiados por tools/build-sidecar.mjs para Tauri externalBin
 src-tauri/binaries/
+# Esquema ACL que Tauri genera al compilar en Linux (el repo versiona el de Windows)
+src-tauri/gen/schemas/linux-schema.json

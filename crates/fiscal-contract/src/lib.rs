@@ -66,7 +66,7 @@ pub fn to_hex(bytes: &[u8]) -> String {
 
 /// Decodifica hexadecimal (mayúsculas o minúsculas). `None` si no es válido.
 pub fn from_hex(text: &str) -> Option<Vec<u8>> {
-    if text.len() % 2 != 0 {
+    if !text.len().is_multiple_of(2) {
         return None;
     }
     (0..text.len())

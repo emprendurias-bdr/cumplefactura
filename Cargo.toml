@@ -6,7 +6,7 @@
 #
 # Un solo Cargo.lock y un solo target/ en la raiz.
 [workspace]
-members = ["src-tauri", "crates/fiscal-contract"]
+members = ["src-tauri", "sidecar", "crates/fiscal-contract"]
 resolver = "2"
 
 [workspace.package]

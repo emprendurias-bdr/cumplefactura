@@ -25,3 +25,6 @@ __pycache__/
 .remember/
 .DS_Store
 ._*
+
+# Binarios del sidecar copiados por tools/build-sidecar.mjs para Tauri externalBin
+src-tauri/binaries/

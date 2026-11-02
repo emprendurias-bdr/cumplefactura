@@ -462,7 +462,7 @@ fn allowed_submit_invoke_url(value: &str) -> bool {
 
 fn sha256_file(path: &Path) -> Result<String, String> {
     let bytes = fs::read(path).map_err(|err| format!("submit XML read error: {err}"))?;
-    Ok(hex::encode(Sha256::digest(&bytes)).to_uppercase())
+    Ok(fiscal_contract::to_hex(&Sha256::digest(&bytes)).to_uppercase())
 }
 
 #[derive(Serialize)]
@@ -680,7 +680,7 @@ mod tests {
             let expected = hmac_sha256_hex(b"test-secret", body).expect("hmac");
             let parsed: serde_json::Value = serde_json::from_slice(body).expect("json");
             let xml = parsed["xml_firmado"].as_str().expect("xml");
-            let xml_hash = hex::encode(Sha256::digest(xml.as_bytes()));
+            let xml_hash = fiscal_contract::to_hex(&Sha256::digest(xml.as_bytes()));
             let signature_ok = headers.contains("POST /verifactu/invoke-submit HTTP/1.1")
                 && headers.contains(&format!("x-signature: {expected}"))
                 && xml.contains("<Signature>ok</Signature>")

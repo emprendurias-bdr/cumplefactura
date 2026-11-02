@@ -96,9 +96,9 @@ Incluido:
 - Smoke E2E de navegador `npm run validate:browser-smoke`, integrado en el gate; usa mock Tauri local y genera `latest-browser-smoke.json/png`.
 - Secret scan local `npm run validate:secret-scan`, integrado en el gate; genera evidencia redacted y no imprime valores.
 - Desktop E2E `npm run validate:tauri-desktop-e2e`, integrado en el gate; standalone usa preflight por defecto y el gate activa WebDriver real con `CUMPLEFACTURA_TAURI_DESKTOP_E2E_REAL=1`.
-- Readiness desktop E2E comprueba `src-tauri/target/release/cumplefactura.exe`, `tauri-driver`, Microsoft Edge WebDriver y evidencia latest pasada.
+- Readiness desktop E2E comprueba `target/release/cumplefactura.exe` (workspace Cargo en la raíz), `tauri-driver`, Microsoft Edge WebDriver y evidencia latest pasada.
 - Tests Rust en `domain::invoice`, `services::audit`, `services::pdf`, `services::verifactu` y `db` (persistencia, listados, backup, PDF, XML, append-only).
-- Build Tauri release validado: `src-tauri/target/release/cumplefactura.exe`.
+- Build Tauri release validado: `target/release/cumplefactura.exe` (workspace Cargo en la raíz).
 
 Pendiente:
 

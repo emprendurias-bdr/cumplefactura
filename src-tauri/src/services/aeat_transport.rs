@@ -138,7 +138,7 @@ fn allowed_endpoint_name(endpoint_url: &str) -> Option<&'static str> {
 
 fn sha256_file(path: &Path) -> Result<String, String> {
     let bytes = fs::read(path).map_err(|err| format!("AEAT XML read error: {err}"))?;
-    Ok(hex::encode(Sha256::digest(&bytes)).to_uppercase())
+    Ok(fiscal_contract::to_hex(&Sha256::digest(&bytes)).to_uppercase())
 }
 
 /// Rechaza campos vacíos/whitespace (contrato de entrada del preflight).

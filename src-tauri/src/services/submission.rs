@@ -62,7 +62,7 @@ pub fn prepare_unsigned_verifactu_package(
 /// SHA-256 hex mayúsculas del fichero XML.
 fn sha256_file(path: &Path) -> Result<String, String> {
     let bytes = fs::read(path).map_err(|err| format!("VERI*FACTU XML read error: {err}"))?;
-    Ok(hex::encode(Sha256::digest(&bytes)).to_uppercase())
+    Ok(fiscal_contract::to_hex(&Sha256::digest(&bytes)).to_uppercase())
 }
 
 #[cfg(test)]

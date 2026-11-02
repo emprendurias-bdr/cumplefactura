@@ -183,7 +183,7 @@ impl Invoice {
     pub fn fiscal_hash(&self) -> Result<String, String> {
         let material = serde_json::to_vec(self).map_err(|err| err.to_string())?;
         let digest = Sha256::digest(material);
-        Ok(hex::encode(digest))
+        Ok(fiscal_contract::to_hex(&digest))
     }
 }
 

@@ -323,7 +323,7 @@ fn allowed_sidecar_sign_xml_url(value: &str) -> bool {
 
 fn sha256_file(path: &Path) -> Result<String, String> {
     let bytes = fs::read(path).map_err(|err| format!("XAdES XML read error: {err}"))?;
-    Ok(hex::encode(Sha256::digest(&bytes)).to_uppercase())
+    Ok(fiscal_contract::to_hex(&Sha256::digest(&bytes)).to_uppercase())
 }
 
 #[derive(Serialize)]

@@ -4,14 +4,10 @@
 //! negocio se quedan en cada módulo (`xades_sidecar`, `verifactu_submit_sidecar`,
 //! `sidecar_channels`).
 
-use hmac::{Hmac, Mac};
 use serde::de::DeserializeOwned;
-use sha2::Sha256;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
-
-type HmacSha256 = Hmac<Sha256>;
 
 /// Destino HTTP local ya parseado (host/puerto/path).
 #[derive(Debug, Clone)]
@@ -54,10 +50,7 @@ pub fn parse_local_http_url(url: &str, expected_path: &str) -> Result<LocalHttpT
 
 /// HMAC-SHA256 hex del body (header `x-signature`).
 pub fn hmac_sha256_hex(key: &[u8], body: &[u8]) -> Result<String, String> {
-    let mut mac =
-        HmacSha256::new_from_slice(key).map_err(|_| "sidecar_hmac_key_invalid".to_string())?;
-    mac.update(body);
-    Ok(hex::encode(mac.finalize().into_bytes()))
+    Ok(fiscal_contract::hmac_sha256_hex(key, body))
 }
 
 /// Extrae JSON del body HTTP si el status es 2xx.

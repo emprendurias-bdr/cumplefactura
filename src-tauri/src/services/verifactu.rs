@@ -416,7 +416,7 @@ pub fn calculate_registro_alta_hash(
         generated_at,
     );
     let digest = Sha256::digest(material.as_bytes());
-    hex::encode(digest).to_uppercase()
+    fiscal_contract::to_hex(&digest).to_uppercase()
 }
 
 /// Huella Anulación desde factura + previo.
@@ -477,7 +477,7 @@ pub fn calculate_registro_anulacion_hash(
         generated_at,
     );
     let digest = Sha256::digest(material.as_bytes());
-    hex::encode(digest).to_uppercase()
+    fiscal_contract::to_hex(&digest).to_uppercase()
 }
 
 /// Cadena canónica (campos ordenados) que se hashea en anulación.

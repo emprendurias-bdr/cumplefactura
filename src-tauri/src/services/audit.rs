@@ -79,7 +79,7 @@ impl AuditEvent {
         if let Some(previous_hash) = &self.previous_hash {
             hasher.update(previous_hash.as_bytes());
         }
-        hex::encode(hasher.finalize())
+        fiscal_contract::to_hex(&hasher.finalize())
     }
 }
 

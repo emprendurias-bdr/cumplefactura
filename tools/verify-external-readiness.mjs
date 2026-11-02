@@ -99,7 +99,7 @@ function section(id, title, checks) {
 const tauriDriver = commandExists("tauri-driver.exe");
 const msedgeDriver = commandExists("msedgedriver.exe");
 const chromeDriver = commandExists("chromedriver.exe");
-const tauriExe = resolve(root, "src-tauri/target/release/cumplefactura.exe");
+const tauriExe = resolve(root, "target/release/cumplefactura.exe");
 
 const sidecarGatePath = resolve(sidecarRoot, "tests/regulatory/evidence/latest-regulatory-gate.json");
 const sidecarLedgerPath = resolve(sidecarRoot, "tests/regulatory/evidence/latest-evidence-ledger.json");

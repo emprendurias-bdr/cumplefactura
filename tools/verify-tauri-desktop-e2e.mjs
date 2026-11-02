@@ -9,7 +9,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const evidenceDir = resolve(root, "tests/regulatory/evidence");
 const outputJson = resolve(evidenceDir, "latest-tauri-desktop-e2e.json");
 const outputMd = resolve(evidenceDir, "latest-tauri-desktop-e2e.md");
-const releaseExe = resolve(root, "src-tauri/target/release/cumplefactura.exe");
+const releaseExe = resolve(root, "target/release/cumplefactura.exe");
 const realMode = ["1", "true", "yes", "on"].includes(
   (process.env.CUMPLEFACTURA_TAURI_DESKTOP_E2E_REAL ?? "").trim().toLowerCase(),
 );

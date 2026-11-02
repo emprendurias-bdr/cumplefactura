@@ -1,0 +1,23 @@
+# Workspace de CumpleFactura.
+#
+# - src-tauri: la aplicacion de escritorio (UI Tauri + SQLite + XML VERI*FACTU).
+# - sidecar: proceso aparte, el unico que toca el certificado y habla con la AEAT.
+# - crates/fiscal-contract: contrato HTTP compartido entre ambos (tipos, HMAC, lector HTTP).
+#
+# Un solo Cargo.lock y un solo target/ en la raiz.
+[workspace]
+members = ["src-tauri", "crates/fiscal-contract"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+
+[workspace.dependencies]
+fiscal-contract = { path = "crates/fiscal-contract" }
+chrono = { version = "0.4", features = ["serde"] }
+hmac = "0.12"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+uuid = { version = "1", features = ["serde", "v4"] }

@@ -80,6 +80,7 @@ function installTauriMock(page) {
         export_dir: null,
         default_territory_flags: ["CommonTerritory", "VeriFactu"],
         onboarding_completed: false,
+        verifactu_endpoint_name: "SistemaVerifactuPruebas",
         updated_at: new Date().toISOString(),
       },
       lastXmlPath: "C:\\CumpleFactura\\Evidence\\cumplefactura-verifactu-e2e.xml",
@@ -131,74 +132,12 @@ function installTauriMock(page) {
         return {
           app_data_dir: "C:\\CumpleFactura\\Data",
           export_dir: state.exportDir,
-          default_backup_path: `${state.exportDir}\\cumplefactura-backup.sqlite3`,
-          default_pdf_path: `${state.exportDir}\\cumplefactura-factura.pdf`,
-          default_verifactu_xml_path: `${state.exportDir}\\cumplefactura-verifactu.xml`,
-          default_cancel_xml_path: `${state.exportDir}\\cumplefactura-verifactu-anulacion.xml`,
-          default_signed_xml_path: `${state.exportDir}\\cumplefactura-verifactu-firmado.xml`,
-          default_json_export_path: `${state.exportDir}\\cumplefactura-factura.json`,
-          default_csv_export_path: `${state.exportDir}\\cumplefactura-facturas.csv`,
-          default_audit_export_path: `${state.exportDir}\\cumplefactura-auditoria.json`,
+          generated_at: new Date().toISOString(),
           notes: ["browser smoke mock"],
         };
       }
       if (cmd === "app_settings_get") {
         return state.settings;
-      }
-      if (cmd === "fiscal_sidecar_capabilities_get") {
-        return {
-          source_project: "contapro-sidecar",
-          source_readiness_status: "blocked",
-          source_gate_status: "passed",
-          source_generated_at: new Date().toISOString(),
-          mvp_channels: ["verifactu", "sii"],
-          deferred_channels: ["face", "ticketbai"],
-          external_call_performed_by_importer: false,
-          notes: ["browser smoke mock"],
-          channels: [
-            { channel: "verifactu", status: "ready", source: "mock", blockers: [], mvp_importable: true, acceptance_status: "accepted", acceptance_validation_status: "passed", notes: [] },
-            { channel: "sii", status: "ready", source: "mock", blockers: [], mvp_importable: true, acceptance_status: "accepted", acceptance_validation_status: "passed", notes: [] },
-            { channel: "face", status: "blocked", source: "mock", blockers: ["face_acceptance_manifest_validated"], mvp_importable: false, deferred_reason: "blocked_by_external_sp_certificate_registration", notes: [] },
-            { channel: "ticketbai", status: "blocked", source: "mock", blockers: ["ticketbai_acceptance_manifest_validated"], mvp_importable: false, deferred_reason: "blocked_by_foral_signature_policy_software_registration_and_acceptance", notes: [] },
-          ],
-        };
-      }
-      if (cmd === "sii_submit_sidecar_preflight") {
-        return {
-          ready: false,
-          status: "blocked",
-          sidecar_url: args.input.sidecar_url,
-          sidecar_endpoint: "/sii/submit-preflight",
-          book: args.input.book,
-          endpoint_name: args.input.endpoint_name,
-          wsdl_name: "SuministroFactEmitidas.wsdl",
-          transport_enabled: false,
-          soap_calls_enabled: false,
-          certificate_loaded: false,
-          sidecar_call_performed: false,
-          external_call_performed: false,
-          blockers: ["CUMPLEFACTURA_ENABLE_SII_SUBMIT_SIDECAR_PREFLIGHT_not_enabled"],
-          warnings: [],
-        };
-      }
-      if (cmd === "ticketbai_submit_sidecar_preflight") {
-        return {
-          ready: false,
-          status: "blocked",
-          sidecar_url: args.input.sidecar_url,
-          sidecar_endpoint: "/ticketbai/submit-preflight",
-          territorio: args.input.territorio,
-          endpoint: args.input.endpoint,
-          xsd_name: "ticketbaiv1-2-2.xsd",
-          xsd_available: true,
-          endpoint_allowed: false,
-          submission_enabled: false,
-          certificate_loaded: false,
-          sidecar_call_performed: false,
-          external_call_performed: false,
-          blockers: ["CUMPLEFACTURA_ENABLE_TICKETBAI_SUBMIT_SIDECAR_PREFLIGHT_not_enabled"],
-          warnings: [],
-        };
       }
       if (cmd === "app_settings_update") {
         state.settings = { ...args.input, updated_at: new Date().toISOString() };
@@ -339,17 +278,48 @@ function installTauriMock(page) {
       if (cmd === "fiscal_audit_export") return { target_path: args.targetPath, status: "created", notes: ["browser smoke mock"] };
       if (cmd === "verifactu_xml_draft_export") {
         state.lastXmlPath = args.targetPath;
-        return { target_path: args.targetPath, status: "draft_xml_exported", xsd_validated: true, notes: ["browser smoke mock"] };
-      }
-      if (cmd === "verifactu_submission_prepare") {
         return {
-          invoice_id: args.invoiceId,
+          target_path: args.targetPath,
+          status: "draft-created-xsd-valid",
+          xsd_validated: true,
           export_id: id("export"),
-          xml_path: args.xmlPath,
           xml_sha256: "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF",
           xml_bytes: 2048,
-          signature_status: "unsigned",
-          transmission_status: "prepared_for_signature",
+          notes: ["browser smoke mock"],
+        };
+      }
+      if (cmd === "verifactu_submit_preflight") {
+        return {
+          status: "ready",
+          blockers: [],
+          warnings: [],
+          endpoint_name: state.settings.verifactu_endpoint_name,
+          endpoint_allowed: true,
+          certificate_loaded: true,
+          certificate_source: "pkcs12_vault",
+          aeat_calls_enabled: true,
+          production_enabled: false,
+          external_call_performed: false,
+        };
+      }
+      if (cmd === "verifactu_submit") {
+        return {
+          invoice_id: args.input.invoice_id,
+          export_id: args.input.export_id,
+          submission_id: id("submission"),
+          xml_sha256: args.input.xml_sha256,
+          endpoint_name: state.settings.verifactu_endpoint_name,
+          operation: "RegFactuSistemaFacturacion",
+          status: "accepted",
+          http_status: 200,
+          csv: "MOCK-CSV",
+          estado_envio: "Correcto",
+          estado_registro: "Correcto",
+          codigo_error: null,
+          descripcion_error: null,
+          tiempo_espera_envio_seconds: 60,
+          soap_fault: null,
+          external_call_performed: true,
         };
       }
       throw new Error(`Unexpected E2E command: ${cmd}`);
@@ -381,7 +351,8 @@ async function expectTextVisible(page, text) {
 await mkdir(evidenceDir, { recursive: true });
 
 const result = await withServer(async (serverLogPath) => {
-  const browser = await chromium.launch({ headless: true });
+  // CUMPLEFACTURA_CHROMIUM_PATH: Chromium del sistema cuando no coincide con la version de Playwright.
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.CUMPLEFACTURA_CHROMIUM_PATH || undefined });
   const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
   const consoleEntries = [];
   page.on("console", (msg) => {
@@ -401,32 +372,18 @@ const result = await withServer(async (serverLogPath) => {
   await expectTextVisible(page, "external_blocked");
 
   await goToSection(page, "Fiscal");
-  await expectTextVisible(page, "Borrador tecnico: XSD local, sin firma ni envio.");
-  await expectTextVisible(page, "Frontera final: solo sidecar local con HMAC puede invocar AEAT");
-  await expectTextVisible(page, "Canales ContaPro sidecar");
-  await expectTextVisible(page, "Importado de ContaPro");
-  await clickByRole(page, "Preflight SII sidecar");
-  await expectTextVisible(page, "/sii/submit-preflight");
-  await expect(page.getByRole("button", { name: "Preflight TicketBAI sidecar", exact: true })).toBeDisabled();
-  await expectTextVisible(page, "homologacion foral sigue bloqueada");
-
-  const initialVisibleLimits = {
-    noSignatureOrSend: true,
-    fakeSidecar: true,
-    externalBlocked: true,
-    contaproImport: true,
-  };
-  await goToSection(page, "Fiscal");
-  const fiscalLimits = await page.locator("body").evaluate((body) => ({
-    noSignatureOrSend: body.textContent?.includes("sin firma ni envio") ?? false,
-    fakeSidecar: body.textContent?.includes("gate usa sidecar falso") ?? false,
-    contaproImport: body.textContent?.includes("Importado de ContaPro") ?? false,
+  await expectTextVisible(page, "Borrador tecnico: XSD local, sin envio.");
+  await expectTextVisible(page, "Frontera final: solo el sidecar local con HMAC y certificado puede invocar AEAT");
+  await expect(page.getByRole("button", { name: "Preflight envio", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Enviar", exact: true })).toBeDisabled();
+  const initialVisibleLimits = await page.locator("body").evaluate((body) => ({
+    noSend: body.textContent?.includes("sin envio") ?? false,
+    gateNoAeat: body.textContent?.includes("el gate no llama a AEAT") ?? false,
   }));
   await goToSection(page, "Panel");
-  const panelLimits = await page.locator("body").evaluate((body) => ({
-    externalBlocked: body.textContent?.includes("external_blocked") ?? false,
-  }));
-  Object.assign(initialVisibleLimits, fiscalLimits, panelLimits);
+  initialVisibleLimits.externalBlocked = await page.locator("body").evaluate(
+    (body) => body.textContent?.includes("external_blocked") ?? false,
+  );
 
   await goToSection(page, "Panel");
   await clickByRole(page, "Rellenar demo");
@@ -490,21 +447,23 @@ const result = await withServer(async (serverLogPath) => {
   await clickByRole(page, "Exportar XML");
   await expectTextVisible(page, "XSD OK");
 
-  await clickByRole(page, "Preparar");
-  await expectTextVisible(page, "unsigned - prepared_for_signature");
+  const finalVisibleLimits = await page.locator("body").evaluate((body) => ({
+    noAeatCsv: body.textContent?.includes("sin llamada AEAT real ni CSV") ?? false,
+    gateNoAeat: body.textContent?.includes("el gate no llama a AEAT") ?? false,
+  }));
+
+  await clickByRole(page, "Preflight envio");
+  await expectTextVisible(page, "ready - SistemaVerifactuPruebas - certificado OK - AEAT NO - sin bloqueos");
+  await clickByRole(page, "Enviar");
+  await expectTextVisible(page, "accepted - SistemaVerifactuPruebas - AEAT SI - CSV MOCK-CSV");
 
   await page.screenshot({ path: screenshotPath, fullPage: true });
   await page.screenshot({ path: latestScreenshotPath, fullPage: true });
 
-  const finalVisibleLimits = await page.locator("body").evaluate((body) => ({
-    noAeatCsv: body.textContent?.includes("sin llamada AEAT real ni CSV") ?? false,
-    fakeSidecar: body.textContent?.includes("gate usa sidecar falso") ?? false,
-  }));
-
-  if (!initialVisibleLimits.noSignatureOrSend || !initialVisibleLimits.fakeSidecar || !initialVisibleLimits.externalBlocked || !initialVisibleLimits.contaproImport) {
+  if (!initialVisibleLimits.noSend || !initialVisibleLimits.gateNoAeat || !initialVisibleLimits.externalBlocked) {
     throw new Error(`Initial visible limits missing: ${JSON.stringify(initialVisibleLimits)}`);
   }
-  if (!finalVisibleLimits.noAeatCsv || !finalVisibleLimits.fakeSidecar) {
+  if (!finalVisibleLimits.noAeatCsv || !finalVisibleLimits.gateNoAeat) {
     throw new Error(`Final visible limits missing: ${JSON.stringify(finalVisibleLimits)}`);
   }
 
@@ -523,7 +482,7 @@ const result = await withServer(async (serverLogPath) => {
     viewport: "1366x900",
     browser: "Playwright Chromium headless",
     browser_plugin_note: "Repeatable npm gate uses Playwright because MCP Browser cannot be invoked from npm scripts.",
-    flow: "app loads -> create company/customer/series -> edit invoice line with discount/IRPF -> draft -> issue -> export VERI*FACTU XML -> prepare signature/submission package",
+    flow: "app loads -> create company/customer/series -> edit invoice line with discount/IRPF -> draft -> issue -> export VERI*FACTU XML -> sidecar preflight -> submit (mocked AEAT CSV)",
     checks: {
       page_identity: true,
       not_blank: true,
@@ -541,7 +500,7 @@ const result = await withServer(async (serverLogPath) => {
     limits: [
       "Browser smoke uses a local Tauri invoke mock.",
       "It proves rendered UI workflow and visible limits only.",
-      "It does not prove Rust command execution, certificate-backed XAdES, SOAP AEAT transport or external acceptance.",
+      "It does not prove Rust command execution, the sidecar process, mTLS AEAT transport or external acceptance.",
     ],
   };
 });

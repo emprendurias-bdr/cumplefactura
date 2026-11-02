@@ -80,14 +80,14 @@ export type FiscalRecordSummary = {
   xml_path?: string | null;
   status: string;
 };
-export type FiscalChainIssue = {
+type FiscalChainIssue = {
   record_id: string;
   invoice_id: string;
   severity: string;
   code: string;
   message: string;
 };
-export type FiscalCompanyChainHead = {
+type FiscalCompanyChainHead = {
   company_id: string;
   last_hash: string;
 };
@@ -112,20 +112,14 @@ export type ExportResult = { target_path: string; status: string; notes: string[
 export type AppDefaults = {
   app_data_dir: string;
   export_dir: string;
-  default_backup_path: string;
-  default_pdf_path: string;
-  default_verifactu_xml_path: string;
-  default_cancel_xml_path: string;
-  default_signed_xml_path: string;
-  default_json_export_path: string;
-  default_csv_export_path: string;
-  default_audit_export_path: string;
+  generated_at: string;
   notes: string[];
 };
 export type AppSettings = {
   export_dir?: string | null;
   default_territory_flags: string[];
   onboarding_completed: boolean;
+  verifactu_endpoint_name: string;
   updated_at: string;
 };
 export type NextNumberPreview = {
@@ -165,152 +159,82 @@ export type ProductForm = {
   discount_rate_percent: string;
   active: boolean;
 };
-export type VerifactuXmlResult = { target_path: string; status: string; xsd_validated: boolean; notes: string[] };
-export type SubmissionPreparation = {
+/** XML exportado y validado; `export_id` + `xml_sha256` habilitan el envío. */
+export type VerifactuXmlResult = {
+  target_path: string;
+  status: string;
+  xsd_validated: boolean;
+  export_id: string;
+  xml_sha256: string;
+  xml_bytes: number;
+  notes: string[];
+};
+/** Lo que se envía: el último XML exportado (alta o anulación). */
+export type SubmissionPackage = { invoice_id: string; export_id: string; xml_path: string; xml_sha256: string };
+/** Respuesta del sidecar a `verifactu_submit_preflight`. Nunca llama a la AEAT. */
+export type SubmitPreflight = {
+  status: "ready" | "blocked";
+  blockers: string[];
+  warnings: string[];
+  endpoint_name: string;
+  endpoint_allowed: boolean;
+  certificate_loaded: boolean;
+  certificate_source: string | null;
+  aeat_calls_enabled: boolean;
+  production_enabled: boolean;
+  external_call_performed: boolean;
+};
+/** Respuesta AEAT interpretada por el sidecar y guardada como evidencia. */
+export type VerifactuSubmission = {
   invoice_id: string;
   export_id: string;
-  xml_path: string;
+  submission_id: string | null;
   xml_sha256: string;
-  xml_bytes: number;
-  signature_status: string;
-  transmission_status: string;
-};
-export type AeatTransportPreflight = {
-  ready: boolean;
-  status: string;
   endpoint_name: string;
-  endpoint_url: string;
-  xml_sha256: string;
-  xml_bytes: number;
-  external_call_performed: boolean;
-  blockers: string[];
-  warnings: string[];
-};
-export type XadesSidecarPreflight = {
-  ready: boolean;
-  status: string;
-  sidecar_url: string;
-  sidecar_endpoint: string;
-  xml_sha256: string;
-  xml_bytes: number;
-  certificate_ref_status: string;
-  current_signature_status: string;
-  signature_status_after_success: string;
-  external_call_performed: boolean;
-  blockers: string[];
-  warnings: string[];
-};
-export type XadesSidecarSignature = SubmissionPreparation & {
-  source_export_id: string;
-  source_xml_path: string;
-  source_xml_sha256: string;
-  xsd_validated_before_signature: boolean;
-  signature_mode: string;
-  certificate_source?: string | null;
-  sidecar_url: string;
-  sidecar_call_performed: boolean;
-  external_call_performed: boolean;
-  notes: string[];
-  warnings: string[];
-};
-export type VerifactuSubmitSidecarPreflight = {
-  ready: boolean;
-  status: string;
-  sidecar_url: string;
-  sidecar_endpoint: string;
-  endpoint_name: string;
-  xml_sha256: string;
-  xml_bytes: number;
-  certificate_ref_status: string;
-  current_signature_status: string;
-  wsdl_name?: string | null;
-  wsdl_sha256?: string | null;
-  operation_available: boolean;
-  endpoint_allowed: boolean;
-  transport_enabled: boolean;
-  soap_calls_enabled: boolean;
-  certificate_loaded: boolean;
-  certificate_source?: string | null;
-  certificate_days_remaining?: number | null;
-  sidecar_call_performed: boolean;
-  external_call_performed: boolean;
-  blockers: string[];
-  warnings: string[];
-};
-export type VerifactuSubmitSidecarInvocation = SubmissionPreparation & {
-  source_export_id: string;
-  sidecar_url: string;
-  sidecar_endpoint: string;
-  endpoint_name: string;
-  wsdl_name: string;
   operation: string;
-  status: string;
-  csv?: string | null;
-  estado_registro?: string | null;
-  codigo_error?: string | null;
-  descripcion_error?: string | null;
-  transport_mode: string;
-  certificate_source: string;
-  sidecar_call_performed: boolean;
+  status: "accepted" | "accepted_with_errors" | "rejected" | "transport_error";
+  http_status: number | null;
+  csv: string | null;
+  estado_envio: string | null;
+  estado_registro: string | null;
+  codigo_error: string | null;
+  descripcion_error: string | null;
+  tiempo_espera_envio_seconds: number | null;
+  soap_fault: string | null;
   external_call_performed: boolean;
-  notes: string[];
-  warnings: string[];
 };
-export type ImportedSidecarChannel = {
-  channel: string;
+
+/** Puertos SOAP del WSDL VERI*FACTU. Producción queda bloqueada por el sidecar en v1. */
+export const VERIFACTU_ENDPOINTS = [
+  { id: "SistemaVerifactuPruebas", label: "Pruebas AEAT" },
+  { id: "SistemaVerifactuSelloPruebas", label: "Pruebas AEAT (certificado de sello)" },
+  { id: "SistemaVerifactu", label: "Produccion AEAT" },
+  { id: "SistemaVerifactuSello", label: "Produccion AEAT (certificado de sello)" },
+] as const;
+
+/** Rutas de exportación que la UI mantiene; todas cuelgan de la carpeta export. */
+export type PathKey = "backup" | "restore" | "pdf" | "xml" | "cancelXml" | "json" | "csv" | "audit";
+
+/** Filtros del listado de facturas tal y como los edita la UI. */
+export type InvoiceFilterForm = {
+  search: string;
+  company_id: string;
+  customer_id: string;
+  fiscal_year: string;
+  series: string;
   status: string;
-  source: string;
-  blockers: string[];
-  mvp_importable: boolean;
-  acceptance_status?: string | null;
-  acceptance_validation_status?: string | null;
-  acceptance_manifest?: string | null;
-  deferred_reason?: string | null;
-  notes: string[];
+  kind: string;
 };
-export type ImportedSidecarCapabilities = {
-  source_project: string;
-  source_readiness_status: string;
-  source_gate_status: string;
-  source_generated_at?: string | null;
-  channels: ImportedSidecarChannel[];
-  mvp_channels: string[];
-  deferred_channels: string[];
-  external_call_performed_by_importer: boolean;
-  notes: string[];
-};
-export type SiiSidecarPreflight = {
-  ready: boolean;
-  status: string;
-  sidecar_url: string;
-  sidecar_endpoint: string;
-  book: string;
-  endpoint_name: string;
-  wsdl_name?: string | null;
-  transport_enabled: boolean;
-  soap_calls_enabled: boolean;
-  certificate_loaded: boolean;
-  sidecar_call_performed: boolean;
-  external_call_performed: boolean;
-  blockers: string[];
-  warnings: string[];
-};
-export type TicketBaiSidecarPreflight = {
-  ready: boolean;
-  status: string;
-  sidecar_url: string;
-  sidecar_endpoint: string;
-  territorio: string;
-  endpoint: string;
-  xsd_name?: string | null;
-  xsd_available: boolean;
-  endpoint_allowed: boolean;
-  submission_enabled: boolean;
-  certificate_loaded: boolean;
-  sidecar_call_performed: boolean;
-  external_call_performed: boolean;
-  blockers: string[];
-  warnings: string[];
+
+/** Formulario de configuración de serie. */
+export type SeriesForm = {
+  label: string;
+  series_code: string;
+  fiscal_year: number;
+  include_year: boolean;
+  separator: string;
+  padding: number;
+  next_number: number;
 };
 
 export type AppSection = "panel" | "empresas" | "clientes" | "facturas" | "fiscal" | "ajustes";

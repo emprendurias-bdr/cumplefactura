@@ -1,7 +1,7 @@
 /* =============================================================================
    CumpleFactura UI — design tokens + layout (fuente; dist/ es el CSS minificado).
    Arquitectura visual: shell → sidebar + content; paneles por feature (series,
-   editor, catálogo, filtros, auditoría, onboarding, exports, sidecars).
+   editor, catálogo, filtros, auditoría, onboarding, exportaciones y envío).
    ============================================================================= */
 
 /* Tokens y base */
@@ -383,12 +383,6 @@ p {
   padding-top: 8px;
 }
 
-.auditExportForm {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: minmax(260px, 1fr) 160px 180px;
-}
-
 .pathField {
   align-items: end;
   display: grid;
@@ -396,7 +390,7 @@ p {
   grid-template-columns: minmax(220px, 1fr) 160px;
 }
 
-.pathForm {
+.backupForm.pathForm {
   grid-template-columns: minmax(0, 1fr) 160px 180px;
 }
 
@@ -542,7 +536,7 @@ button:disabled {
   opacity: 0.45;
 }
 
-/* Flujo fiscal: export / XML / sidecar / transporte (4 columnas) */
+/* Flujo de factura: borrador / emisión / rectificativa */
 .flow {
   display: grid;
   gap: 14px;
@@ -588,9 +582,8 @@ button:disabled {
   .entityForms,
   .auditColumns,
   .auditSummary,
-  .auditExportForm,
   .pathField,
-  .pathForm,
+  .backupForm.pathForm,
   .filterForm,
   .onboardingForm,
   .productForm,
@@ -605,9 +598,8 @@ button:disabled {
   .entityForms,
   .auditColumns,
   .auditSummary,
-  .auditExportForm,
   .pathField,
-  .pathForm,
+  .backupForm.pathForm,
   .filterForm,
   .onboardingForm,
   .productForm,
@@ -700,7 +692,7 @@ button:disabled {
   white-space: nowrap;
 }
 
-/* Backup/restore y formularios sidecar ContaPro */
+/* Formularios de ruta y acción (backup, restore, exportaciones, envío) */
 .backupForm {
   display: grid;
   gap: 10px;
@@ -708,16 +700,6 @@ button:disabled {
   margin: 10px 0;
 }
 
-.sidecarForms {
-  display: grid;
-  gap: 10px;
-}
-
-.sidecarForms .backupForm {
-  grid-template-columns: 140px 180px minmax(220px, 1fr) 180px;
-}
-
-.auditExportForm input,
 .backupForm input,
 .backupForm select {
   border: 1px solid #d8ded6;
@@ -729,8 +711,7 @@ button:disabled {
 }
 
 .pathField .linkButton,
-.pathForm .linkButton,
-.auditExportForm .linkButton {
+.pathForm .linkButton {
   margin-top: 0;
 }
 
@@ -744,8 +725,6 @@ button:disabled {
   .headerActions,
   .editorTop,
   .editorFooter,
-  .auditExportForm,
-  .sidecarForms .backupForm,
   .backupForm {
     align-items: stretch;
     display: grid;

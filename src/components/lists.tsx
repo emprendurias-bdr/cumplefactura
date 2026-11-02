@@ -1,13 +1,5 @@
-/** DataList / Pager / filas de cadena fiscal. */
+/** DataList y Pager: listas simples con paginación. */
 import type { ReactNode } from "react";
-import type { FiscalChainVerification } from "../types";
-import { short } from "../lib/format";
-
-/** Filas legibles del informe de cadena fiscal para DataList. */
-export function chainRows(result: FiscalChainVerification) {
-  if (result.valid) return [`OK - ${result.total_records} registros fiscales`];
-  return result.issues.map((issue) => `${issue.severity} - ${issue.code} - ${short(issue.record_id)} - ${issue.message}`);
-}
 
 /** Lista simple reutilizable (título + filas + pager opcional). */
 export function DataList({ title, empty, rows, footer }: { title: string; empty: string; rows: string[]; footer?: ReactNode }) {

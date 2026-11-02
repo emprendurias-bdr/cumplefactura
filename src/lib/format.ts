@@ -4,8 +4,10 @@ import type {
   CompanyForm,
   Customer,
   CustomerForm,
+  InvoiceFilterForm,
   InvoiceLineForm,
   InvoiceLineInput,
+  PathKey,
   Product,
   ProductForm,
 } from "../types";
@@ -214,38 +216,59 @@ export function editorTotals(lines: InvoiceLineForm[]) {
 }
 
 /** Une dir+file asumiendo separador Windows o Unix según `dir`. */
-export function joinPath(dir: string, file: string) {
+function joinPath(dir: string, file: string) {
   const separator = dir.includes("\\") ? "\\" : "/";
   return `${dir.replace(/[\\/]+$/, "")}${separator}${file}`;
 }
 
 /** Stamp compacto para nombres de export. */
-export function timestamp() {
+function timestamp() {
   return new Date().toISOString().replace(/[-:T.]/g, "").slice(0, 14);
 }
 
-export function optionalText(value: string) {
+function optionalText(value: string) {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
 }
 
-export function optionalNumber(value: string) {
+function optionalNumber(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return null;
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-/** Filtros vacíos de `invoice_list` (null = sin restringir). */
-export function emptyInvoiceFilters() {
+/** Formulario de filtros vacío. */
+export function emptyFilterForm(): InvoiceFilterForm {
+  return { search: "", company_id: "", customer_id: "", fiscal_year: "", series: "", status: "", kind: "" };
+}
+
+/** Filtros de `invoice_list`: campo vacío = sin restringir (`null`). */
+export function filtersToInput(form: InvoiceFilterForm) {
   return {
-    company_id: null as string | null,
-    customer_id: null as string | null,
-    fiscal_year: null as number | null,
-    series: null as string | null,
-    status: null as string | null,
-    kind: null as string | null,
-    search: null as string | null,
+    company_id: optionalText(form.company_id),
+    customer_id: optionalText(form.customer_id),
+    fiscal_year: optionalNumber(form.fiscal_year),
+    series: optionalText(form.series.toUpperCase()),
+    status: optionalText(form.status),
+    kind: optionalText(form.kind),
+    search: optionalText(form.search),
+  };
+}
+
+/** Rutas por defecto de cada exportación dentro de `dir`, con marca de tiempo. */
+export function exportPaths(dir: string): Record<PathKey, string> {
+  const stamp = timestamp();
+  const file = (name: string) => joinPath(dir, `cumplefactura-${name}-${stamp}`);
+  return {
+    backup: file("backup") + ".sqlite3",
+    restore: "",
+    pdf: file("factura") + ".pdf",
+    xml: file("verifactu") + ".xml",
+    cancelXml: file("verifactu-anulacion") + ".xml",
+    json: file("factura") + ".json",
+    csv: file("facturas") + ".csv",
+    audit: file("auditoria") + ".json",
   };
 }
 

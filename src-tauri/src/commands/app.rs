@@ -2,7 +2,7 @@
 
 use serde::Serialize;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 /// Defaults de rutas (backup, PDF, XML, JSON, CSV, auditoría) con stamp temporal.
@@ -28,7 +28,7 @@ pub fn app_defaults_get(app: AppHandle) -> Result<AppDefaults, String> {
         .path()
         .app_data_dir()
         .map_err(|err| format!("cannot resolve app data dir: {err}"))?;
-    let export_dir = resolve_export_dir(&app, &app_data_dir)?;
+    let export_dir = resolve_export_dir(&app, &app_data_dir);
     fs::create_dir_all(&export_dir).map_err(|err| format!("cannot create export dir: {err}"))?;
 
     let stamp = chrono::Utc::now().format("%Y%m%d-%H%M%S").to_string();
@@ -64,11 +64,12 @@ pub fn app_defaults_get(app: AppHandle) -> Result<AppDefaults, String> {
     })
 }
 
-fn resolve_export_dir(app: &AppHandle, app_data_dir: &PathBuf) -> Result<PathBuf, String> {
-    match app.path().document_dir() {
-        Ok(document_dir) => Ok(document_dir.join("CumpleFactura")),
-        Err(_) => Ok(app_data_dir.join("exports")),
-    }
+/// `Documentos/CumpleFactura`, o `<datos de la app>/exports` si no hay carpeta de documentos.
+fn resolve_export_dir(app: &AppHandle, app_data_dir: &Path) -> PathBuf {
+    app.path()
+        .document_dir()
+        .map(|dir| dir.join("CumpleFactura"))
+        .unwrap_or_else(|_| app_data_dir.join("exports"))
 }
 
 fn path_string(path: PathBuf) -> String {

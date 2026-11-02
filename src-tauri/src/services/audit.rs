@@ -21,13 +21,6 @@ pub struct AuditEvent {
     pub previous_hash: Option<String>,
 }
 
-/// Secuencia ordenada de eventos (consulta de cabeza de cadena).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
-pub struct AuditTrail {
-    pub events: Vec<AuditEvent>,
-}
-
 impl AuditEvent {
     /// Alta de evento `invoice_issued` con UUID y timestamp UTC.
     pub fn invoice_issued(
@@ -83,13 +76,6 @@ impl AuditEvent {
     }
 }
 
-impl AuditTrail {
-    /// Hash del último evento de la trail, si hay alguno.
-    #[allow(dead_code)]
-    pub fn latest_hash(&self) -> Option<String> {
-        self.events.last().map(AuditEvent::chain_hash)
-    }
-}
 #[cfg(test)]
 mod tests {
     use super::*;

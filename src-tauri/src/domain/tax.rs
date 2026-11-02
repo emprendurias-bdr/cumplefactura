@@ -1,17 +1,6 @@
-//! Régimen fiscal y territory flags (CommonTerritory, VeriFactu, Sii…).
+//! Territory flags fiscales (CommonTerritory, VeriFactu, Sii, TicketBAI, Navarra).
 
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
-pub enum TaxRegime {
-    General,
-    Exempt,
-    ReverseCharge,
-    RecargoEquivalencia,
-    CanariasIgic,
-    Foral,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TerritoryFlag {

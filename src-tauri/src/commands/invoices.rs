@@ -74,16 +74,17 @@ pub fn invoice_issue(
         &format!("{:?}", invoice.kind),
         rectification_reason_code.as_deref(),
     )?;
-    let fiscal_hash = verifactu::calculate_issued_invoice_registro_alta_hash_with_type(
-        &company_tax_id,
-        &invoice.series,
+    let fiscal_hash = verifactu::IssuedAlta {
+        issuer_tax_id: &company_tax_id,
+        series: &invoice.series,
         number,
         issued_at,
-        invoice.totals.tax_cents,
-        invoice.totals.total_cents,
+        tax_cents: invoice.totals.tax_cents,
+        total_cents: invoice.totals.total_cents,
         invoice_type,
-        previous_fiscal_hash.as_deref(),
-    )?;
+        previous_hash: previous_fiscal_hash.as_deref(),
+    }
+    .hash()?;
     let audit_event = AuditEvent::invoice_issued(
         invoice.id.clone(),
         actor,
@@ -98,7 +99,6 @@ pub fn invoice_issue(
         &fiscal_hash,
         previous_fiscal_hash.as_deref(),
         &audit_event,
-        &audit_hash,
     )?;
 
     Ok(IssuedInvoice {

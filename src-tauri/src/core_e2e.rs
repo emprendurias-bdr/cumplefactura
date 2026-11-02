@@ -6,14 +6,13 @@ use crate::domain::invoice::{
 };
 use crate::domain::tax::TerritoryFlag;
 use crate::services::{audit::AuditEvent, export, fiscal_chain, pdf, verifactu, verifactu_submit};
-use rusqlite::Connection;
 use serde_json::json;
 use std::fs;
 use std::path::PathBuf;
 
 #[test]
 fn real_sqlite_verifactu_core_workflow_generates_evidence() {
-    let mut conn = memory_conn();
+    let mut conn = db::test_conn();
     let app_root = app_root();
     let evidence_dir = app_root.join("tests").join("regulatory").join("evidence");
     let write_evidence = std::env::var("CUMPLEFACTURA_WRITE_CORE_E2E_EVIDENCE")
@@ -100,16 +99,17 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
         .expect("previous fiscal hash");
     let invoice_type =
         verifactu::registro_alta_invoice_type_for_kind("Complete", None).expect("invoice type");
-    let fiscal_hash = verifactu::calculate_issued_invoice_registro_alta_hash_with_type(
-        &company.tax_id,
-        &issued.series,
-        issued.number.expect("issued number"),
-        issued.issued_at.as_deref().expect("issued_at"),
-        issued.totals.tax_cents,
-        issued.totals.total_cents,
+    let fiscal_hash = verifactu::IssuedAlta {
+        issuer_tax_id: &company.tax_id,
+        series: &issued.series,
+        number: issued.number.expect("issued number"),
+        issued_at: issued.issued_at.as_deref().expect("issued_at"),
+        tax_cents: issued.totals.tax_cents,
+        total_cents: issued.totals.total_cents,
         invoice_type,
-        previous_fiscal_hash.as_deref(),
-    )
+        previous_hash: previous_fiscal_hash.as_deref(),
+    }
+    .hash()
     .expect("AEAT fiscal hash");
     let audit_event = AuditEvent::invoice_issued(
         issued.id.clone(),
@@ -117,14 +117,12 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
         fiscal_hash.clone(),
         db::latest_audit_hash(&conn).expect("audit hash"),
     );
-    let audit_hash = audit_event.chain_hash();
     db::insert_issued_invoice(
         &mut conn,
         &issued,
         &fiscal_hash,
         previous_fiscal_hash.as_deref(),
         &audit_event,
-        &audit_hash,
     )
     .expect("issued invoice persistence");
 
@@ -300,14 +298,6 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
         remove_if_exists(&csv_path);
         remove_if_exists(&audit_export_path);
     }
-}
-
-fn memory_conn() -> Connection {
-    let conn = Connection::open_in_memory().expect("memory db");
-    conn.pragma_update(None, "foreign_keys", "ON")
-        .expect("foreign keys");
-    db::apply_migrations(&conn).expect("migrations");
-    conn
 }
 
 fn app_root() -> PathBuf {

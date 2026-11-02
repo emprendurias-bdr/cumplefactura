@@ -266,7 +266,6 @@ pub fn verifactu_xml_anulacion_draft_export(
         cancellation_hash.clone(),
         previous_audit_hash,
     );
-    let audit_hash = audit_event.chain_hash();
     if let Err(err) = db::insert_anulacion_record(
         &mut conn,
         &invoice_id,
@@ -275,7 +274,6 @@ pub fn verifactu_xml_anulacion_draft_export(
         &generated_at,
         &target_path,
         &audit_event,
-        &audit_hash,
     ) {
         let _ = fs::remove_file(&target_path);
         return Err(err);

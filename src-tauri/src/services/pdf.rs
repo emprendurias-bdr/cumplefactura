@@ -75,13 +75,11 @@ pub fn write_invoice_pdf(target_path: &str, invoice: &InvoicePdfData) -> Result<
 
 /// Ensambla objetos PDF 1.4 (Catalog/Pages/Page/Font/Contents) alrededor del stream de texto.
 fn build_pdf(content: &str) -> Vec<u8> {
-    let objects = vec![
-        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+    let objects = ["<< /Type /Catalog /Pages 2 0 R >>".to_string(),
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
         "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>".to_string(),
         "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_string(),
-        format!("<< /Length {} >>\nstream\n{}endstream", content.as_bytes().len(), content),
-    ];
+        format!("<< /Length {} >>\nstream\n{}endstream", content.len(), content)];
 
     let mut bytes = Vec::new();
     bytes.extend_from_slice(b"%PDF-1.4\n");

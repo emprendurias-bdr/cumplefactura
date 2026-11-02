@@ -231,16 +231,17 @@ fn validate_recomputed_hash(
             record.invoice_rectification_reason_code.as_deref(),
         )
         .and_then(|invoice_type| {
-            verifactu::calculate_issued_invoice_registro_alta_hash_with_type(
-                &record.company_tax_id,
-                &record.invoice_series,
+            verifactu::IssuedAlta {
+                issuer_tax_id: &record.company_tax_id,
+                series: &record.invoice_series,
                 number,
                 issued_at,
-                record.invoice_tax_cents,
-                record.invoice_total_cents,
+                tax_cents: record.invoice_tax_cents,
+                total_cents: record.invoice_total_cents,
                 invoice_type,
-                record.previous_fiscal_hash.as_deref(),
-            )
+                previous_hash: record.previous_fiscal_hash.as_deref(),
+            }
+            .hash()
         }),
         "Anulacion" => match record.previous_fiscal_hash.as_deref() {
             Some(previous_hash) => verifactu::calculate_issued_invoice_registro_anulacion_hash(
@@ -314,16 +315,6 @@ mod tests {
     use crate::services::audit::AuditEvent;
     use rusqlite::{params, Connection};
 
-    fn memory_conn() -> Connection {
-        let conn = Connection::open_in_memory().expect("memory db");
-        conn.pragma_update(None, "foreign_keys", "ON")
-            .expect("foreign keys");
-        for migration in db::migrations() {
-            conn.execute_batch(migration.sql).expect("migration");
-        }
-        conn
-    }
-
     fn company() -> Company {
         Company::from_input(CompanyInput {
             legal_name: "Demo SL".to_string(),
@@ -393,15 +384,17 @@ mod tests {
     ) -> String {
         let issued_at = invoice.issued_at.as_deref().expect("issued_at");
         let number = invoice.number.expect("number");
-        let fiscal_hash = verifactu::calculate_issued_invoice_registro_alta_hash(
-            "B00000000",
-            &invoice.series,
+        let fiscal_hash = verifactu::IssuedAlta {
+            issuer_tax_id: "B00000000",
+            series: &invoice.series,
             number,
             issued_at,
-            invoice.totals.tax_cents,
-            invoice.totals.total_cents,
+            tax_cents: invoice.totals.tax_cents,
+            total_cents: invoice.totals.total_cents,
+            invoice_type: "F1",
             previous_hash,
-        )
+        }
+        .hash()
         .expect("alta hash");
         let audit_event = AuditEvent::invoice_issued(
             invoice.id.clone(),
@@ -409,22 +402,14 @@ mod tests {
             fiscal_hash.clone(),
             None,
         );
-        let audit_hash = audit_event.chain_hash();
-        db::insert_issued_invoice(
-            conn,
-            invoice,
-            &fiscal_hash,
-            previous_hash,
-            &audit_event,
-            &audit_hash,
-        )
-        .expect("insert issued");
+        db::insert_issued_invoice(conn, invoice, &fiscal_hash, previous_hash, &audit_event)
+            .expect("insert issued");
         fiscal_hash
     }
 
     #[test]
     fn verifies_valid_alta_anulacion_chain() {
-        let mut conn = memory_conn();
+        let mut conn = db::test_conn();
         let company = company();
         let customer = customer();
         db::insert_company(&conn, &company).expect("company");
@@ -453,7 +438,6 @@ mod tests {
             anulacion_hash.clone(),
             None,
         );
-        let event_hash = event.chain_hash();
         let target = std::env::temp_dir().join(format!(
             "cumplefactura-anulacion-{}.xml",
             uuid::Uuid::new_v4()
@@ -467,7 +451,6 @@ mod tests {
             generated_at,
             target.to_str().expect("utf8"),
             &event,
-            &event_hash,
         )
         .expect("insert anulacion");
 
@@ -481,7 +464,7 @@ mod tests {
 
     #[test]
     fn detects_invoice_tampering_after_fiscal_record() {
-        let mut conn = memory_conn();
+        let mut conn = db::test_conn();
         let company = company();
         let customer = customer();
         db::insert_company(&conn, &company).expect("company");
@@ -511,7 +494,7 @@ mod tests {
 
     #[test]
     fn detects_broken_previous_hash_link() {
-        let mut conn = memory_conn();
+        let mut conn = db::test_conn();
         let company = company();
         let customer = customer();
         db::insert_company(&conn, &company).expect("company");

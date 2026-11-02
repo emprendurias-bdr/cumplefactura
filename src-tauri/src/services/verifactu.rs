@@ -3,11 +3,12 @@
 //! - Construye XML según namespaces AEAT (`SuministroLR` + `SuministroInformacion`).
 //! - Calcula huellas SHA-256 del material de registro (encadenado con factura previa).
 //! - Valida contra XSD bundled vía `tools/validate-verifactu-xsd.ps1` (Windows).
-//! No firma XAdES ni envía a AEAT; eso vive en los módulos sidecar / transport.
+//!
+//! No envía a la AEAT: eso lo hace el sidecar (`services::verifactu_submit`). En modo
+//! VERI*FACTU los registros no se firman (RD 1007/2023 art. 16.3); basta la huella.
 
 use crate::db::{InvoicePdfData, PreviousInvoiceLink};
 use chrono::{DateTime, Datelike};
-use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -323,100 +324,84 @@ pub fn build_verifactu_anulacion_xml_draft(
     Ok(xml)
 }
 
-/// Huella Alta desde datos de factura + enlace previo (wrapper de dominio).
+/// Huella Alta desde datos de factura + enlace previo.
 pub fn calculate_invoice_registro_alta_hash(
     invoice: &InvoicePdfData,
     previous: Option<&PreviousInvoiceLink>,
 ) -> Result<String, String> {
-    let number = invoice
-        .number
-        .ok_or_else(|| "VERI*FACTU hash requires an issued invoice number".to_string())?;
-    let issued_at = invoice
-        .issued_at
-        .as_deref()
-        .ok_or_else(|| "VERI*FACTU hash requires issued_at".to_string())?;
-    calculate_issued_invoice_registro_alta_hash_with_type(
-        &invoice.company_tax_id,
-        &invoice.series,
-        number,
-        issued_at,
-        invoice.tax_cents,
-        invoice.total_cents,
-        registro_alta_invoice_type(invoice)?,
-        previous.map(|item| item.fiscal_hash.as_str()),
-    )
+    IssuedAlta {
+        issuer_tax_id: &invoice.company_tax_id,
+        series: &invoice.series,
+        number: invoice
+            .number
+            .ok_or_else(|| "VERI*FACTU hash requires an issued invoice number".to_string())?,
+        issued_at: invoice
+            .issued_at
+            .as_deref()
+            .ok_or_else(|| "VERI*FACTU hash requires issued_at".to_string())?,
+        tax_cents: invoice.tax_cents,
+        total_cents: invoice.total_cents,
+        invoice_type: registro_alta_invoice_type(invoice)?,
+        previous_hash: previous.map(|item| item.fiscal_hash.as_str()),
+    }
+    .hash()
 }
 
-#[allow(dead_code)]
-/// Huella Alta para factura ya emitida (tipo de factura inferido del kind).
-pub fn calculate_issued_invoice_registro_alta_hash(
-    issuer_tax_id: &str,
-    series: &str,
-    number: i64,
-    issued_at: &str,
-    tax_cents: i64,
-    total_cents: i64,
-    previous_hash: Option<&str>,
-) -> Result<String, String> {
-    calculate_issued_invoice_registro_alta_hash_with_type(
-        issuer_tax_id,
-        series,
-        number,
-        issued_at,
-        tax_cents,
-        total_cents,
-        "F1",
-        previous_hash,
-    )
+/// Factura emitida tal y como entra en la huella de su RegistroAlta.
+pub struct IssuedAlta<'a> {
+    pub issuer_tax_id: &'a str,
+    pub series: &'a str,
+    pub number: i64,
+    /// RFC 3339; es a la vez fecha de expedición y `FechaHoraHusoGenRegistro`.
+    pub issued_at: &'a str,
+    pub tax_cents: i64,
+    pub total_cents: i64,
+    /// `TipoFactura` AEAT (F1, F2, R1…).
+    pub invoice_type: &'a str,
+    pub previous_hash: Option<&'a str>,
 }
 
-/// Igual que issued, forzando el `TipoFactura` AEAT explícito.
-pub fn calculate_issued_invoice_registro_alta_hash_with_type(
-    issuer_tax_id: &str,
-    series: &str,
-    number: i64,
-    issued_at: &str,
-    tax_cents: i64,
-    total_cents: i64,
-    invoice_type: &str,
-    previous_hash: Option<&str>,
-) -> Result<String, String> {
-    let expedition_date = aeat_date(issued_at)?;
-    Ok(calculate_registro_alta_hash(
-        issuer_tax_id,
-        &format_invoice_number(series, number),
-        &expedition_date,
-        invoice_type,
-        &money(tax_cents),
-        &money(total_cents),
-        previous_hash,
-        issued_at,
-    ))
+impl IssuedAlta<'_> {
+    pub fn hash(&self) -> Result<String, String> {
+        Ok(AltaHash {
+            issuer_tax_id: self.issuer_tax_id,
+            invoice_number: &format_invoice_number(self.series, self.number),
+            expedition_date: &aeat_date(self.issued_at)?,
+            invoice_type: self.invoice_type,
+            tax_total: &money(self.tax_cents),
+            invoice_total: &money(self.total_cents),
+            previous_hash: self.previous_hash,
+            generated_at: self.issued_at,
+        }
+        .hash())
+    }
 }
 
-/// SHA-256 del material canónico de RegistroAlta (núcleo del encadenado).
-pub fn calculate_registro_alta_hash(
-    issuer_tax_id: &str,
-    invoice_number: &str,
-    expedition_date: &str,
-    invoice_type: &str,
-    tax_total: &str,
-    invoice_total: &str,
-    previous_hash: Option<&str>,
-    generated_at: &str,
-) -> String {
-    let material = registro_alta_hash_material(
-        issuer_tax_id,
-        invoice_number,
-        expedition_date,
-        invoice_type,
-        tax_total,
-        invoice_total,
-        previous_hash,
-        generated_at,
-    );
-    let digest = Sha256::digest(material.as_bytes());
-    fiscal_contract::to_hex(&digest).to_uppercase()
+/// Campos de la huella de RegistroAlta, ya en el formato del documento técnico AEAT.
+pub struct AltaHash<'a> {
+    pub issuer_tax_id: &'a str,
+    pub invoice_number: &'a str,
+    pub expedition_date: &'a str,
+    pub invoice_type: &'a str,
+    pub tax_total: &'a str,
+    pub invoice_total: &'a str,
+    pub previous_hash: Option<&'a str>,
+    pub generated_at: &'a str,
+}
+
+impl AltaHash<'_> {
+    pub fn hash(&self) -> String {
+        aeat_hash(&[
+            ("IDEmisorFactura", self.issuer_tax_id),
+            ("NumSerieFactura", self.invoice_number),
+            ("FechaExpedicionFactura", self.expedition_date),
+            ("TipoFactura", self.invoice_type),
+            ("CuotaTotal", self.tax_total),
+            ("ImporteTotal", self.invoice_total),
+            ("Huella", &self.previous_hash.unwrap_or("").to_uppercase()),
+            ("FechaHoraHusoGenRegistro", self.generated_at),
+        ])
+    }
 }
 
 /// Huella Anulación desde factura + previo.
@@ -451,75 +436,46 @@ pub fn calculate_issued_invoice_registro_anulacion_hash(
     previous_hash: &str,
     generated_at: &str,
 ) -> Result<String, String> {
-    let expedition_date = aeat_date(issued_at)?;
-    Ok(calculate_registro_anulacion_hash(
+    Ok(AnulacionHash {
         issuer_tax_id,
-        &format_invoice_number(series, number),
-        &expedition_date,
+        invoice_number: &format_invoice_number(series, number),
+        expedition_date: &aeat_date(issued_at)?,
         previous_hash,
         generated_at,
-    ))
+    }
+    .hash())
 }
 
-/// SHA-256 del material canónico de RegistroAnulacion.
-pub fn calculate_registro_anulacion_hash(
-    issuer_tax_id: &str,
-    invoice_number: &str,
-    expedition_date: &str,
-    previous_hash: &str,
-    generated_at: &str,
-) -> String {
-    let material = registro_anulacion_hash_material(
-        issuer_tax_id,
-        invoice_number,
-        expedition_date,
-        previous_hash,
-        generated_at,
-    );
-    let digest = Sha256::digest(material.as_bytes());
-    fiscal_contract::to_hex(&digest).to_uppercase()
+/// Campos de la huella de RegistroAnulacion en formato AEAT.
+pub struct AnulacionHash<'a> {
+    pub issuer_tax_id: &'a str,
+    pub invoice_number: &'a str,
+    pub expedition_date: &'a str,
+    pub previous_hash: &'a str,
+    pub generated_at: &'a str,
 }
 
-/// Cadena canónica (campos ordenados) que se hashea en anulación.
-pub fn registro_anulacion_hash_material(
-    issuer_tax_id: &str,
-    invoice_number: &str,
-    expedition_date: &str,
-    previous_hash: &str,
-    generated_at: &str,
-) -> String {
-    format!(
-        "IDEmisorFacturaAnulada={}&NumSerieFacturaAnulada={}&FechaExpedicionFacturaAnulada={}&Huella={}&FechaHoraHusoGenRegistro={}",
-        issuer_tax_id.trim(),
-        invoice_number.trim(),
-        expedition_date.trim(),
-        previous_hash.trim().to_uppercase(),
-        generated_at.trim()
-    )
+impl AnulacionHash<'_> {
+    pub fn hash(&self) -> String {
+        aeat_hash(&[
+            ("IDEmisorFacturaAnulada", self.issuer_tax_id),
+            ("NumSerieFacturaAnulada", self.invoice_number),
+            ("FechaExpedicionFacturaAnulada", self.expedition_date),
+            ("Huella", &self.previous_hash.to_uppercase()),
+            ("FechaHoraHusoGenRegistro", self.generated_at),
+        ])
+    }
 }
 
-/// Cadena canónica (campos ordenados) que se hashea en alta.
-pub fn registro_alta_hash_material(
-    issuer_tax_id: &str,
-    invoice_number: &str,
-    expedition_date: &str,
-    invoice_type: &str,
-    tax_total: &str,
-    invoice_total: &str,
-    previous_hash: Option<&str>,
-    generated_at: &str,
-) -> String {
-    format!(
-        "IDEmisorFactura={}&NumSerieFactura={}&FechaExpedicionFactura={}&TipoFactura={}&CuotaTotal={}&ImporteTotal={}&Huella={}&FechaHoraHusoGenRegistro={}",
-        issuer_tax_id.trim(),
-        invoice_number.trim(),
-        expedition_date.trim(),
-        invoice_type.trim(),
-        tax_total.trim(),
-        invoice_total.trim(),
-        previous_hash.unwrap_or("").trim().to_uppercase(),
-        generated_at.trim()
-    )
+/// SHA-256 en mayúsculas de `Campo1=valor1&Campo2=valor2…`, el material de huella
+/// del documento técnico de la AEAT. Cada valor va sin espacios alrededor.
+fn aeat_hash(fields: &[(&str, &str)]) -> String {
+    let material = fields
+        .iter()
+        .map(|(name, value)| format!("{name}={}", value.trim()))
+        .collect::<Vec<_>>()
+        .join("&");
+    fiscal_contract::sha256_hex(material.as_bytes()).to_uppercase()
 }
 
 /// Bloque Desglose/Impuesto del XML Alta.
@@ -795,16 +751,17 @@ mod tests {
 
     #[test]
     fn calculates_official_aeat_first_registro_alta_hash_example() {
-        let hash = calculate_registro_alta_hash(
-            "89890001K",
-            "12345678/G33",
-            "01-01-2024",
-            "F1",
-            "12.35",
-            "123.45",
-            None,
-            "2024-01-01T19:20:30+01:00",
-        );
+        let hash = AltaHash {
+            issuer_tax_id: "89890001K",
+            invoice_number: "12345678/G33",
+            expedition_date: "01-01-2024",
+            invoice_type: "F1",
+            tax_total: "12.35",
+            invoice_total: "123.45",
+            previous_hash: None,
+            generated_at: "2024-01-01T19:20:30+01:00",
+        }
+        .hash();
 
         assert_eq!(
             hash,
@@ -814,16 +771,17 @@ mod tests {
 
     #[test]
     fn calculates_official_aeat_chained_registro_alta_hash_example() {
-        let hash = calculate_registro_alta_hash(
-            "89890001K",
-            "12345679/G34",
-            "01-01-2024",
-            "F1",
-            "12.35",
-            "123.45",
-            Some("3C464DAF61ACB827C65FDA19F352A4E3BDC2C640E9E9FC4CC058073F38F12F60"),
-            "2024-01-01T19:20:35+01:00",
-        );
+        let hash = AltaHash {
+            issuer_tax_id: "89890001K",
+            invoice_number: "12345679/G34",
+            expedition_date: "01-01-2024",
+            invoice_type: "F1",
+            tax_total: "12.35",
+            invoice_total: "123.45",
+            previous_hash: Some("3C464DAF61ACB827C65FDA19F352A4E3BDC2C640E9E9FC4CC058073F38F12F60"),
+            generated_at: "2024-01-01T19:20:35+01:00",
+        }
+        .hash();
 
         assert_eq!(
             hash,
@@ -833,13 +791,14 @@ mod tests {
 
     #[test]
     fn calculates_official_aeat_registro_anulacion_hash_example() {
-        let hash = calculate_registro_anulacion_hash(
-            "89890001K",
-            "12345679/G34",
-            "01-01-2024",
-            "F7B94CFD8924EDFF273501B01EE5153E4CE8F259766F88CF6ACB8935802A2B97",
-            "2024-01-01T19:20:40+01:00",
-        );
+        let hash = AnulacionHash {
+            issuer_tax_id: "89890001K",
+            invoice_number: "12345679/G34",
+            expedition_date: "01-01-2024",
+            previous_hash: "F7B94CFD8924EDFF273501B01EE5153E4CE8F259766F88CF6ACB8935802A2B97",
+            generated_at: "2024-01-01T19:20:40+01:00",
+        }
+        .hash();
 
         assert_eq!(
             hash,

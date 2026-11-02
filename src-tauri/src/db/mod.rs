@@ -296,8 +296,8 @@ pub fn insert_issued_invoice(
     fiscal_hash: &str,
     previous_fiscal_hash: Option<&str>,
     audit_event: &AuditEvent,
-    audit_hash: &str,
 ) -> Result<(), String> {
+    let audit_hash = audit_event.chain_hash();
     let tx = conn.transaction().map_err(db_error)?;
     if let Some(source_invoice_id) = &invoice.rectifies_invoice_id {
         let updated = tx
@@ -357,8 +357,8 @@ pub fn insert_anulacion_record(
     generated_at: &str,
     xml_path: &str,
     audit_event: &AuditEvent,
-    audit_hash: &str,
 ) -> Result<(), String> {
+    let audit_hash = audit_event.chain_hash();
     let tx = conn.transaction().map_err(db_error)?;
     let company_id: String = tx
         .query_row(
@@ -1651,6 +1651,16 @@ fn insert_fiscal_record_tx(tx: &Transaction<'_>, record: &FiscalRecordInput) -> 
     .map_err(db_error)
 }
 
+/// SQLite en memoria con claves foráneas y todas las migraciones. Solo tests.
+#[cfg(test)]
+pub fn test_conn() -> Connection {
+    let conn = Connection::open_in_memory().expect("memory db");
+    conn.pragma_update(None, "foreign_keys", "ON")
+        .expect("foreign keys");
+    apply_migrations(&conn).expect("migrations");
+    conn
+}
+
 fn db_error(err: rusqlite::Error) -> String {
     format!("database error: {err}")
 }
@@ -1675,11 +1685,7 @@ mod tests {
     use crate::domain::tax::TerritoryFlag;
 
     fn memory_conn() -> Connection {
-        let conn = Connection::open_in_memory().expect("memory db");
-        conn.pragma_update(None, "foreign_keys", "ON")
-            .expect("foreign keys");
-        apply_migrations(&conn).expect("migrations");
-        conn
+        super::test_conn()
     }
 
     fn company() -> Company {
@@ -2218,15 +2224,8 @@ mod tests {
             None,
         );
         let audit_hash = audit_event.chain_hash();
-        insert_issued_invoice(
-            &mut conn,
-            &issued,
-            &alta_hash,
-            None,
-            &audit_event,
-            &audit_hash,
-        )
-        .expect("issued invoice");
+        insert_issued_invoice(&mut conn, &issued, &alta_hash, None, &audit_event)
+            .expect("issued invoice");
 
         let records = list_fiscal_records(&conn).expect("fiscal records");
         assert_eq!(records.len(), 1);
@@ -2243,7 +2242,6 @@ mod tests {
             anulacion_hash.clone(),
             Some(audit_hash),
         );
-        let anulacion_audit_hash = anulacion_event.chain_hash();
         insert_anulacion_record(
             &mut conn,
             &issued.id,
@@ -2252,7 +2250,6 @@ mod tests {
             "2026-05-28T10:05:00Z",
             "C:\\tmp\\anulacion.xml",
             &anulacion_event,
-            &anulacion_audit_hash,
         )
         .expect("anulacion record");
 
@@ -2300,16 +2297,8 @@ mod tests {
             alta_hash.clone(),
             None,
         );
-        let audit_hash = audit_event.chain_hash();
-        insert_issued_invoice(
-            &mut conn,
-            &issued,
-            &alta_hash,
-            None,
-            &audit_event,
-            &audit_hash,
-        )
-        .expect("issued invoice");
+        insert_issued_invoice(&mut conn, &issued, &alta_hash, None, &audit_event)
+            .expect("issued invoice");
 
         let update = conn.execute(
             "UPDATE fiscal_records SET status = 'changed' WHERE fiscal_hash = ?1",
@@ -2341,15 +2330,8 @@ mod tests {
             None,
         );
         let source_audit_hash = source_event.chain_hash();
-        insert_issued_invoice(
-            &mut conn,
-            &source,
-            &source_hash,
-            None,
-            &source_event,
-            &source_audit_hash,
-        )
-        .expect("source issued");
+        insert_issued_invoice(&mut conn, &source, &source_hash, None, &source_event)
+            .expect("source issued");
 
         let (rectifying, _) = Invoice::issue(InvoiceIssueInput {
             draft: InvoiceDraftInput {
@@ -2385,14 +2367,12 @@ mod tests {
             rectifying_hash.clone(),
             Some(source_audit_hash),
         );
-        let rectifying_audit_hash = rectifying_event.chain_hash();
         insert_issued_invoice(
             &mut conn,
             &rectifying,
             &rectifying_hash,
             Some(&source_hash),
             &rectifying_event,
-            &rectifying_audit_hash,
         )
         .expect("rectifying insert");
 
@@ -2431,16 +2411,8 @@ mod tests {
             "F".repeat(64),
             None,
         );
-        let audit_hash = audit_event.chain_hash();
-        insert_issued_invoice(
-            &mut conn,
-            &issued,
-            &"F".repeat(64),
-            None,
-            &audit_event,
-            &audit_hash,
-        )
-        .expect("issued");
+        insert_issued_invoice(&mut conn, &issued, &"F".repeat(64), None, &audit_event)
+            .expect("issued");
 
         let hash = "A".repeat(64);
         let export_id = insert_fiscal_export(

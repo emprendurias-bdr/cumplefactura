@@ -13,7 +13,12 @@
 //! 7. solo entonces se llama a la AEAT.
 //!
 //! Qué no hace nunca: devolver el XML de la AEAT en bruto, la referencia del
-//! certificado, rutas del vault o el secreto. Solo campos interpretados.
+//! certificado, rutas del vault, el secreto o la contraseña del certificado
+//! (`certificate_password` solo se pasa a `Backend::load_certificate`). Solo campos
+//! interpretados.
+//!
+//! Caducidad del certificado (preflight): `certificate_expires_soon` si quedan ≤ 30
+//! días (aviso) y `certificate_expired` si ya caducó (aviso y bloqueo).
 //!
 //! Por qué un `Backend` intercambiable: los tests ejercitan toda la política con
 //! una AEAT falsa, sin certificados ni red.
@@ -27,9 +32,11 @@ use fiscal_contract::messages::{
     SubmitPreflightRequest, SubmitPreflightResponse,
 };
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const OPERATION: &str = "RegFactuSistemaFacturacion";
+/// Días antes de `notAfter` a partir de los que el preflight avisa.
+const EXPIRY_WARNING_DAYS: i64 = 30;
 const MIN_TIMEOUT_SECONDS: u64 = 5;
 const MAX_TIMEOUT_SECONDS: u64 = 120;
 
@@ -42,7 +49,11 @@ pub trait Backend {
         &self,
         vault_dir: Option<&Path>,
         certificate_ref: &str,
+        password: Option<&str>,
     ) -> Result<Self::Certificate, &'static str>;
+
+    /// `notAfter` del certificado en segundos Unix, si se puede leer.
+    fn certificate_not_after(&self, certificate: &Self::Certificate) -> Option<i64>;
 
     fn post_soap(
         &self,
@@ -85,14 +96,31 @@ pub fn preflight<B: Backend>(
         }
         Some(_) => {}
     }
-    let certificate_loaded =
-        match backend.load_certificate(config.vault_dir.as_deref(), &request.certificate_ref) {
-            Ok(_) => true,
-            Err(code) => {
-                blockers.push(code.to_string());
-                false
-            }
-        };
+    let mut not_after = None;
+    let certificate_loaded = match backend.load_certificate(
+        config.vault_dir.as_deref(),
+        &request.certificate_ref,
+        request.certificate_password.as_deref(),
+    ) {
+        Ok(certificate) => {
+            not_after = backend.certificate_not_after(&certificate);
+            true
+        }
+        Err(code) => {
+            blockers.push(code.to_string());
+            false
+        }
+    };
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs() as i64);
+    let expires_in_days = not_after.map(|not_after| expiry_days(not_after, now));
+    if not_after.is_some_and(|not_after| not_after <= now) {
+        warnings.push("certificate_expired".to_string());
+        blockers.push("certificate_expired".to_string());
+    } else if expires_in_days.is_some_and(|days| days <= EXPIRY_WARNING_DAYS) {
+        warnings.push("certificate_expires_soon".to_string());
+    }
     if !config.allow_aeat {
         blockers.push("aeat_calls_disabled".to_string());
     }
@@ -109,6 +137,8 @@ pub fn preflight<B: Backend>(
         endpoint_allowed: endpoint.is_some(),
         certificate_loaded,
         certificate_source: certificate_loaded.then(|| "pkcs12_vault".to_string()),
+        certificate_expires_at: not_after.map(crate::vault::iso_utc),
+        certificate_expires_in_days: expires_in_days,
         aeat_calls_enabled: config.allow_aeat,
         production_enabled: config.allow_production,
         external_call_performed: false,
@@ -135,7 +165,11 @@ pub fn invoke_submit<B: Backend>(
         return Err(reject("aeat_calls_disabled"));
     }
     let certificate = backend
-        .load_certificate(config.vault_dir.as_deref(), &request.certificate_ref)
+        .load_certificate(
+            config.vault_dir.as_deref(),
+            &request.certificate_ref,
+            request.certificate_password.as_deref(),
+        )
         .map_err(reject)?;
 
     let timeout = Duration::from_secs(
@@ -167,6 +201,11 @@ pub fn invoke_submit<B: Backend>(
     })
 }
 
+/// Días completos que quedan hasta `not_after` (negativo si ya pasó).
+pub fn expiry_days(not_after: i64, now: i64) -> i64 {
+    (not_after - now).div_euclid(86_400)
+}
+
 /// Rechazo antes de cualquier conexión saliente (HTTP 409).
 pub fn reject(code: &str) -> Rejection {
     (
@@ -186,10 +225,14 @@ pub(crate) mod tests {
 
     pub const REGISTRO: &str = "<sfLR:RegFactuSistemaFacturacion xmlns:sfLR=\"https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroLR.xsd\"><sfLR:Cabecera/></sfLR:RegFactuSistemaFacturacion>";
 
+    pub const PASSWORD: &str = "clave-de-prueba-123";
+
     /// AEAT y vault falsos: el certificado `vault://certs/ok` existe; el resto no.
+    /// `vault://certs/con-clave` solo abre con `PASSWORD` en la petición.
     pub struct FakeBackend {
         pub response: Result<HttpResponse, String>,
         pub calls: RefCell<Vec<(EndpointName, String)>>,
+        pub not_after: Option<i64>,
     }
 
     impl FakeBackend {
@@ -200,6 +243,7 @@ pub(crate) mod tests {
                     body: body.as_bytes().to_vec(),
                 }),
                 calls: RefCell::new(Vec::new()),
+                not_after: None,
             }
         }
     }
@@ -211,12 +255,18 @@ pub(crate) mod tests {
             &self,
             _: Option<&Path>,
             certificate_ref: &str,
+            password: Option<&str>,
         ) -> Result<(), &'static str> {
-            if certificate_ref == "vault://certs/ok" {
-                Ok(())
-            } else {
-                Err("certificate_not_found")
+            match (certificate_ref, password) {
+                ("vault://certs/ok", _) | ("vault://certs/con-clave", Some(PASSWORD)) => Ok(()),
+                ("vault://certs/con-clave", None) => Err("certificate_password_required"),
+                ("vault://certs/con-clave", _) => Err("certificate_pkcs12_invalid"),
+                _ => Err("certificate_not_found"),
             }
+        }
+
+        fn certificate_not_after(&self, _: &()) -> Option<i64> {
+            self.not_after
         }
 
         fn post_soap(
@@ -249,6 +299,7 @@ pub(crate) mod tests {
             endpoint_name: endpoint.to_string(),
             certificate_ref: certificate_ref.to_string(),
             timeout_seconds: 30,
+            certificate_password: None,
         }
     }
 
@@ -263,6 +314,7 @@ pub(crate) mod tests {
             &SubmitPreflightRequest {
                 endpoint_name: "SistemaVerifactu".to_string(),
                 certificate_ref: "vault://certs/falta".to_string(),
+                certificate_password: None,
             },
         );
         assert_eq!(result.status, "blocked");
@@ -286,6 +338,7 @@ pub(crate) mod tests {
             &SubmitPreflightRequest {
                 endpoint_name: "SistemaVerifactuPruebas".to_string(),
                 certificate_ref: "vault://certs/ok".to_string(),
+                certificate_password: None,
             },
         );
         assert_eq!(result.status, "ready");
@@ -364,6 +417,7 @@ pub(crate) mod tests {
         let backend = FakeBackend {
             response: Err("connect_error: refused".to_string()),
             calls: RefCell::new(Vec::new()),
+            not_after: None,
         };
         let result = invoke_submit(
             &config(true, true),
@@ -377,5 +431,84 @@ pub(crate) mod tests {
             Some("connect_error: refused")
         );
         assert_eq!(result.http_status, None);
+    }
+
+    fn preflight_with(
+        backend: &FakeBackend,
+        certificate_ref: &str,
+        password: Option<&str>,
+    ) -> SubmitPreflightResponse {
+        preflight(
+            &config(true, false),
+            backend,
+            &SubmitPreflightRequest {
+                endpoint_name: "SistemaVerifactuPruebas".to_string(),
+                certificate_ref: certificate_ref.to_string(),
+                certificate_password: password.map(str::to_string),
+            },
+        )
+    }
+
+    #[test]
+    fn password_from_request_reaches_vault_and_never_the_response() {
+        let backend = FakeBackend::answering(200, ACCEPTED);
+        let result = preflight_with(&backend, "vault://certs/con-clave", None);
+        assert_eq!(result.blockers, vec!["certificate_password_required"]);
+        let result = preflight_with(&backend, "vault://certs/con-clave", Some(PASSWORD));
+        assert_eq!(result.status, "ready");
+        assert!(!serde_json::to_string(&result).unwrap().contains(PASSWORD));
+
+        let mut request = submit("SistemaVerifactuPruebas", "vault://certs/con-clave");
+        request.certificate_password = Some(PASSWORD.to_string());
+        let answer = invoke_submit(&config(true, false), &backend, &request).unwrap();
+        assert!(!serde_json::to_string(&answer).unwrap().contains(PASSWORD));
+        assert!(!backend.calls.borrow()[0].1.contains(PASSWORD));
+        request.certificate_password = Some("otra".to_string());
+        let rejected = invoke_submit(&config(true, false), &backend, &request).unwrap_err();
+        assert_eq!(rejected.1.error, "certificate_pkcs12_invalid");
+        assert!(rejected.1.detail.is_none());
+    }
+
+    #[test]
+    fn preflight_reports_certificate_expiry() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let mut backend = FakeBackend::answering(200, ACCEPTED);
+        let result = preflight_with(&backend, "vault://certs/ok", None);
+        assert_eq!(
+            (
+                result.certificate_expires_at,
+                result.certificate_expires_in_days
+            ),
+            (None, None)
+        );
+
+        backend.not_after = Some(now + 90 * 86_400 + 3_600);
+        let result = preflight_with(&backend, "vault://certs/ok", None);
+        assert_eq!(result.certificate_expires_in_days, Some(90));
+        assert!(result.certificate_expires_at.unwrap().ends_with('Z'));
+        assert!(result.warnings.is_empty() && result.status == "ready");
+
+        backend.not_after = Some(now + 30 * 86_400 + 3_600);
+        let result = preflight_with(&backend, "vault://certs/ok", None);
+        assert_eq!(result.warnings, vec!["certificate_expires_soon"]);
+        assert_eq!(result.status, "ready");
+
+        backend.not_after = Some(now - 10);
+        let result = preflight_with(&backend, "vault://certs/ok", None);
+        assert_eq!(result.certificate_expires_in_days, Some(-1));
+        assert_eq!(result.warnings, vec!["certificate_expired"]);
+        assert_eq!(result.blockers, vec!["certificate_expired"]);
+        assert_eq!(result.status, "blocked");
+    }
+
+    #[test]
+    fn expiry_days_counts_whole_days() {
+        assert_eq!(expiry_days(86_400 * 31, 0), 31);
+        assert_eq!(expiry_days(86_400 * 31 - 1, 0), 30);
+        assert_eq!(expiry_days(0, 0), 0);
+        assert_eq!(expiry_days(-1, 0), -1);
     }
 }

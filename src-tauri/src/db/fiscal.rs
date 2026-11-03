@@ -343,6 +343,83 @@ pub fn insert_verifactu_submission(
     Ok(id)
 }
 
+/// Fila de `verifactu_submissions` para la interfaz (`verifactu_submission_list`).
+#[derive(Debug, Clone, Serialize)]
+pub struct VerifactuSubmissionSummary {
+    pub id: String,
+    pub invoice_id: String,
+    pub fiscal_export_id: String,
+    pub endpoint_name: String,
+    pub xml_sha256: String,
+    pub status: String,
+    pub csv: Option<String>,
+    pub estado_envio: Option<String>,
+    pub estado_registro: Option<String>,
+    pub codigo_error: Option<String>,
+    pub descripcion_error: Option<String>,
+    pub tiempo_espera_envio_seconds: Option<i64>,
+    pub submitted_at: String,
+}
+
+/// Respuestas guardadas, de la más reciente a la más antigua; opcionalmente de una factura.
+pub fn list_verifactu_submissions(
+    conn: &Connection,
+    invoice_id: Option<&str>,
+) -> Result<Vec<VerifactuSubmissionSummary>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, invoice_id, fiscal_export_id, endpoint_name, xml_sha256, status, csv, estado_envio, estado_registro, codigo_error, descripcion_error, tiempo_espera_envio_seconds, submitted_at
+             FROM verifactu_submissions
+             WHERE ?1 IS NULL OR invoice_id = ?1
+             ORDER BY submitted_at DESC, rowid DESC",
+        )
+        .map_err(db_error)?;
+    let rows = stmt
+        .query_map(params![invoice_id], |row| {
+            Ok(VerifactuSubmissionSummary {
+                id: row.get(0)?,
+                invoice_id: row.get(1)?,
+                fiscal_export_id: row.get(2)?,
+                endpoint_name: row.get(3)?,
+                xml_sha256: row.get(4)?,
+                status: row.get(5)?,
+                csv: row.get(6)?,
+                estado_envio: row.get(7)?,
+                estado_registro: row.get(8)?,
+                codigo_error: row.get(9)?,
+                descripcion_error: row.get(10)?,
+                tiempo_espera_envio_seconds: row.get(11)?,
+                submitted_at: row.get(12)?,
+            })
+        })
+        .map_err(db_error)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
+}
+
+/// Última respuesta con `TiempoEsperaEnvio` para la empresa de la factura y ese
+/// endpoint: (`submitted_at`, segundos). La espera de la AEAT es por obligado
+/// tributario, no por factura.
+pub fn latest_verifactu_wait(
+    conn: &Connection,
+    invoice_id: &str,
+    endpoint_name: &str,
+) -> Result<Option<(String, i64)>, String> {
+    conn.query_row(
+        "SELECT s.submitted_at, s.tiempo_espera_envio_seconds
+         FROM verifactu_submissions s
+         JOIN invoices i ON i.id = s.invoice_id
+         WHERE i.company_id = (SELECT company_id FROM invoices WHERE id = ?1)
+           AND s.endpoint_name = ?2
+           AND s.tiempo_espera_envio_seconds IS NOT NULL
+         ORDER BY s.submitted_at DESC, s.rowid DESC
+         LIMIT 1",
+        params![invoice_id, endpoint_name],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )
+    .optional()
+    .map_err(db_error)
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct PreviousInvoiceLink {
     pub company_tax_id: String,

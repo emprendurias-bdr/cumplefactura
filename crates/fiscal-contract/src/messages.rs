@@ -3,8 +3,11 @@
 //! Qué hace: un único juego de structs serializables que usan los dos extremos.
 //! Si un campo cambia aquí, la app y el sidecar dejan de compilar a la vez.
 //!
-//! Qué no lleva nunca: rutas del vault, contraseñas, bytes del certificado ni el
-//! secreto de sesión. La app solo conoce `certificate_ref` (`vault://certs/<id>`).
+//! Qué no lleva nunca: rutas del vault, bytes del certificado ni el secreto de
+//! sesión. La app solo conoce `certificate_ref` (`vault://certs/<id>`). La única
+//! contraseña es `certificate_password` en las peticiones (modo «solo durante esta
+//! sesión», ADR-002): viaja en el cuerpo firmado con HMAC por loopback y ninguna
+//! respuesta la devuelve.
 //!
 //! Por qué `endpoint_name` es `String` y no `EndpointName`: un nombre desconocido
 //! debe producir un bloqueo explicado (`endpoint_name_not_allowed`), no un error de
@@ -39,10 +42,27 @@ pub struct ErrorResponse {
 }
 
 /// `POST /verifactu/submit-preflight`: ¿se podría enviar ahora?
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct SubmitPreflightRequest {
     pub endpoint_name: String,
     pub certificate_ref: String,
+    /// Contraseña del PKCS#12 para esta petición. `None`: el sidecar la busca en el entorno.
+    #[serde(default)]
+    pub certificate_password: Option<String>,
+}
+
+/// `Debug` a mano para que ninguna traza imprima la contraseña del certificado.
+impl std::fmt::Debug for SubmitPreflightRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SubmitPreflightRequest")
+            .field("endpoint_name", &self.endpoint_name)
+            .field("certificate_ref", &self.certificate_ref)
+            .field(
+                "certificate_password",
+                &self.certificate_password.as_ref().map(|_| "***"),
+            )
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -56,6 +76,12 @@ pub struct SubmitPreflightResponse {
     pub certificate_loaded: bool,
     /// `pkcs12_vault` cuando el certificado se ha podido abrir.
     pub certificate_source: Option<String>,
+    /// `notAfter` del certificado (`AAAA-MM-DDTHH:MM:SSZ`); `None` si no se pudo leer.
+    #[serde(default)]
+    pub certificate_expires_at: Option<String>,
+    /// Días completos hasta `notAfter` (negativo si ya caducó).
+    #[serde(default)]
+    pub certificate_expires_in_days: Option<i64>,
     pub aeat_calls_enabled: bool,
     pub production_enabled: bool,
     /// Siempre `false`: el preflight nunca sale a internet.
@@ -63,7 +89,7 @@ pub struct SubmitPreflightResponse {
 }
 
 /// `POST /verifactu/invoke-submit`: envía el XML a la AEAT.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct InvokeSubmitRequest {
     /// Documento `sfLR:RegFactuSistemaFacturacion` completo, tal y como lo generó la app.
     pub xml: String,
@@ -72,6 +98,26 @@ pub struct InvokeSubmitRequest {
     pub endpoint_name: String,
     pub certificate_ref: String,
     pub timeout_seconds: u64,
+    /// Igual que en `SubmitPreflightRequest`.
+    #[serde(default)]
+    pub certificate_password: Option<String>,
+}
+
+/// `Debug` a mano para que ninguna traza imprima la contraseña del certificado.
+impl std::fmt::Debug for InvokeSubmitRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InvokeSubmitRequest")
+            .field("xml", &self.xml)
+            .field("xml_sha256", &self.xml_sha256)
+            .field("endpoint_name", &self.endpoint_name)
+            .field("certificate_ref", &self.certificate_ref)
+            .field("timeout_seconds", &self.timeout_seconds)
+            .field(
+                "certificate_password",
+                &self.certificate_password.as_ref().map(|_| "***"),
+            )
+            .finish()
+    }
 }
 
 /// Resultado de un envío que llegó a salir hacia la AEAT.
@@ -113,5 +159,16 @@ mod tests {
             json,
             r#"{"error":"hmac_invalid","external_call_performed":false}"#
         );
+    }
+
+    #[test]
+    fn debug_never_prints_certificate_password() {
+        let request = SubmitPreflightRequest {
+            endpoint_name: "SistemaVerifactuPruebas".to_string(),
+            certificate_ref: "vault://certs/a".to_string(),
+            certificate_password: Some("clave-secreta".to_string()),
+        };
+        let printed = format!("{request:?}");
+        assert!(!printed.contains("clave-secreta") && printed.contains("***"));
     }
 }

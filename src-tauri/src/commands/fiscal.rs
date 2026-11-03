@@ -1,10 +1,13 @@
 //! IPC fiscal local: exportaciones, XML VERI*FACTU, cadena, copia de seguridad y envío.
 //!
 //! El envío a la AEAT pasa siempre por el sidecar (`services::sidecar_process`):
-//! la app nunca abre certificados ni conexiones salientes. Restore es solo preflight.
+//! la app nunca abre certificados ni conexiones salientes. Toda respuesta del envío
+//! se guarda (`verifactu_submission_list`); reenviar es siempre decisión del usuario.
+//! `backup_restore` solo valida salvo con `confirm = true` (ver `db::backup`).
 
 use crate::db::{
     self, AppState, AuditSummary, FiscalRecordSummary, ListPagination, PreviousInvoiceLink,
+    VerifactuSubmissionSummary,
 };
 use crate::domain::require;
 use crate::services::audit::AuditEvent;
@@ -18,6 +21,7 @@ use chrono::{SecondsFormat, Utc};
 use fiscal_contract::messages::{InvokeSubmitResponse, SubmitPreflightResponse};
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::path::Path;
 use tauri::{AppHandle, Manager, State};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,8 +45,12 @@ pub struct VerifactuXmlResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackupRestoreResult {
     pub source_path: String,
+    /// `validated-only` · `restored` · `rolled_back`.
     pub status: String,
     pub destructive_restore_performed: bool,
+    /// Copia de la base anterior, hecha antes de sustituirla.
+    pub safety_backup_path: Option<String>,
+    pub chain_ok: Option<bool>,
     pub notes: Vec<String>,
 }
 
@@ -53,13 +61,13 @@ pub struct ExportResult {
     pub notes: Vec<String>,
 }
 
-/// Resultado del envío: respuesta AEAT interpretada y, si la AEAT contestó, el
-/// identificador del registro guardado como evidencia.
+/// Resultado del envío: respuesta AEAT interpretada y el identificador de la fila
+/// guardada en `verifactu_submissions` (también si fue `transport_error`).
 #[derive(Debug, Clone, Serialize)]
 pub struct VerifactuSubmission {
     pub invoice_id: String,
     pub export_id: String,
-    pub submission_id: Option<String>,
+    pub submission_id: String,
     #[serde(flatten)]
     pub aeat: InvokeSubmitResponse,
 }
@@ -90,19 +98,38 @@ pub fn backup_export(
     })
 }
 
-/// Preflight restore: valida origen; no reemplaza la BD en MVP.
+/// Restaurar copia. Sin `confirm` (o `false`) solo valida; con `true` sustituye la
+/// base activa con copia previa y vuelta atrás si la cadena fiscal no verifica.
 #[tauri::command]
-pub fn backup_restore(source_path: String) -> Result<BackupRestoreResult, String> {
+pub fn backup_restore(
+    state: State<'_, AppState>,
+    source_path: String,
+    confirm: Option<bool>,
+) -> Result<BackupRestoreResult, String> {
     require("source_path", &source_path)?;
     export::validate_restore_source(&source_path)?;
+    db::validate_backup_file(Path::new(&source_path))?;
+    if !confirm.unwrap_or(false) {
+        return Ok(BackupRestoreResult {
+            source_path,
+            status: "validated-only".to_string(),
+            destructive_restore_performed: false,
+            safety_backup_path: None,
+            chain_ok: None,
+            notes: vec![
+                "Copia válida. Confirma para sustituir la base actual (se guarda antes una copia previa).".to_string(),
+            ],
+        });
+    }
+    let mut conn = state.lock()?;
+    let outcome = db::restore_database(&mut conn, Path::new(&source_path))?;
     Ok(BackupRestoreResult {
         source_path,
-        status: "validated-only".to_string(),
-        destructive_restore_performed: false,
-        notes: vec![
-            "Restore is intentionally preflight-only in this MVP to avoid replacing the active fiscal database without an explicit offline recovery flow.".to_string(),
-            "Close the app and use a documented recovery procedure before destructive restore.".to_string(),
-        ],
+        status: outcome.status.to_string(),
+        destructive_restore_performed: outcome.status == "restored",
+        safety_backup_path: Some(outcome.safety_backup_path),
+        chain_ok: outcome.chain_ok,
+        notes: outcome.notes,
     })
 }
 
@@ -326,38 +353,39 @@ pub fn verifactu_submit_preflight(
     app: AppHandle,
     state: State<'_, AppState>,
     sidecar: State<'_, SidecarManager>,
-    input: SubmitInput,
+    mut input: SubmitInput,
 ) -> Result<SubmitPreflightResponse, String> {
-    let (_, endpoint_name) = checked_submission(&state, &input)?;
+    let (_, endpoint_name) = checked_submission(&state, &mut input)?;
     let client = sidecar.client(|| LaunchConfig::resolve(&app))?;
     verifactu_submit::preflight(&client, &input, &endpoint_name)
 }
 
 /// Envía el XML exportado a la AEAT a través del sidecar y guarda la respuesta.
+/// Un `transport_error` previo no bloquea: el usuario puede reintentar a mano.
 #[tauri::command]
 pub fn verifactu_submit(
     app: AppHandle,
     state: State<'_, AppState>,
     sidecar: State<'_, SidecarManager>,
-    input: SubmitInput,
+    mut input: SubmitInput,
 ) -> Result<VerifactuSubmission, String> {
-    let (xml, endpoint_name) = checked_submission(&state, &input)?;
+    let (xml, endpoint_name) = checked_submission(&state, &mut input)?;
+    {
+        let conn = state.lock()?;
+        verifactu_submit::check_wait_time(&conn, &input.invoice_id, &endpoint_name, Utc::now())?;
+    }
     let client = sidecar.client(|| LaunchConfig::resolve(&app))?;
     // Sin bloqueo de base de datos durante la llamada a la AEAT (hasta 30 s).
     let aeat = verifactu_submit::submit(&client, &input, xml, &endpoint_name)?;
-    let submission_id = if verifactu_submit::aeat_answered(&aeat) {
-        let conn = state.lock()?;
-        Some(db::insert_verifactu_submission(
-            &conn,
-            db::VerifactuSubmissionRecord {
-                invoice_id: &input.invoice_id,
-                fiscal_export_id: &input.export_id,
-                response: &aeat,
-            },
-        )?)
-    } else {
-        None
-    };
+    let conn = state.lock()?;
+    let submission_id = db::insert_verifactu_submission(
+        &conn,
+        db::VerifactuSubmissionRecord {
+            invoice_id: &input.invoice_id,
+            fiscal_export_id: &input.export_id,
+            response: &aeat,
+        },
+    )?;
     Ok(VerifactuSubmission {
         invoice_id: input.invoice_id,
         export_id: input.export_id,
@@ -366,8 +394,22 @@ pub fn verifactu_submit(
     })
 }
 
+/// Respuestas de la AEAT guardadas, de la más reciente a la más antigua.
+#[tauri::command]
+pub fn verifactu_submission_list(
+    state: State<'_, AppState>,
+    invoice_id: Option<String>,
+) -> Result<Vec<VerifactuSubmissionSummary>, String> {
+    let conn = state.lock()?;
+    db::list_verifactu_submissions(&conn, invoice_id.as_deref())
+}
+
 /// Comprobaciones comunes a preflight y envío. Devuelve el XML y el endpoint configurado.
-fn checked_submission(state: &AppState, input: &SubmitInput) -> Result<(String, String), String> {
+/// En modo `env` descarta la contraseña que llegue de la interfaz: manda el entorno del sidecar.
+fn checked_submission(
+    state: &AppState,
+    input: &mut SubmitInput,
+) -> Result<(String, String), String> {
     let xml = verifactu_submit::read_checked_xml(input)?;
     let conn = state.lock()?;
     if !db::fiscal_export_matches(
@@ -381,7 +423,11 @@ fn checked_submission(state: &AppState, input: &SubmitInput) -> Result<(String, 
     if db::verifactu_xml_already_accepted(&conn, &input.xml_sha256)? {
         return Err("xml_already_accepted_by_aeat".to_string());
     }
-    Ok((xml, db::get_app_settings(&conn)?.verifactu_endpoint_name))
+    let settings = db::get_app_settings(&conn)?;
+    if !settings.sends_certificate_password() {
+        input.certificate_password = None;
+    }
+    Ok((xml, settings.verifactu_endpoint_name))
 }
 
 fn resolve_verifactu_xsd_assets(app: &AppHandle) -> Result<verifactu::VerifactuXsdAssets, String> {

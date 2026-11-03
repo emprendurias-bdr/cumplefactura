@@ -1,4 +1,7 @@
-//! Empresas emisoras y configuración de series de facturación.
+//! Empresas emisoras, configuración de series de facturación y logo (D1).
+//!
+//! El logo se copia a `<app data>/logos/<company_id>.<ext>` tras validarlo (`services::logo`);
+//! nunca se guarda la ruta original del usuario.
 
 use super::*;
 
@@ -253,12 +256,13 @@ pub struct CompanySummary {
     pub country_code: String,
     pub default_series: String,
     pub created_at: String,
+    pub logo_path: Option<String>,
 }
 
 pub fn list_companies(conn: &Connection) -> Result<Vec<CompanySummary>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, legal_name, tax_id, address, postal_code, municipality, province, country_code, default_series, created_at
+            "SELECT id, legal_name, tax_id, address, postal_code, municipality, province, country_code, default_series, created_at, logo_path
              FROM companies ORDER BY created_at DESC",
         )
         .map_err(db_error)?;
@@ -275,8 +279,81 @@ pub fn list_companies(conn: &Connection) -> Result<Vec<CompanySummary>, String> 
                 country_code: row.get(7)?,
                 default_series: row.get(8)?,
                 created_at: row.get(9)?,
+                logo_path: row.get(10)?,
             })
         })
         .map_err(db_error)?;
     rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
+}
+
+/// Valida el logo, lo copia en `logos_dir/<company_id>.<ext>` y guarda esa ruta.
+pub fn set_company_logo(
+    conn: &mut Connection,
+    company_id: &str,
+    source_path: &std::path::Path,
+    logos_dir: &std::path::Path,
+) -> Result<String, String> {
+    require_company(conn, company_id)?;
+    let size = fs::metadata(source_path)
+        .map_err(|err| format!("logo_read_error:{err}"))?
+        .len();
+    if size > crate::services::logo::MAX_LOGO_BYTES as u64 {
+        return Err("logo_too_large:1MB".to_string());
+    }
+    let bytes = fs::read(source_path).map_err(|err| format!("logo_read_error:{err}"))?;
+    let logo = crate::services::logo::parse_logo(&bytes)?;
+    fs::create_dir_all(logos_dir).map_err(|err| format!("logo_write_error:{err}"))?;
+    let target = logos_dir.join(format!("{company_id}.{}", logo.extension));
+    fs::write(&target, &bytes).map_err(|err| format!("logo_write_error:{err}"))?;
+    let target = target.to_string_lossy().into_owned();
+    let tx = conn.transaction().map_err(db_error)?;
+    let previous: Option<String> = tx
+        .query_row(
+            "SELECT logo_path FROM companies WHERE id = ?1",
+            params![company_id],
+            |row| row.get(0),
+        )
+        .map_err(db_error)?;
+    tx.execute(
+        "UPDATE companies SET logo_path = ?2 WHERE id = ?1",
+        params![company_id, target],
+    )
+    .map_err(db_error)?;
+    operational_audit(&tx, "company", company_id, "company_logo_set", &target)?;
+    tx.commit().map_err(db_error)?;
+    // Logo anterior con otra extensión: ya no lo usa nadie.
+    if let Some(previous) = previous.filter(|path| *path != target) {
+        let _ = fs::remove_file(previous);
+    }
+    Ok(target)
+}
+
+/// Quita el logo y borra su copia.
+pub fn clear_company_logo(conn: &mut Connection, company_id: &str) -> Result<(), String> {
+    require_company(conn, company_id)?;
+    let tx = conn.transaction().map_err(db_error)?;
+    let previous: Option<String> = tx
+        .query_row(
+            "SELECT logo_path FROM companies WHERE id = ?1",
+            params![company_id],
+            |row| row.get(0),
+        )
+        .map_err(db_error)?;
+    tx.execute(
+        "UPDATE companies SET logo_path = NULL WHERE id = ?1",
+        params![company_id],
+    )
+    .map_err(db_error)?;
+    operational_audit(
+        &tx,
+        "company",
+        company_id,
+        "company_logo_cleared",
+        company_id,
+    )?;
+    tx.commit().map_err(db_error)?;
+    if let Some(previous) = previous {
+        let _ = fs::remove_file(previous);
+    }
+    Ok(())
 }

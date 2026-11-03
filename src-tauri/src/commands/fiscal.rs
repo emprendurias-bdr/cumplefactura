@@ -256,9 +256,14 @@ pub fn verifactu_xml_anulacion_draft_export(
     state: State<'_, AppState>,
     invoice_id: String,
     target_path: String,
+    reason: String,
 ) -> Result<VerifactuXmlResult, String> {
     require("invoice_id", &invoice_id)?;
     require("target_path", &target_path)?;
+    // Motivo obligatorio (design.md §7.7): solo va a la factura y a la auditoría, nunca al XML.
+    if reason.trim().is_empty() {
+        return Err("reason_required".to_string());
+    }
 
     let mut conn = state.lock()?;
     let invoice = db::invoice_pdf_data(&conn, &invoice_id)?;
@@ -301,6 +306,7 @@ pub fn verifactu_xml_anulacion_draft_export(
         &generated_at,
         &target_path,
         &audit_event,
+        &reason,
     ) {
         let _ = fs::remove_file(&target_path);
         return Err(err);

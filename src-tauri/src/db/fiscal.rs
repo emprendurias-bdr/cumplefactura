@@ -2,6 +2,8 @@
 
 use super::*;
 
+// Un argumento por dato del registro de anulación; agruparlos solo movería el problema.
+#[allow(clippy::too_many_arguments)]
 pub fn insert_anulacion_record(
     conn: &mut Connection,
     invoice_id: &str,
@@ -10,7 +12,12 @@ pub fn insert_anulacion_record(
     generated_at: &str,
     xml_path: &str,
     audit_event: &AuditEvent,
+    reason: &str,
 ) -> Result<(), String> {
+    let reason = reason.trim();
+    if reason.is_empty() {
+        return Err("reason_required".to_string());
+    }
     let audit_hash = audit_event.chain_hash();
     let tx = conn.transaction().map_err(db_error)?;
     let company_id: String = tx
@@ -24,8 +31,8 @@ pub fn insert_anulacion_record(
         .ok_or_else(|| format!("invoice not found: {invoice_id}"))?;
 
     tx.execute(
-        "UPDATE invoices SET status = 'Void' WHERE id = ?1 AND status = 'Issued'",
-        params![invoice_id],
+        "UPDATE invoices SET status = 'Void', void_reason = ?2 WHERE id = ?1 AND status = 'Issued'",
+        params![invoice_id, reason],
     )
     .map_err(db_error)
     .and_then(|updated| {
@@ -68,6 +75,9 @@ pub fn insert_anulacion_record(
         ],
     )
     .map_err(db_error)?;
+    // El motivo va en un evento propio, encadenado detrás: `invoice_voided` no cambia.
+    let payload = serde_json::json!({ "reason": reason }).to_string();
+    operational_audit(&tx, "invoice", invoice_id, "invoice_void_reason", &payload)?;
     tx.commit().map_err(db_error)
 }
 

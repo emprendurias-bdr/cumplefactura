@@ -5,7 +5,7 @@
 
 use crate::db::{
     self, AppState, CommercialDocument, CommercialDocumentInput, CommercialDocumentListFilters,
-    CommercialDocumentPage, ListPagination,
+    CommercialDocumentPage, CommercialSeriesConfig, CommercialSeriesConfigInput, ListPagination,
 };
 use crate::domain::invoice::Invoice;
 use crate::domain::require;
@@ -114,4 +114,25 @@ pub fn commercial_document_pdf(
         target_path,
         sha256,
     })
+}
+
+/// Series de presupuesto, proforma y albarán de la empresa (guardadas o por defecto P/PF/AL).
+#[tauri::command]
+pub fn commercial_series_list(
+    state: State<'_, AppState>,
+    company_id: String,
+) -> Result<Vec<CommercialSeriesConfig>, String> {
+    require("company_id", &company_id)?;
+    let conn = state.lock()?;
+    db::list_commercial_series(&conn, &company_id)
+}
+
+/// Cambia el código/relleno de un tipo; no renumera documentos ya numerados.
+#[tauri::command]
+pub fn commercial_series_configure(
+    state: State<'_, AppState>,
+    input: CommercialSeriesConfigInput,
+) -> Result<CommercialSeriesConfig, String> {
+    let mut conn = state.lock()?;
+    db::configure_commercial_series(&mut conn, input)
 }

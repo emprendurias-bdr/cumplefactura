@@ -70,6 +70,7 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
         rectifies_invoice_id: None,
         rectification_reason_code: None,
         rectification_method: None,
+        notes: String::new(),
         lines: vec![InvoiceLineInput {
             description: "Servicio profesional".to_string(),
             quantity: 1,
@@ -77,6 +78,7 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
             discount_rate_basis_points: None,
             tax_rate_basis_points: 2_100,
             withholding_rate_basis_points: None,
+            price_pending: None,
         }],
     };
     let draft = Invoice::draft(draft_input.clone()).expect("draft invoice");

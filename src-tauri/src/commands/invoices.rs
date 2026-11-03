@@ -1,6 +1,11 @@
-//! IPC facturas: borrador, emisión (nº + huella en Rust), listado, PDF.
+//! IPC facturas: borrador, emisión (nº + huella en Rust), listado, ficha, PDF.
+//!
+//! Editar un borrador (`invoice_draft_update`) nunca toca facturas emitidas (`not_draft`).
+//! La emisión se bloquea con `price_pending_lines:<n>` mientras haya líneas sin precio (D8).
 
-use crate::db::{self, AppState, InvoiceListFilters, InvoiceSummary, ListPagination};
+use crate::db::{
+    self, AppState, InvoiceDetail, InvoiceListFilters, InvoiceSummary, ListPagination,
+};
 use crate::domain::invoice::{Invoice, InvoiceDraftInput, InvoiceIssueInput, IssuedInvoice};
 use crate::domain::require;
 use crate::services::audit::AuditEvent;
@@ -31,6 +36,29 @@ pub fn invoice_draft_create(
     Ok(invoice)
 }
 
+/// Reescribe un borrador (cabecera, líneas, observaciones). Solo `Draft`.
+#[tauri::command]
+pub fn invoice_draft_update(
+    state: State<'_, AppState>,
+    id: String,
+    input: InvoiceDraftInput,
+) -> Result<Invoice, String> {
+    require("id", &id)?;
+    let mut conn = state.lock()?;
+    db::update_invoice_draft(&mut conn, &id, input)
+}
+
+/// Ficha completa (borrador o emitida) con la forma de `Invoice` + campos operativos.
+#[tauri::command]
+pub fn invoice_get(
+    state: State<'_, AppState>,
+    invoice_id: String,
+) -> Result<InvoiceDetail, String> {
+    require("invoice_id", &invoice_id)?;
+    let conn = state.lock()?;
+    db::get_invoice_detail(&conn, &invoice_id)
+}
+
 /// Emite: reserva secuencia, calcula huella, audit trail y registro fiscal.
 /// `draft_id` (opcional): borrador que se emite. Se borra en la misma transacción y sus albaranes
 /// y periodos recurrentes pasan a la factura emitida.
@@ -44,6 +72,7 @@ pub fn invoice_issue(
     if let Some(draft_id) = draft_id.as_deref() {
         db::check_commercial_links_for_issue(&conn, draft_id, &input.draft.customer_id)?;
     }
+    db::check_price_pending_for_issue(&conn, draft_id.as_deref(), &input.draft)?;
     let previous_hash = match input.previous_audit_hash.clone() {
         Some(hash) => Some(hash),
         None => db::latest_audit_hash(&conn)?,

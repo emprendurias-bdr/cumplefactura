@@ -125,8 +125,10 @@ pub(crate) mod tests {
                 tax_rate_basis_points: 2_100,
                 taxable_base_cents: 20_000,
                 tax_cents: 4_200,
+                ..Default::default()
             }],
             rectified_invoice: None,
+            ..Default::default()
         }
     }
 

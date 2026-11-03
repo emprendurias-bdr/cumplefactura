@@ -317,6 +317,7 @@ fn persists_app_settings_for_onboarding() {
             onboarding_completed: true,
             verifactu_endpoint_name: "SistemaVerifactuSelloPruebas".to_string(),
             certificate_password_mode: "env".to_string(),
+            qr_environment: "production".to_string(),
         },
     )
     .expect("save settings");
@@ -336,6 +337,8 @@ fn persists_app_settings_for_onboarding() {
         "SistemaVerifactuSelloPruebas"
     );
     assert_eq!(loaded.certificate_password_mode, "env");
+    assert_eq!(loaded.qr_environment, "production");
+    assert_eq!(defaults.qr_environment, "test");
     assert!(!loaded.sends_certificate_password());
     assert_eq!(defaults.certificate_password_mode, "session");
     assert!(defaults.sends_certificate_password());
@@ -346,11 +349,13 @@ fn persists_app_settings_for_onboarding() {
     .expect("settings saved before the endpoint field still load");
     assert_eq!(legacy.verifactu_endpoint_name, "SistemaVerifactuPruebas");
     assert_eq!(legacy.certificate_password_mode, "session");
+    assert_eq!(legacy.qr_environment, "test");
     let old_input: AppSettingsInput = serde_json::from_str(
         r#"{"export_dir":null,"default_territory_flags":["VeriFactu"],"onboarding_completed":true}"#,
     )
     .expect("old UI input without the new fields still deserializes");
     assert_eq!(old_input.certificate_password_mode, "session");
+    assert_eq!(old_input.qr_environment, "test");
     let keychain = AppSettingsInput {
         certificate_password_mode: "keychain".to_string(),
         ..old_input.clone()
@@ -368,9 +373,14 @@ fn persists_app_settings_for_onboarding() {
     assert!(update_app_settings(&conn, invalid).is_err());
     let invalid_mode = AppSettingsInput {
         certificate_password_mode: "disk".to_string(),
-        ..old_input
+        ..old_input.clone()
     };
     assert!(update_app_settings(&conn, invalid_mode).is_err());
+    let invalid_qr = AppSettingsInput {
+        qr_environment: "prod".to_string(),
+        ..old_input
+    };
+    assert!(update_app_settings(&conn, invalid_qr).is_err());
 }
 
 #[test]

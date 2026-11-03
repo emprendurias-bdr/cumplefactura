@@ -6,6 +6,9 @@
 //! - `keychain`: se acepta y se guarda, pero mientras no se apruebe la librería del
 //!   llavero se comporta como `session`;
 //! - `env`: la app no manda contraseña y el sidecar usa su variable de entorno.
+//!
+//! `qr_environment` (`test` por defecto, `production`) elige el host de cotejo del QR
+//! tributario del PDF; se cambia a producción al homologar.
 
 use fiscal_contract::endpoints::{EndpointName, DEFAULT_ENDPOINT};
 use serde::{Deserialize, Serialize};
@@ -21,6 +24,9 @@ pub struct AppSettings {
     /// `session` · `keychain` · `env`. Ajustes guardados antes de este campo cargan `session`.
     #[serde(default = "default_password_mode")]
     pub certificate_password_mode: String,
+    /// `test` · `production`. Ajustes guardados antes de este campo cargan `test`.
+    #[serde(default = "default_qr_environment")]
+    pub qr_environment: String,
     pub updated_at: String,
 }
 
@@ -33,6 +39,8 @@ pub struct AppSettingsInput {
     pub verifactu_endpoint_name: String,
     #[serde(default = "default_password_mode")]
     pub certificate_password_mode: String,
+    #[serde(default = "default_qr_environment")]
+    pub qr_environment: String,
 }
 
 impl Default for AppSettings {
@@ -43,6 +51,7 @@ impl Default for AppSettings {
             onboarding_completed: false,
             verifactu_endpoint_name: default_endpoint_name(),
             certificate_password_mode: default_password_mode(),
+            qr_environment: default_qr_environment(),
             updated_at: chrono::Utc::now().to_rfc3339(),
         }
     }
@@ -87,6 +96,7 @@ impl AppSettingsInput {
                 self.certificate_password_mode
             ));
         }
+        crate::services::qr::QrEnvironment::parse(&self.qr_environment)?;
         Ok(())
     }
 }
@@ -101,6 +111,10 @@ impl AppSettings {
 
 pub fn default_flags() -> Vec<String> {
     vec!["CommonTerritory".to_string(), "VeriFactu".to_string()]
+}
+
+pub fn default_qr_environment() -> String {
+    "test".to_string()
 }
 
 pub fn default_password_mode() -> String {

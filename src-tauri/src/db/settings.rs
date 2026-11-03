@@ -35,6 +35,7 @@ pub fn update_app_settings(
         onboarding_completed: input.onboarding_completed,
         verifactu_endpoint_name: input.verifactu_endpoint_name,
         certificate_password_mode: input.certificate_password_mode,
+        qr_environment: input.qr_environment,
         updated_at: chrono::Utc::now().to_rfc3339(),
     };
     let value =

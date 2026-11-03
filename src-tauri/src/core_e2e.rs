@@ -154,8 +154,12 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
         ))
     };
     remove_if_exists(&pdf_path);
-    pdf::write_invoice_pdf(pdf_path.to_str().expect("pdf utf8"), &invoice_data)
-        .expect("PDF export");
+    pdf::write_invoice_pdf(
+        pdf_path.to_str().expect("pdf utf8"),
+        &invoice_data,
+        crate::services::qr::QrEnvironment::Test,
+    )
+    .expect("PDF export");
 
     let json_path = if write_evidence {
         evidence_dir.join("latest-core-e2e-invoice.json")

@@ -30,3 +30,6 @@ __pycache__/
 src-tauri/binaries/
 # Esquema ACL que Tauri genera al compilar en Linux (el repo versiona el de Windows)
 src-tauri/gen/schemas/linux-schema.json
+
+# Capturas que genera tools/verify-modes-visual.mjs: se publican fuera del repo.
+docs/ux/f2/

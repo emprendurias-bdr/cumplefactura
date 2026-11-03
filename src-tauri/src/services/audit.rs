@@ -60,6 +60,26 @@ impl AuditEvent {
         }
     }
 
+    /// Evento de gestión sin efecto fiscal (plantillas recurrentes, borradores generados).
+    pub fn operational(
+        entity_type: &str,
+        entity_id: &str,
+        action: &str,
+        payload_hash: String,
+        previous_hash: Option<String>,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            entity_type: entity_type.to_string(),
+            entity_id: entity_id.to_string(),
+            action: action.to_string(),
+            actor: "local-user".to_string(),
+            occurred_at: Utc::now().to_rfc3339(),
+            payload_hash,
+            previous_hash,
+        }
+    }
+
     /// SHA-256 del contenido del evento + previous_hash (eslabón de la trail).
     pub fn chain_hash(&self) -> String {
         let mut hasher = Sha256::new();

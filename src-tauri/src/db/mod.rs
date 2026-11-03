@@ -11,6 +11,7 @@
 //! | `products`  | `products`                                                     |
 //! | `invoices`  | `invoices`, `invoice_lines`, numeración                        |
 //! | `fiscal`    | `fiscal_records`, `audit_events`, `fiscal_exports`, `verifactu_submissions` |
+//! | `recurring` | `recurring_invoices`, `recurring_runs`                         |
 //!
 //! Todo se reexporta aquí: el resto de la app usa `db::<función>` sin conocer el módulo.
 
@@ -36,6 +37,7 @@ mod customers;
 mod fiscal;
 mod invoices;
 mod products;
+mod recurring;
 mod settings;
 
 pub use companies::*;
@@ -43,6 +45,7 @@ pub use customers::*;
 pub use fiscal::*;
 pub use invoices::*;
 pub use products::*;
+pub use recurring::*;
 pub use settings::*;
 
 pub struct AppState {
@@ -110,6 +113,11 @@ pub fn migrations() -> Vec<Migration> {
             version: 9,
             name: "verifactu_submissions",
             sql: include_str!("migrations/009_verifactu_submissions.sql"),
+        },
+        Migration {
+            version: 11,
+            name: "recurring_invoices",
+            sql: include_str!("migrations/011_recurring_invoices.sql"),
         },
     ]
 }

@@ -9,4 +9,5 @@ pub mod customers;
 pub mod fiscal;
 pub mod invoices;
 pub mod products;
+pub mod recurring;
 pub mod settings;

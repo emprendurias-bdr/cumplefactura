@@ -53,6 +53,12 @@ pub fn run() {
             commands::fiscal::fiscal_chain_verify,
             commands::fiscal::verifactu_submit_preflight,
             commands::fiscal::verifactu_submit,
+            commands::recurring::recurring_list,
+            commands::recurring::recurring_save,
+            commands::recurring::recurring_set_active,
+            commands::recurring::recurring_delete,
+            commands::recurring::recurring_generate_due,
+            commands::recurring::recurring_preview,
         ])
         .build(tauri::generate_context!())
         .expect("error while building CumpleFactura")

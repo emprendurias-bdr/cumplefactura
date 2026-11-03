@@ -1,7 +1,8 @@
 /**
  * Confirmación de «Anular factura» (design.md §7.7), compartida por la lista y la ficha.
  * Anular genera el registro de anulación encadenado (XML de anulación) y la factura pasa a
- * Anulada. Pide «Lo entiendo» porque no se deshace; no pide motivo porque Rust aún no lo guarda.
+ * Anulada. Pide «Lo entiendo» porque no se deshace y un motivo obligatorio, que Rust guarda en la
+ * factura y en la auditoría (no entra en el XML ni en la huella).
  */
 import { t } from "../i18n/es";
 import { invoiceNumber } from "../lib/numberProposal";
@@ -20,10 +21,11 @@ export function AnularDialog({ c, invoice, onClose }: { c: Ctx; invoice: Invoice
       verb={t("anular.verbo")}
       danger
       acknowledge
+      reason
       loadingText={t("anular.cargando")}
       onCancel={onClose}
-      onConfirm={async () => {
-        if (invoice && (await c.vf.exportCancelXml(invoice.id))) onClose();
+      onConfirm={async (reason) => {
+        if (invoice && (await c.vf.exportCancelXml(invoice.id, reason))) onClose();
       }}
     />
   );

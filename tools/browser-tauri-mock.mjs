@@ -241,6 +241,7 @@ export function installTauriMock(page, seed = null) {
         notes: ["browser smoke mock"],
       }),
       verifactu_xml_anulacion_draft_export: (args) => {
+        if (!String(args.reason || "").trim()) throw "reason_required";
         state.invoices = state.invoices.map((inv) => (inv.id === args.invoiceId ? { ...inv, status: "Void" } : inv));
         return { target_path: args.targetPath, status: "draft-created-xsd-valid", xsd_validated: true, export_id: id("export"), xml_sha256: hex(98), xml_bytes: 1024, notes: ["browser smoke mock"] };
       },

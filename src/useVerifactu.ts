@@ -122,8 +122,8 @@ export function useVerifactu(m: Model) {
   /** Anular: XML de anulación encadenado; la factura pasa a Anulada en Rust. */
   const exportCancelXml = action(
     t("ok.anulacion"),
-    async (invoiceId: string) => {
-      const result = await invoke<VerifactuXmlResult>("verifactu_xml_anulacion_draft_export", { invoiceId, targetPath: m.paths.cancelXml });
+    async (invoiceId: string, reason: string) => {
+      const result = await invoke<VerifactuXmlResult>("verifactu_xml_anulacion_draft_export", { invoiceId, targetPath: m.paths.cancelXml, reason });
       return { invoiceId, result };
     },
     async ({ invoiceId, result }) => {

@@ -2,7 +2,7 @@
 
 Fecha: 2026-11-03. Autor: Fable 5.1 (sesión «Plan de trabajo optimizado»). Decide: Ricardo. Revisan: Bilel y David.
 
-**Actualización 2026-11-03 (respuestas de Ricardo).** PR #7 fusionado en `main` (ADR-001 aceptada). Interfaz alineada con `design.md` desde el primer PR (ADR-003). Contraseña del certificado: la elige el cliente, con la opción recomendada por defecto (ADR-002). Documentos y Recurrentes especificados para Bilel y David en `docs/ESPEC_DOCUMENTOS_Y_RECURRENTES.md`. Primero lo fiscal, siempre (F3 antes que F4). Queda abierta la pregunta sobre la evidencia (§3).
+**Actualización 2026-11-03 (respuestas de Ricardo).** PR #7 fusionado en `main` (ADR-001 aceptada). Interfaz alineada con `design.md` desde el primer PR (ADR-003). Contraseña del certificado: la elige el cliente, con la opción recomendada por defecto (ADR-002). Documentos y Recurrentes especificados para Bilel y David en `docs/ESPEC_DOCUMENTOS_Y_RECURRENTES.md`. Primero lo fiscal, siempre (F3 antes que F4). Evidencia: solo la última ejecución del gate (§3, opción A). `Stepper` de 5 pasos, cambiado en `design.md` (ADR-003).
 
 Fuentes: sesiones «Arrancar servidor frontend local» (3-nov), «Vilel branch merge review» (30-oct → 2-nov, PR #7) y «Repo UX/UI analysis» (30-oct, `docs/ANALISIS_REPO_UX_UI_2026-10-30.md` + `docs/PLAN_UX_UI_2026-10-30.md` + `docs/PROMPT_SESION_SUITE_BDR.md`), más verificación directa del repo en esta sesión.
 
@@ -35,7 +35,7 @@ Lo que las tres sesiones dejaron pendiente y sigue pendiente:
 - Envío real a la AEAT de pruebas con certificado (`tools/homolog-verifactu.mjs --enviar`) y manifiesto de aceptación redactado.
 - Decisión sobre la contraseña del certificado (hoy variable de entorno).
 - Fase-2 nunca pasó CI Windows (WebDriver) y no se fusionó.
-- Las preguntas P1–P6 del análisis UX: respondidas el 03-11 (ver §7), salvo los pasos del Stepper, que chocan con `design.md`.
+- Las preguntas P1–P6 del análisis UX: respondidas el 03-11 (ver §7), incluidos los pasos del Stepper (5).
 
 ---
 
@@ -92,7 +92,7 @@ Lo que las tres sesiones dejaron pendiente y sigue pendiente:
 - Textos en `src/i18n/es.ts` desde el primer componente (§8).
 - Cada pantalla pasa la lista de §12 en los 4 modos antes de pedir revisión.
 
-**Conflicto encontrado que hay que resolver en `design.md`.** El §10 fija para CumpleFactura un `Stepper` de 6 pasos: Emitida → Registro → XML → **Firmando** → Enviada → Aceptada. PR #7 envía sin firma XAdES (RD 1007/2023 art. 16.3), así que «Firmando» no ocurre nunca, y §7.8 prohíbe colorear un paso que no ha ocurrido. Propuesta para `design.md` v1.4, por §0.4 punto 7: **5 pasos** (Emitida → Registro → XML → Enviada → Aceptada); «Firmando» vuelve solo si algún día se implementa el modo «No VERI\*FACTU». Hasta que se decida, F2 implementa los 5 pasos y lo dice en el PR.
+**Conflicto resuelto en `design.md` (Ricardo, 03-11: 5 pasos).** El §10 fija para CumpleFactura un `Stepper` de 6 pasos: Emitida → Registro → XML → **Firmando** → Enviada → Aceptada. PR #7 envía sin firma XAdES (RD 1007/2023 art. 16.3), así que «Firmando» no ocurre nunca, y §7.8 prohíbe colorear un paso que no ha ocurrido. Cambiado en `design.md` v1.4 (rama del PR #4 de `bdr-ui`): **5 pasos** (Emitida → Registro → XML → Enviada → Aceptada); «Firmando» vuelve solo si algún día se implementa el modo «No VERI\*FACTU». F2 implementa los 5 pasos.
 
 | Opción | Dependencias nuevas | Código | Control del diseño |
 |---|---|---|---|
@@ -114,9 +114,9 @@ Lo que las tres sesiones dejaron pendiente y sigue pendiente:
 | Rust sidecar | `native-tls`, `roxmltree`, `serde`, `serde_json`, `fiscal-contract` (+ `rcgen` test) | **igual** | Toda red sale por `aeat_client.rs`. |
 | Rust contrato | `hmac`, `sha2`, `serde`, `serde_json`, `uuid` | igual | |
 | Frontend | 3.416 líneas | ≤ 5.000 con toda la UI BDR | Un fichero por pantalla o componente, ≤ 300 líneas, cabecera con lógica/estado/estructura. Sin `any`. |
-| `tests/regulatory/evidence/` | 452 ficheros, 6,3 MB versionados | Ver «Evidencia del gate» abajo | Pendiente de Ricardo. |
+| `tests/regulatory/evidence/` | 116 ficheros (antes 452, 6,3 MB) | Solo `latest-*` y la última ejecución | Hecho 03-11: opción A. El gate borra los registros anteriores al terminar. |
 
-**Evidencia del gate (pregunta abierta).** Cada vez que alguien ejecuta `npm run validate:regulatory` en Windows, el gate escribe en `tests/regulatory/evidence/` unos 14 registros con la fecha en el nombre (`20260604-142025-cargo_test.log`, `…-tauri_build.log`…) y sobrescribe unos 20 resúmenes `latest-*` (JSON, Markdown, PNG, el XML y el PDF de prueba). Hoy hay 35 ejecuciones guardadas: 452 ficheros y 6,3 MB en el repo. El gate y el ledger solo leen los `latest-*` y los registros de la **última** ejecución; los de las 34 anteriores no los usa nada. Problemas: cada PR que pasa el gate añade unos 30 ficheros al diff, y los históricos engordan el repo sin aportar. Opciones:
+**Evidencia del gate (decidido 03-11: opción A).** Cada vez que alguien ejecuta `npm run validate:regulatory` en Windows, el gate escribe en `tests/regulatory/evidence/` unos 14 registros con la fecha en el nombre (`20260604-142025-cargo_test.log`, `…-tauri_build.log`…) y sobrescribe unos 20 resúmenes `latest-*` (JSON, Markdown, PNG, el XML y el PDF de prueba). Había 35 ejecuciones guardadas: 452 ficheros y 6,3 MB en el repo. El gate y el ledger solo leen los `latest-*` y los registros de la **última** ejecución; los de las 34 anteriores no los usa nada. Problemas: cada PR que pasa el gate añade unos 30 ficheros al diff, y los históricos engordan el repo sin aportar. Opciones:
 
 | Opción | Qué se sube al repo | Qué se pierde |
 |---|---|---|
@@ -166,7 +166,7 @@ Sigue el orden y los criterios de `docs/PLAN_UX_UI_2026-10-30.md` (tokens → sh
 | F2.5 Editor, emisión y Verifactu | Editor partido 1fr/420 px, ConfirmDialog de emisión con «Lo entiendo», `Ctrl+Enter`, asistente de rectificativa en 4 pasos; pantalla Verifactu con el flujo real de PR #7 (Exportar XML → Comprobación previa → Enviar → Respuesta AEAT) y técnico en `<details>`. | `RectificationWizard.tsx`, `FiscalProgress` → `progress.ts` + test. | 1,5 |
 | F2.6 Ajustes, primer arranque, clientes y productos | Subpáginas de Ajustes (Empresa, Series, Fiscalidad, Certificado, Copias, Avanzado); `FirstRun` a pantalla completa; Clientes y Productos como tabla + formulario lateral. | `FirstRun.tsx`, `Onboarding.tsx` (estructura). | 1 |
 
-Pasos del Stepper Verifactu: **5**, no los 6 de `design.md` §10, hasta que se resuelva el conflicto descrito en ADR-003. Pasos 4 y 5 solo se colorean con fila en `verifactu_submissions`.
+Pasos del Stepper Verifactu: **5**, como fija `design.md` v1.4 §10 (ADR-003). Pasos 4 y 5 solo se colorean con fila en `verifactu_submissions`.
 
 ### F3 — Cierre fiscal y local-first (4 PR, ~4 días; empieza tras F1.2)
 
@@ -223,6 +223,6 @@ Formato de PR: título `<fase>(<área>): <qué>`, cuerpo con objetivo, ficheros,
 | 2 | ¿Librería de componentes? | Alineado con `design.md` desde el principio (ADR-003). |
 | 3 | ¿Dónde se guarda la contraseña del certificado? | La elige el cliente; por defecto, solo durante la sesión (ADR-002). |
 | 4 | ¿Documentos y Recurrentes en el menú? | Visibles con explicación; especificados para Bilel y David. |
-| 5 | ¿Qué evidencia se versiona? | Pendiente: contexto y opciones en §3, «Evidencia del gate». |
+| 5 | ¿Qué evidencia se versiona? | Solo la última ejecución (opción A). Hecho. |
 | 6 | ¿Fiscal o comercial primero? | Fiscal siempre. |
-| 7 | ¿Stepper de 5 o 6 pasos? | Nueva: conflicto con `design.md` §10 (ADR-003). Decide Ricardo con Bilel y Dabiz. |
+| 7 | ¿Stepper de 5 o 6 pasos? | 5 pasos. Cambiado en `design.md`. |

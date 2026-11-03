@@ -196,7 +196,7 @@ dialog.bdr-dialog.cf-palette { width: min(620px, calc(100vw - 32px)); transition
 .cf-palette__search { max-width: none; height: 44px; }
 .cf-palette__list { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow: auto; }
 .cf-palette__item { display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; border-radius: var(--r-s); cursor: pointer; font-size: 14px; }
-.cf-palette__item.is-active { background: var(--p-activo-bg); color: var(--p-activo-fg); }
+.cf-palette__item.is-active { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--fg); }
 .cf-palette__item.is-active .bdr-muted { color: inherit; }
 .cf-palette__empty { padding: 12px; }
 

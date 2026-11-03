@@ -4,6 +4,7 @@ import type {
   CompanyForm,
   Customer,
   CustomerForm,
+  Invoice,
   InvoiceFilterForm,
   InvoiceLineForm,
   InvoiceLineInput,
@@ -11,16 +12,11 @@ import type {
   Product,
   ProductForm,
 } from "../types";
-import { PAGE_SIZE } from "../types";
+import { PAGE_SIZE } from "../types.ts"; // con extensión: lo importan los tests de node
 
-/** Formatea céntimos a EUR es-ES. */
-export function cents(value: number) {
-  return new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(value / 100);
-}
-
-/** Acorta hashes/ids para listados. */
+/** Acorta huellas para tablas: `C02E·77B4` (la completa va en `title`). */
 export function short(value?: string | null) {
-  return value ? `${value.slice(0, 12)}...` : "-";
+  return value ? `${value.slice(0, 4)}·${value.slice(-4)}` : "—";
 }
 
 /** Compone código de serie (opcionalmente con año fiscal). */
@@ -128,8 +124,11 @@ export function productToForm(value: Product): ProductForm {
   };
 }
 
+/** `1.234,56` o `1234.56` → número; con coma, los puntos son de miles. Vacío o basura → NaN. */
 export function decimal(value: string) {
-  return Number(String(value).replace(",", "."));
+  const text = String(value).trim();
+  if (!text) return Number.NaN;
+  return Number(text.includes(",") ? text.replace(/\./g, "").replace(",", ".") : text);
 }
 
 /** String euros UI → céntimos enteros para Rust. */
@@ -192,6 +191,22 @@ export function productToInvoiceLine(product: Product, lineId: string): InvoiceL
     tax_rate_percent: (product.tax_rate_basis_points / 100).toString(),
     withholding_rate_percent: product.withholding_rate_basis_points ? (product.withholding_rate_basis_points / 100).toString() : "",
   };
+}
+
+/** Líneas de Rust (céntimos y puntos básicos) → formulario del editor. */
+export function invoiceToLines(invoice: Pick<Invoice, "lines">): InvoiceLineForm[] {
+  const lines = invoice.lines ?? [];
+  if (lines.length === 0) return [newInvoiceLine()];
+  const percent = (bp?: number | null) => (bp ? String(bp / 100).replace(".", ",") : "");
+  return lines.map((line, index) => ({
+    id: `line-${index}-${line.id ?? Date.now()}`,
+    description: line.description,
+    quantity: String(line.quantity),
+    unit_price_euros: String(line.unit_price_cents / 100).replace(".", ","),
+    discount_rate_percent: percent(line.discount_rate_basis_points) || "0",
+    tax_rate_percent: percent(line.tax_rate_basis_points) || "0",
+    withholding_rate_percent: percent(line.withholding_rate_basis_points),
+  }));
 }
 
 /** Totales preview en cliente (base/IVA/IRPF/total) alineados con lógica de líneas. */

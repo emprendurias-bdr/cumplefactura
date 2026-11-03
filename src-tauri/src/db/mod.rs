@@ -11,6 +11,7 @@
 //! | `products`  | `products`                                                     |
 //! | `invoices`  | `invoices`, `invoice_lines`, numeración                        |
 //! | `fiscal`    | `fiscal_records`, `audit_events`, `fiscal_exports`, `verifactu_submissions` |
+//! | `commercial_documents` | `commercial_documents`, `commercial_document_lines`, `commercial_sequences` |
 //! | `recurring` | `recurring_invoices`, `recurring_runs`                         |
 //!
 //! Todo se reexporta aquí: el resto de la app usa `db::<función>` sin conocer el módulo.
@@ -32,6 +33,7 @@ use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 use tauri::Manager;
 
+mod commercial_documents;
 mod companies;
 mod customers;
 mod fiscal;
@@ -40,6 +42,7 @@ mod products;
 mod recurring;
 mod settings;
 
+pub use commercial_documents::*;
 pub use companies::*;
 pub use customers::*;
 pub use fiscal::*;
@@ -113,6 +116,11 @@ pub fn migrations() -> Vec<Migration> {
             version: 9,
             name: "verifactu_submissions",
             sql: include_str!("migrations/009_verifactu_submissions.sql"),
+        },
+        Migration {
+            version: 10,
+            name: "commercial_documents",
+            sql: include_str!("migrations/010_commercial_documents.sql"),
         },
         Migration {
             version: 11,

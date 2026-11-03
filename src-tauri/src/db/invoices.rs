@@ -8,12 +8,35 @@ pub fn insert_invoice_draft(conn: &mut Connection, invoice: &Invoice) -> Result<
     tx.commit().map_err(db_error)
 }
 
+/// Emisión sin borrador previo; la app usa `insert_issued_invoice_from_draft`.
+#[cfg(test)]
 pub fn insert_issued_invoice(
     conn: &mut Connection,
     invoice: &Invoice,
     fiscal_hash: &str,
     previous_fiscal_hash: Option<&str>,
     audit_event: &AuditEvent,
+) -> Result<(), String> {
+    insert_issued_invoice_from_draft(
+        conn,
+        invoice,
+        fiscal_hash,
+        previous_fiscal_hash,
+        audit_event,
+        None,
+    )
+}
+
+/// Emite como `insert_issued_invoice`. Con `draft_id`, en la misma transacción pasa a la factura
+/// emitida los albaranes y periodos recurrentes del borrador y borra el borrador: así no puede
+/// emitirse dos veces ni facturar dos veces los mismos albaranes.
+pub fn insert_issued_invoice_from_draft(
+    conn: &mut Connection,
+    invoice: &Invoice,
+    fiscal_hash: &str,
+    previous_fiscal_hash: Option<&str>,
+    audit_event: &AuditEvent,
+    draft_id: Option<&str>,
 ) -> Result<(), String> {
     let audit_hash = audit_event.chain_hash();
     let tx = conn.transaction().map_err(db_error)?;
@@ -64,7 +87,39 @@ pub fn insert_issued_invoice(
         ],
     )
     .map_err(db_error)?;
+    if let Some(draft_id) = draft_id {
+        consume_draft(&tx, draft_id, invoice)?;
+    }
     tx.commit().map_err(db_error)
+}
+
+fn consume_draft(tx: &Connection, draft_id: &str, issued: &Invoice) -> Result<(), String> {
+    let is_draft: bool = tx
+        .query_row(
+            "SELECT EXISTS (SELECT 1 FROM invoices WHERE id = ?1 AND company_id = ?2 AND status = 'Draft')",
+            params![draft_id, issued.company_id],
+            |row| row.get(0),
+        )
+        .map_err(db_error)?;
+    if !is_draft {
+        return Err("not_draft".to_string());
+    }
+    link_commercial_documents_to_issued(tx, draft_id, &issued.id)?;
+    tx.execute(
+        "UPDATE recurring_runs SET invoice_id = ?2 WHERE invoice_id = ?1",
+        params![draft_id, issued.id],
+    )
+    .map_err(db_error)?;
+    for table in ["invoice_territory_flags", "invoice_lines"] {
+        tx.execute(
+            &format!("DELETE FROM {table} WHERE invoice_id = ?1"),
+            params![draft_id],
+        )
+        .map_err(db_error)?;
+    }
+    tx.execute("DELETE FROM invoices WHERE id = ?1", params![draft_id])
+        .map_err(db_error)?;
+    Ok(())
 }
 
 pub fn next_invoice_number_preview(

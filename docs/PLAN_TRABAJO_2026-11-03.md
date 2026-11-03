@@ -186,6 +186,36 @@ Rebasar solo backend, renumerando la migración 009 → 010 y adaptando a la DB 
 
 ---
 
+## 4b. Ronda de UX/UI (03-11): decisiones de Ricardo y siguiente ronda
+
+**Dónde estamos.** Backend de F3 y F4 integrado en `claude/adoring-brown-zw9671` (127 tests). La interfaz rediseñada con `design.md` está terminándose en paralelo; una revisión de capturas provisionales encontró 7 fallos que ya se le han pasado al agente (chip de cadena sin evidencia, dos acciones principales por pantalla, chip «Recomendada» estirado, opción del llavero sin aspecto deshabilitado, campo de contraseña a todo el ancho, etiqueta del hero de Recurrentes, avatar vacío, serie incoherente entre hero y barra).
+
+**Decisiones (Ricardo, 03-11):**
+
+| # | Tema | Decisión |
+|---|---|---|
+| D1 | PDF de factura | Plantilla con logo y tabla, sin librerías nuevas: cabecera con logo, emisor y cliente, tabla de líneas, totales, QR y leyenda, observaciones. Que el PDF se parezca a `DocPreview`. |
+| D2 | Observaciones | Campo «Observaciones» en la factura (migración aditiva). Pasa desde presupuesto, proforma, albaranes y plantilla recurrente; sale en el PDF; **no** entra en huella ni XML. |
+| D3 | Origen de recurrentes | `invoice_list` y la ficha dicen «Recurrente · <plantilla> · <periodo>» en los borradores generados. |
+| D4 | Datos de ejemplo | Solo en desarrollo (`import.meta.env.DEV`), nunca en la app instalada. |
+| D5 | `FechaOperacion` en recapitulativas | No se rellena en las recapitulativas; las fechas de cada albarán van en las líneas del PDF. Las facturas normales no cambian (salida byte a byte igual). **Pendiente**: confirmar con `C:\03 LEGISLACION` y la FAQ de la AEAT antes de homologar. |
+| D6 | Proforma pagada | El anticipo se registra como **cobro**. Trae el módulo de cobros de `claude/cf-funcionalidades-estrella` (tabla de cobros, vencimiento), adaptado: el cobro de la proforma pasa a la factura al convertir. |
+| D7 | Series de documentos | Configurables en Ajustes › Series, con `P`, `PF`, `AL` por defecto. |
+| D8 | Albarán sin precios | Se puede facturar: el borrador marca esas líneas «pendiente de precio» y la emisión se bloquea hasta ponerlo. Las líneas de texto «Albarán AL-… · fecha» no cuentan. |
+
+**Siguiente ronda (orden):**
+
+| Paso | Qué | Quién |
+|---|---|---|
+| R1 | Terminar e integrar la interfaz; capturas con datos en 4 modos; publicar una página de revisión con todas las pantallas | Agente UI + integración |
+| R2 | Backend de D1, D2, D3, D5, D6, D7, D8 (migración 012, PDF con logo, cobros, series de documentos, marca de precio pendiente) | Agente backend, en paralelo con R1 |
+| R3 | Interfaz de D1–D8 sobre la integración de R1 y R2 | Agente UI |
+| R4 | Revisión de Ricardo sobre la página de capturas; lista de ajustes visuales; una pasada de correcciones | Ricardo + Opus |
+| R5 | Visto bueno de Bilel y Dabiz (protocolo `design.md` §0.2: tokens, shell, fuentes, `qrcode`); gate completo en Windows; fusión en `main` | Ricardo, Bilel, Dabiz |
+| R6 | Homologación con la AEAT de pruebas (certificado de Ricardo) | Ricardo |
+
+Fuera de esta ronda, para decidir después: email (hoy `mailto:`), importación de clientes, productos y facturas, facturas simplificadas o modo mostrador, intracomunitarias y VIES, y las decisiones abiertas de `design.md` §13 (modo por defecto, texto del panel ⚙).
+
 ## 5. Riesgos
 
 | Riesgo | Señal | Mitigación |

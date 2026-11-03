@@ -11,6 +11,9 @@
 //! | `products`  | `products`                                                     |
 //! | `invoices`  | `invoices`, `invoice_lines`, numeración                        |
 //! | `fiscal`    | `fiscal_records`, `audit_events`, `fiscal_exports`, `verifactu_submissions` |
+//! | `commercial_documents` | `commercial_documents`, `commercial_document_lines`, `commercial_sequences` |
+//! | `recurring` | `recurring_invoices`, `recurring_runs`                         |
+//! | `backup`    | restaurar una copia sobre la base activa (con copia previa y vuelta atrás) |
 //!
 //! Todo se reexporta aquí: el resto de la app usa `db::<función>` sin conocer el módulo.
 
@@ -31,18 +34,24 @@ use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 use tauri::Manager;
 
+mod backup;
+mod commercial_documents;
 mod companies;
 mod customers;
 mod fiscal;
 mod invoices;
 mod products;
+mod recurring;
 mod settings;
 
+pub use backup::*;
+pub use commercial_documents::*;
 pub use companies::*;
 pub use customers::*;
 pub use fiscal::*;
 pub use invoices::*;
 pub use products::*;
+pub use recurring::*;
 pub use settings::*;
 
 pub struct AppState {
@@ -111,19 +120,34 @@ pub fn migrations() -> Vec<Migration> {
             name: "verifactu_submissions",
             sql: include_str!("migrations/009_verifactu_submissions.sql"),
         },
+        Migration {
+            version: 10,
+            name: "commercial_documents",
+            sql: include_str!("migrations/010_commercial_documents.sql"),
+        },
+        Migration {
+            version: 11,
+            name: "recurring_invoices",
+            sql: include_str!("migrations/011_recurring_invoices.sql"),
+        },
     ]
 }
 
 pub fn init_app_state(app: &tauri::App) -> Result<AppState, Box<dyn Error>> {
     let app_data_dir = app.path().app_data_dir()?;
     fs::create_dir_all(&app_data_dir)?;
-    let db_path = app_data_dir.join("cumplefactura.sqlite3");
-    let conn = Connection::open(db_path)?;
-    conn.pragma_update(None, "foreign_keys", "ON")?;
-    apply_migrations(&conn)?;
+    let conn = open_database(&app_data_dir.join("cumplefactura.sqlite3"))?;
     Ok(AppState {
         conn: Mutex::new(conn),
     })
+}
+
+/// Abre (o crea) la base en `path` con claves foráneas y todas las migraciones.
+pub fn open_database(path: &std::path::Path) -> Result<Connection, rusqlite::Error> {
+    let conn = Connection::open(path)?;
+    conn.pragma_update(None, "foreign_keys", "ON")?;
+    apply_migrations(&conn)?;
+    Ok(conn)
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -222,4 +246,4 @@ fn clean_optional(value: Option<String>) -> Option<String> {
         .filter(|item| !item.is_empty())
 }
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

@@ -18,7 +18,7 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite; sidecar Rust `cumplefactura
 | Comando | Entrada | Salida | Estado |
 |---|---|---|---|
 | `app_defaults_get` | - | `AppDefaults` | Resuelve carpetas de datos y export desde Tauri; la UI deriva los nombres de fichero |
-| `app_settings_get` | - | `AppSettings` | Lee configuracion local persistida de onboarding, carpeta export, flags fiscales y endpoint VERI*FACTU |
+| `app_settings_get` | - | `AppSettings` | Lee configuracion local persistida de onboarding, carpeta export, flags fiscales, endpoint VERI*FACTU, `certificate_password_mode` (`session` por defecto, `keychain` actua como `session` hasta aprobar la libreria, `env`) y `qr_environment` (`test` por defecto, `production`) |
 | `app_settings_update` | `AppSettingsInput` | `AppSettings` | Guarda onboarding local y valida flags soportados y endpoint (4 puertos del WSDL) |
 | `company_create` | `CompanyInput` | `Company` | Persistencia SQLite |
 | `company_update` | `CompanyUpdateInput` | `Company` | Edita datos reales del emisor por ID sin recrear entidad |
@@ -30,19 +30,29 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite; sidecar Rust `cumplefactura
 | `invoice_draft_create` | `InvoiceDraftInput` | `Invoice` | Totales + persistencia SQLite |
 | `invoice_list` | `InvoiceListFilters?`, `ListPagination?` | `InvoiceSummary[]` | Busca/filtra por empresa, cliente, año, serie, estado, tipo y texto con `limit/offset` |
 | `invoice_next_number_preview` | `company_id`, `fiscal_year`, `series` | `NextNumberPreview` | Lee `invoice_sequences`; preview UI, no reserva |
-| `invoice_issue` | `InvoiceIssueInput` | `IssuedInvoice` | Ignora numero UI, reserva desde `invoice_sequences`, huella RegistroAlta AEAT + auditoria + registro fiscal persistido; soporta `Rectifying` R1-R5/I-S |
-| `invoice_export_pdf` | `invoice_id`, `target_path` | `FilePath` | PDF basico local |
+| `invoice_issue` | `InvoiceIssueInput`, `draft_id?` | `IssuedInvoice` | Con `draft_id`, en la misma transaccion pasa a la factura emitida los albaranes y periodos recurrentes del borrador y borra el borrador (`not_draft` si no lo es). Ignora numero UI, reserva desde `invoice_sequences`, huella RegistroAlta AEAT + auditoria + registro fiscal persistido; soporta `Rectifying` R1-R5/I-S |
+| `invoice_export_pdf` | `invoice_id`, `target_path` | `FilePath` | PDF local; las facturas emitidas llevan QR tributario VERI*FACTU y la leyenda de cotejo; los borradores no |
 | `invoice_export_json` | `invoice_id`, `target_path` | `ExportResult` | JSON de factura local |
 | `invoice_export_csv` | `filters`, `target_path` | `ExportResult` | CSV local; filtros aceptados por contrato, MVP exporta todo |
 | `fiscal_audit_export` | `filters`, `target_path` | `ExportResult` | JSON de trazabilidad fiscal local con verificacion de cadena; no certificacion |
 | `verifactu_xml_draft_export` | `invoice_id`, `target_path` | `VerifactuXmlResult` | XML alta, XSD local obligatorio; registra `fiscal_exports` `xml_exported` y devuelve `export_id` + `xml_sha256`; sin envio |
 | `verifactu_xml_anulacion_draft_export` | `invoice_id`, `target_path` | `VerifactuXmlResult` | XML anulacion, XSD local obligatorio, registro fiscal append-only, factura `Void`, `xml_exported`; sin envio |
 | `fiscal_chain_verify` | - | `FiscalChainVerification` | Recalculo huellas AEAT + enlaces `previous_fiscal_hash` + deteccion tamper |
-| `verifactu_submit_preflight` | `SubmitInput` (`invoice_id`, `export_id`, `xml_path`, `xml_sha256`, `certificate_ref`) | `SubmitPreflightResponse` | Comprueba que el XML sigue siendo el exportado y pregunta al sidecar (lanzandolo si hace falta) por endpoint, certificado y permiso AEAT; nunca llama a la AEAT |
-| `verifactu_submit` | `SubmitInput` | `VerifactuSubmission` | Envia el XML sin firma al sidecar, que lo remite a la AEAT por TLS mutuo; guarda CSV y estados en `verifactu_submissions` si la AEAT contesta |
+| `verifactu_submit_preflight` | `SubmitInput` (`invoice_id`, `export_id`, `xml_path`, `xml_sha256`, `certificate_ref`, `certificate_password?`) | `SubmitPreflightResponse` (+ `certificate_expires_at`, `certificate_expires_in_days`; avisos `certificate_expires_soon`, `certificate_expired`, este ultimo tambien bloqueo) | Comprueba que el XML sigue siendo el exportado y pregunta al sidecar (lanzandolo si hace falta) por endpoint, certificado y permiso AEAT; nunca llama a la AEAT |
+| `verifactu_submit` | `SubmitInput` | `VerifactuSubmission` | Envia el XML sin firma al sidecar, que lo remite a la AEAT por TLS mutuo; guarda toda respuesta en `verifactu_submissions`, tambien `transport_error`; rechaza `aeat_wait_time_pending:<s>` y `xml_already_accepted_by_aeat`; sin reintentos automaticos |
+| `verifactu_submission_list` | `invoice_id?` | `VerifactuSubmissionSummary[]` | Todas las respuestas AEAT, la mas reciente primero |
 | `company_list` / `customer_list` / `invoice_list` / `audit_list` / `fiscal_record_list` | filtros/paginacion segun lista | listas resumen | Lectura SQLite |
 | `backup_export` | `target_path` | `BackupResult` | Export SQLite con `VACUUM INTO` |
-| `backup_restore` | `source_path` | `BackupRestoreResult` | Preflight `validated-only`; no reemplazo destructivo en MVP |
+| `backup_restore` | `source_path`, `confirm?` | `BackupRestoreResult` (+ `safety_backup_path`, `chain_ok`) | Sin `confirm`: valida que es una base CumpleFactura integra (`validated-only`). Con `confirm`: copia previa, sustituye, migra y verifica la cadena; si falla, vuelve a la copia (`restored` / `rolled_back`) |
+| `commercial_document_list` | `filters {company_id, kind, status?, customer_id?, year?}`, `pagination?` | `{items, total}` | Presupuestos, proformas y albaranes; `expired` se calcula al leer |
+| `commercial_document_get` / `commercial_document_save_draft` / `commercial_document_delete_draft` | `id` / `CommercialDocumentInput` / `id` | `CommercialDocument` / `{}` | Sin valor fiscal; borrar solo en borrador (`not_draft`) |
+| `commercial_document_send` / `commercial_document_set_status` | `id` / `id, status, reason?` | `CommercialDocument` | Numero propio (`P`, `PF`, `AL`) al enviar o entregar; transiciones de `docs/ESPEC_DOCUMENTOS_Y_RECURRENTES.md` §3.4 (`transition_not_allowed:<de>→<a>`, `reason_required`) |
+| `commercial_document_derive` | `id, target_kind` | `CommercialDocument` | Presupuesto aceptado → proforma o albaran; proforma → albaran |
+| `commercial_document_to_invoice_draft` | `ids[]` | `Invoice` (borrador) | Uno o varios albaranes del mismo cliente y mes (recapitulativa); `mixed_customers`, `mixed_months`, `not_delivered`, `already_invoiced` |
+| `commercial_document_pdf` | `id, target_path` | `{target_path, sha256}` | PDF con «Documento sin valor fiscal», sin QR ni huella |
+| `recurring_list` / `recurring_save` / `recurring_set_active` / `recurring_delete` | `company_id?` / `RecurringInvoiceInput` / `id, active` / `id` | `RecurringInvoice[]` / `RecurringInvoice` / `null` | Plantillas; borrado logico que conserva borradores y periodos |
+| `recurring_generate_due` | `today?` | `{created, skipped}` | Un borrador por periodo vencido; idempotente por `recurring_id + period_key`; nunca emite |
+| `recurring_preview` | `id?`, `count` (≤ 12), `input?` | `{period_key, run_date, total_cents}[]` | Proximas fechas, tambien antes de guardar |
 
 ## Invariantes P0
 
@@ -78,7 +88,9 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite; sidecar Rust `cumplefactura
 - Sin `CUMPLEFACTURA_SIDECAR_ALLOW_AEAT=1` el sidecar no puede llamar a la AEAT; produccion exige `--allow-production`, que v1 no pasa nunca.
 - Las rutas por defecto se derivan de la carpeta export de `app_defaults_get`; no se hardcodea un perfil de Windows en React.
 - La seleccion principal de carpeta export, backup, restore y artefactos fiscales usa dialogo nativo Tauri con filtros de extension; los campos de ruta quedan en solo lectura desde la UI.
-- Restore destructivo queda fuera del MVP: `backup_restore` valida origen y devuelve `destructive_restore_performed=false`.
+- Restaurar una copia exige `confirm`: antes se guarda una copia de seguridad de la base activa y, si la base restaurada no migra o su cadena fiscal no verifica, se vuelve a esa copia.
+- Presupuestos, proformas, albaranes y plantillas recurrentes nunca escriben en `invoice_sequences`, `fiscal_records`, `fiscal_exports` ni `verifactu_submissions`.
+- La contraseña del certificado nunca se guarda en SQLite, logs ni respuestas; las trazas `Debug` la muestran como `***`.
 - La huella fiscal de `Alta`/`Anulacion` se recalcula con los campos oficiales AEAT cubiertos por los tests.
 
 ## Fronteras

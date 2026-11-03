@@ -5,6 +5,7 @@ use crate::domain::invoice::{Invoice, InvoiceDraftInput, InvoiceIssueInput, Issu
 use crate::domain::require;
 use crate::services::audit::AuditEvent;
 use crate::services::pdf;
+use crate::services::qr::QrEnvironment;
 use crate::services::verifactu;
 use tauri::State;
 
@@ -31,12 +32,18 @@ pub fn invoice_draft_create(
 }
 
 /// Emite: reserva secuencia, calcula huella, audit trail y registro fiscal.
+/// `draft_id` (opcional): borrador que se emite. Se borra en la misma transacción y sus albaranes
+/// y periodos recurrentes pasan a la factura emitida.
 #[tauri::command]
 pub fn invoice_issue(
     state: State<'_, AppState>,
     input: InvoiceIssueInput,
+    draft_id: Option<String>,
 ) -> Result<IssuedInvoice, String> {
     let mut conn = state.lock()?;
+    if let Some(draft_id) = draft_id.as_deref() {
+        db::check_commercial_links_for_issue(&conn, draft_id, &input.draft.customer_id)?;
+    }
     let previous_hash = match input.previous_audit_hash.clone() {
         Some(hash) => Some(hash),
         None => db::latest_audit_hash(&conn)?,
@@ -93,12 +100,13 @@ pub fn invoice_issue(
     );
     let audit_hash = audit_event.chain_hash();
 
-    db::insert_issued_invoice(
+    db::insert_issued_invoice_from_draft(
         &mut conn,
         &invoice,
         &fiscal_hash,
         previous_fiscal_hash.as_deref(),
         &audit_event,
+        draft_id.as_deref(),
     )?;
 
     Ok(IssuedInvoice {
@@ -154,6 +162,7 @@ pub fn invoice_export_pdf(
     require("target_path", &target_path)?;
     let conn = state.lock()?;
     let invoice = db::invoice_pdf_data(&conn, &invoice_id)?;
-    pdf::write_invoice_pdf(&target_path, &invoice)?;
+    let qr_environment = QrEnvironment::parse(&db::get_app_settings(&conn)?.qr_environment)?;
+    pdf::write_invoice_pdf(&target_path, &invoice, qr_environment)?;
     Ok(target_path)
 }

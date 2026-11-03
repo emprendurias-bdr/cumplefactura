@@ -204,7 +204,10 @@ fn validate_draft(input: &InvoiceDraftInput) -> Result<(), String> {
     Ok(())
 }
 
-fn build_line(input: InvoiceLineInput, allow_negative: bool) -> Result<InvoiceLine, String> {
+pub(crate) fn build_line(
+    input: InvoiceLineInput,
+    allow_negative: bool,
+) -> Result<InvoiceLine, String> {
     require("line.description", &input.description)?;
     if input.quantity <= 0 {
         return Err("line.quantity must be positive".to_string());
@@ -244,7 +247,7 @@ fn build_line(input: InvoiceLineInput, allow_negative: bool) -> Result<InvoiceLi
     })
 }
 
-fn calculate_totals(lines: &[InvoiceLine]) -> InvoiceTotals {
+pub(crate) fn calculate_totals(lines: &[InvoiceLine]) -> InvoiceTotals {
     let taxable_base_cents = lines.iter().map(|line| line.taxable_base_cents).sum();
     let tax_cents = lines.iter().map(|line| line.tax_cents).sum();
     let withholding_cents = lines.iter().map(|line| line.withholding_cents).sum();

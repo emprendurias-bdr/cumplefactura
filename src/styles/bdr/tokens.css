@@ -1,0 +1,135 @@
+/* bdr-ui design.md v1.3 · commit 4aa365c */
+/* Comunes a todos los modos */
+:root {
+  --papel: #F5F5F0; --pizarra: #13212A;
+  --menta: #4CC38A; --sol: #F5CF4A; --violeta: #8B78E8; --rosa: #EE8FB4;
+  --azul-noche: #1F3A8A; --cielo: #4F95E0; --coral: #F0806A;
+  --accion-bg: #4CC38A; --accion-fg: #13212A; --accion-bg-hover: #3FB27B;
+  --r-s: 12px; --r-m: 20px; --r-l: 28px; --r-pill: 999px;
+  --sombra-1: 0 1px 2px rgba(19,33,42,.06);
+  --sombra-2: 0 18px 40px rgba(19,33,42,.12);
+  --fuente-sans: 'Host Grotesk', system-ui, sans-serif;
+  --fuente-mono: 'Geist Mono', ui-monospace, monospace;
+}
+[data-apariencia="oscuro"] { --sombra-1: none; --sombra-2: 0 0 0 1px #2A3A44; color-scheme: dark; --ok-text: #82D5AD; --info-text: #8DBAEB; --warn-text: #F7D96E; --err-text: #F4A697; }
+[data-apariencia="claro"] { color-scheme: light; --ok-text: #2D6A55; --info-text: #34618E; --warn-text: #6D6737; --err-text: #82504A; }
+/* Tintes de los tres productos a la vez (puzle BDR, «Tus apps»). Iguales en Intenso y Suave. */
+[data-apariencia="claro"] { --tinte-azul: #CED4E5; --tinte-violeta: #E5E1FA; --tinte-sol: #FDF4D7; }
+[data-apariencia="oscuro"] { --tinte-azul: #192A46; --tinte-violeta: #373C61; --tinte-sol: #545434; }
+
+[data-apariencia="claro"][data-color="intenso"] {
+  --bg: #F5F5F0;
+  --surface: #FFFFFF;
+  --surface-2: #ECECE5;
+  --line: #E0E0D8;
+  --line-strong: #C9CCC4;
+  --fg: #13212A;
+  --muted: #4A565D;
+  --ok-bg: #4CC38A; --ok-fg: #13212A;
+  --info-bg: #4F95E0; --info-fg: #13212A;
+  --warn-bg: #F5CF4A; --warn-fg: #13212A;
+  --err-bg: #F0806A; --err-fg: #13212A;
+  --neu-bg: #ECECE5; --neu-fg: #4A565D;
+}
+[data-apariencia="claro"][data-color="suave"] {
+  --bg: #F5F5F0;
+  --surface: #FFFFFF;
+  --surface-2: #ECECE5;
+  --line: #E0E0D8;
+  --line-strong: #C9CCC4;
+  --fg: #13212A;
+  --muted: #4A565D;
+  --ok-bg: #D8F2E5; --ok-fg: #2D6A55;
+  --info-bg: #D8E8F8; --info-fg: #34618E;
+  --warn-bg: #FDF4D7; --warn-fg: #6D6737;
+  --err-bg: #FCE3DE; --err-fg: #82504A;
+  --neu-bg: #ECECE5; --neu-fg: #4A565D;
+}
+[data-apariencia="oscuro"][data-color="intenso"] {
+  --bg: #0E181E;
+  --surface: #16242C;
+  --surface-2: #1C2D36;
+  --line: #2A3A44;
+  --line-strong: #3A4C57;
+  --fg: #F5F5F0;
+  --muted: #AEB9BF;
+  --ok-bg: #4CC38A; --ok-fg: #13212A;
+  --info-bg: #4F95E0; --info-fg: #13212A;
+  --warn-bg: #F5CF4A; --warn-fg: #13212A;
+  --err-bg: #F0806A; --err-fg: #13212A;
+  --neu-bg: #1C2D36; --neu-fg: #AEB9BF;
+}
+[data-apariencia="oscuro"][data-color="suave"] {
+  --bg: #0E181E;
+  --surface: #16242C;
+  --surface-2: #1C2D36;
+  --line: #2A3A44;
+  --line-strong: #3A4C57;
+  --fg: #F5F5F0;
+  --muted: #AEB9BF;
+  --ok-bg: #255146; --ok-fg: #82D5AD;
+  --info-bg: #26445E; --info-fg: #8DBAEB;
+  --warn-bg: #545434; --warn-fg: #F7D96E;
+  --err-bg: #533E3D; --err-fg: #F4A697;
+  --neu-bg: #1C2D36; --neu-fg: #AEB9BF;
+}
+[data-producto="azul"][data-apariencia="claro"][data-color="intenso"] {
+  --p-hero: #1F3A8A; --p-hero-fg: #FFFFFF;
+  --p-activo-bg: #1F3A8A; --p-activo-fg: #FFFFFF;
+  --p-grafica: #1F3A8A; --p-icono: #1F3A8A; --p-icono-fg: #FFFFFF;
+}
+[data-producto="azul"][data-apariencia="claro"][data-color="suave"] {
+  --p-hero: linear-gradient(135deg, #CED4E5, #E9EBF3); --p-hero-fg: #13212A;
+  --p-activo-bg: #CED4E5; --p-activo-fg: #1B326D;
+  --p-grafica: #1F3A8A; --p-icono: #1F3A8A; --p-icono-fg: #FFFFFF;
+}
+[data-producto="azul"][data-apariencia="oscuro"][data-color="intenso"] {
+  --p-hero: #1F3A8A; --p-hero-fg: #FFFFFF;
+  --p-activo-bg: #1F3A8A; --p-activo-fg: #FFFFFF;
+  --p-grafica: #6D7FB3; --p-icono: #1F3A8A; --p-icono-fg: #FFFFFF;
+}
+[data-producto="azul"][data-apariencia="oscuro"][data-color="suave"] {
+  --p-hero: linear-gradient(135deg, #1A2E56, #18283F); --p-hero-fg: #FFFFFF;
+  --p-activo-bg: #192A46; --p-activo-fg: #8F9CC4;
+  --p-grafica: #6D7FB3; --p-icono: #1F3A8A; --p-icono-fg: #FFFFFF;
+}
+[data-producto="violeta"][data-apariencia="claro"][data-color="intenso"] {
+  --p-hero: #8B78E8; --p-hero-fg: #13212A;
+  --p-activo-bg: #8B78E8; --p-activo-fg: #13212A;
+  --p-grafica: #8B78E8; --p-icono: #8B78E8; --p-icono-fg: #13212A;
+}
+[data-producto="violeta"][data-apariencia="claro"][data-color="suave"] {
+  --p-hero: linear-gradient(135deg, #B4A7F0, #E5E1FA); --p-hero-fg: #13212A;
+  --p-activo-bg: #E5E1FA; --p-activo-fg: #5B559C;
+  --p-grafica: #8B78E8; --p-icono: #8B78E8; --p-icono-fg: #13212A;
+}
+[data-producto="violeta"][data-apariencia="oscuro"][data-color="intenso"] {
+  --p-hero: #8B78E8; --p-hero-fg: #13212A;
+  --p-activo-bg: #8B78E8; --p-activo-fg: #13212A;
+  --p-grafica: #8B78E8; --p-icono: #8B78E8; --p-icono-fg: #13212A;
+}
+[data-producto="violeta"][data-apariencia="oscuro"][data-color="suave"] {
+  --p-hero: linear-gradient(135deg, #4B4A81, #2D3552); --p-hero-fg: #FFFFFF;
+  --p-activo-bg: #373C61; --p-activo-fg: #B9AEF1;
+  --p-grafica: #8B78E8; --p-icono: #8B78E8; --p-icono-fg: #13212A;
+}
+[data-producto="sol"][data-apariencia="claro"][data-color="intenso"] {
+  --p-hero: #F5CF4A; --p-hero-fg: #13212A;
+  --p-activo-bg: #F5CF4A; --p-activo-fg: #13212A;
+  --p-grafica: #F5CF4A; --p-icono: #F5CF4A; --p-icono-fg: #13212A;
+}
+[data-producto="sol"][data-apariencia="claro"][data-color="suave"] {
+  --p-hero: linear-gradient(135deg, #F8E089, #FDF4D7); --p-hero-fg: #13212A;
+  --p-activo-bg: #FDF4D7; --p-activo-fg: #6D6737;
+  --p-grafica: #F5CF4A; --p-icono: #F5CF4A; --p-icono-fg: #13212A;
+}
+[data-producto="sol"][data-apariencia="oscuro"][data-color="intenso"] {
+  --p-hero: #F5CF4A; --p-hero-fg: #13212A;
+  --p-activo-bg: #F5CF4A; --p-activo-fg: #13212A;
+  --p-grafica: #F5CF4A; --p-icono: #F5CF4A; --p-icono-fg: #13212A;
+}
+[data-producto="sol"][data-apariencia="oscuro"][data-color="suave"] {
+  --p-hero: linear-gradient(135deg, #7A713A, #434632); --p-hero-fg: #FFFFFF;
+  --p-activo-bg: #545434; --p-activo-fg: #F7D96E;
+  --p-grafica: #F5CF4A; --p-icono: #F5CF4A; --p-icono-fg: #13212A;
+}

@@ -1,0 +1,9 @@
+/* Fuentes de design.md §4.7, servidas desde el propio paquete (OFL, ver src/assets/fonts/OFL-*.txt).
+   Host Grotesk para todo el texto; Geist Mono para cifras, códigos, fechas, etiquetas y chips. */
+@font-face { font-family: "Host Grotesk"; font-weight: 400; font-display: swap; src: url("../assets/fonts/host-grotesk-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Host Grotesk"; font-weight: 500; font-display: swap; src: url("../assets/fonts/host-grotesk-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Host Grotesk"; font-weight: 600; font-display: swap; src: url("../assets/fonts/host-grotesk-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Host Grotesk"; font-weight: 700; font-display: swap; src: url("../assets/fonts/host-grotesk-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Host Grotesk"; font-weight: 800; font-display: swap; src: url("../assets/fonts/host-grotesk-latin-800-normal.woff2") format("woff2"); }
+@font-face { font-family: "Geist Mono"; font-weight: 400; font-display: swap; src: url("../assets/fonts/geist-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Geist Mono"; font-weight: 500; font-display: swap; src: url("../assets/fonts/geist-mono-latin-500-normal.woff2") format("woff2"); }

@@ -14,21 +14,36 @@ const realMode = ["1", "true", "yes", "on"].includes(
 const resolvedEdgeDriverPath = windows ? await downloadEdgeDriver().catch(() => "") : "";
 
 /**
- * Recorrido real: sección de la barra lateral, botón y texto esperado en la barra de
- * estado. Cada pantalla solo existe mientras su sección está activa.
+ * Recorrido real sobre la interfaz BDR (design.md) con una base nueva: primer arranque, cliente,
+ * factura, XML y comprobación previa. Cada paso: `nav` (enlace de la barra lateral), `fill`
+ * (campos por su etiqueta), `click` (botón o enlace por su texto) y el texto que debe aparecer
+ * (toast o pantalla). Cada paso exige su propio resultado.
  */
 const steps = [
-  { section: "Empresas", button: "Nueva empresa" },
-  { section: "Clientes", button: "Nuevo cliente" },
-  { section: "Panel", button: "Rellenar demo" },
-  // Cada paso exige su propio resultado: "Refrescar: OK" ya está en pantalla y no prueba nada.
-  { section: "Empresas", button: "Guardar emisor", expect: ["Emisor creado"] },
-  { section: "Clientes", button: "Guardar cliente", expect: ["Emisor y cliente creados"] },
-  { section: "Facturas", button: "Crear borrador", expect: ["Borrador persistido"] },
-  { section: "Facturas", button: "Emitir factura", expect: ["Factura emitida"] },
-  { section: "Fiscal", button: "Exportar XML", expect: ["XML VERI*FACTU: OK"] },
-  // Arranca el sidecar real junto al exe; sin certificado ni --allow-aeat responde "blocked".
-  { section: "Fiscal", button: "Preflight envio", expect: ["Preflight envio: OK"] },
+  { click: "Rellenar con datos de ejemplo", expect: ["Datos de ejemplo cargados"] },
+  { click: "Guardar y seguir", expect: ["Empresa creada."] },
+  { click: "Siguiente" },
+  { click: "Guardar serie y seguir", expect: ["Serie guardada."] },
+  // La carpeta de exportación por defecto la da Rust (app_defaults_get): no se abre el diálogo nativo.
+  { click: "Empezar a facturar", expect: ["Factura para"] },
+  { nav: "Clientes", click: "Nuevo cliente" },
+  {
+    fill: { Nombre: "Cliente E2E", NIF: "12345678Z", "Dirección": "Calle Cliente 2", "Código postal": "28002", Municipio: "Madrid", Provincia: "Madrid", "País": "ES" },
+    click: "Guardar cliente",
+    expect: ["Cliente creado."],
+  },
+  { nav: "Facturas", click: "Nueva factura", expect: ["Factura para"] },
+  { click: "Guardar borrador", expect: ["Borrador guardado."] },
+  { click: "Emitir factura", expect: ["Lo entiendo"] },
+  { click: "Lo entiendo" },
+  { click: "Emitir", expect: ["emitida."] },
+  { nav: "Verifactu", click: "Exportar XML", expect: ["XML preparado y validado."] },
+  // Arranca el sidecar real junto al exe; sin certificado ni --allow-aeat responde «bloqueada».
+  {
+    fill: { "Contraseña del certificado": "e2e-sin-certificado" },
+    click: "Comprobación previa",
+    expect: ["No se puede enviar todavía.", "Todo listo para enviar."],
+  },
 ];
 
 async function wait(ms) {
@@ -72,15 +87,15 @@ async function waitFor(port, sessionId, label, script, timeoutMs = 20_000, args 
   throw new Error(`Timed out waiting for ${label}. Body head: ${bodyText.slice(0, 1200)} Body tail: ${bodyText.slice(-1200)}`);
 }
 
-/** Pulsa el botón habilitado con ese texto exacto (incluye los de la barra lateral). Espera hasta 10 s. */
-async function clickButton(port, sessionId, text) {
+/** Pulsa el botón, enlace o etiqueta habilitado con ese texto exacto. Espera hasta 10 s. */
+async function clickButton(port, sessionId, text, scope = "") {
   const escaped = text.replace(/'/g, "\\'");
-  const xpath = `//button[normalize-space(.)='${escaped}' and not(@disabled)]`;
+  const xpath = `${scope}//*[(self::button or self::a or self::label) and normalize-space(.)='${escaped}' and not(@disabled)]`;
   const start = Date.now();
   for (;;) {
     try {
       const elementId = await findElement(port, sessionId, "xpath", xpath);
-      // Algunos drivers (WebKitWebDriver) no desplazan el botón a la vista antes de pulsar.
+      // Algunos drivers (WebKitWebDriver) no desplazan el control a la vista antes de pulsar.
       await execute(port, sessionId, "arguments[0].scrollIntoView({ block: 'center' });", [
         { "element-6066-11e4-a52e-4f735466cecf": elementId },
       ]);
@@ -91,14 +106,31 @@ async function clickButton(port, sessionId, text) {
         const buttons = await execute(
           port,
           sessionId,
-          "return [...document.querySelectorAll('button')].map((b) => `${b.innerText.trim()}${b.disabled ? ' [disabled]' : ''}`).join(' | ');",
+          "return [...document.querySelectorAll('button, a')].map((b) => `${b.innerText.trim()}${b.disabled ? ' [disabled]' : ''}`).join(' | ');",
         ).catch(() => "?");
-        const status = await execute(port, sessionId, "return document.querySelector('header p')?.innerText ?? '';").catch(() => "?");
-        throw new Error(`Button not clickable: ${text} (${error.message}). Status: ${status}. Buttons: ${buttons}`);
+        const toast = await execute(port, sessionId, "return document.querySelector('.bdr-toast')?.innerText ?? '';").catch(() => "?");
+        throw new Error(`Control not clickable: ${text} (${error.message}). Toast: ${toast}. Controls: ${buttons}`);
       }
       await wait(300);
     }
   }
+}
+
+/** Escribe en el campo cuya etiqueta (<label for>) tiene ese texto, como lo haría React. */
+async function fillField(port, sessionId, label, value) {
+  const ok = await execute(
+    port,
+    sessionId,
+    `const label = [...document.querySelectorAll('label')].find((l) => l.textContent.trim() === arguments[0]);
+     const input = label && document.getElementById(label.htmlFor);
+     if (!input) return false;
+     const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value').set;
+     setter.call(input, arguments[1]);
+     input.dispatchEvent(new Event('input', { bubbles: true }));
+     return true;`,
+    [label, value],
+  );
+  if (!ok) throw new Error(`Field not found: ${label}`);
 }
 
 async function realDesktopSmoke(tauriDriverPath, nativeDriverPath) {
@@ -136,13 +168,14 @@ async function realDesktopSmoke(tauriDriverPath, nativeDriverPath) {
       port,
       sessionId,
       "CumpleFactura UI",
-      `return document.body?.innerText.includes("CumpleFactura") || document.body?.innerText.includes("Facturacion local-first");`,
+      `return document.body?.innerText.includes("CumpleFactura");`,
     );
 
     const completedSteps = [];
     for (const step of steps) {
-      await clickButton(port, sessionId, step.section);
-      await clickButton(port, sessionId, step.button);
+      if (step.nav) await clickButton(port, sessionId, step.nav, "//nav[@aria-label='Secciones']");
+      for (const [label, value] of Object.entries(step.fill ?? {})) await fillField(port, sessionId, label, value);
+      await clickButton(port, sessionId, step.click);
       if (step.expect) {
         await waitFor(
           port,
@@ -155,7 +188,7 @@ async function realDesktopSmoke(tauriDriverPath, nativeDriverPath) {
       } else {
         await wait(500);
       }
-      completedSteps.push(step.button);
+      completedSteps.push(step.click);
     }
 
     const screenshot = await webdriver(port, sessionId, "GET", "/screenshot");
@@ -173,7 +206,7 @@ async function realDesktopSmoke(tauriDriverPath, nativeDriverPath) {
         ui_text_detected: true,
         real_rust_commands_executed: true,
         verifactu_xml_exported: completedSteps.includes("Exportar XML"),
-        sidecar_preflight_executed: completedSteps.includes("Preflight envio"),
+        sidecar_preflight_executed: completedSteps.includes("Comprobación previa"),
       },
       completed_steps: completedSteps,
       screenshot_path: screenshotPath,

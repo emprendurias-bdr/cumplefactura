@@ -1,71 +1,85 @@
 /**
- * Carcasa de CumpleFactura: barra lateral, cabecera y la sección activa.
- * El estado y las llamadas a Rust viven en `useCumpleFactura`; cada pantalla en `sections/`.
+ * Raíz de CumpleFactura. Un hook por dominio (núcleo, Verifactu, documentos, recurrentes) y la ruta
+ * por hash eligen la pantalla. Mientras no se ha completado el primer arranque se ve FirstRun a
+ * pantalla completa; si los ajustes no cargan, una página de error con «Reintentar».
+ * Sin transiciones de página (design.md §4.11).
  */
-import { type ReactElement, useState } from "react";
-import { Icon } from "./components/Icon";
+import { type ReactElement, useEffect } from "react";
+import { t } from "./i18n/es";
+import { applyPreferences, readPreferences, watchSystemAppearance } from "./lib/appearance";
+import type { Section } from "./lib/routes";
 import { AjustesSection } from "./sections/AjustesSection";
 import { ClientesSection } from "./sections/ClientesSection";
-import { EmpresasSection } from "./sections/EmpresasSection";
+import type { Ctx } from "./sections/ctx";
+import { DocumentosSection } from "./sections/DocumentosSection";
+import { FacturaDetalle } from "./sections/FacturaDetalle";
+import { FacturaEditor } from "./sections/FacturaEditor";
 import { FacturasSection } from "./sections/FacturasSection";
-import { FiscalSection } from "./sections/FiscalSection";
-import { PanelSection } from "./sections/PanelSection";
-import { NAV_ITEMS, type AppSection } from "./types";
-import { useCumpleFactura, type Model } from "./useCumpleFactura";
+import { FirstRun } from "./sections/FirstRun";
+import { ProductosSection } from "./sections/ProductosSection";
+import { RecurrentesSection } from "./sections/RecurrentesSection";
+import { RectificativaWizard } from "./sections/RectificativaWizard";
+import { VerifactuSection } from "./sections/VerifactuSection";
+import { Shell } from "./shell/Shell";
+import { useRoute } from "./shell/useRoute";
+import { Button } from "./ui/Button";
+import { Callout } from "./ui/Callout";
+import { Skeleton } from "./ui/Skeleton";
+import { Toaster } from "./ui/Toast";
+import { useCumpleFactura } from "./useCumpleFactura";
+import { useDocuments } from "./useDocuments";
+import { useRecurring } from "./useRecurring";
+import { useVerifactu } from "./useVerifactu";
 
-const SECTIONS: Record<AppSection, (p: Model) => ReactElement> = {
-  panel: PanelSection,
-  empresas: EmpresasSection,
+function facturas(c: Ctx) {
+  if (c.route.id === "nueva") return <FacturaEditor {...c} />;
+  if (c.route.id && c.route.action === "rectificar") return <RectificativaWizard {...c} />;
+  if (c.route.id) return <FacturaDetalle {...c} />;
+  return <FacturasSection {...c} />;
+}
+
+const SCREENS: Record<Section, (c: Ctx) => ReactElement> = {
+  facturas,
+  documentos: DocumentosSection,
+  recurrentes: RecurrentesSection,
   clientes: ClientesSection,
-  facturas: FacturasSection,
-  fiscal: FiscalSection,
+  productos: ProductosSection,
+  verifactu: VerifactuSection,
   ajustes: AjustesSection,
 };
 
 export default function App() {
-  const [section, setSection] = useState<AppSection>("panel");
-  const model = useCumpleFactura();
-  const Section = SECTIONS[section];
+  const m = useCumpleFactura();
+  const vf = useVerifactu(m);
+  const docs = useDocuments(m);
+  const rec = useRecurring(m);
+  const route = useRoute();
 
+  useEffect(() => {
+    applyPreferences(readPreferences());
+    return watchSystemAppearance();
+  }, []);
+
+  if (!m.appSettings) {
+    return (
+      <main className="bdr-main cf-boot" id="contenido">
+        {m.loadError ? (
+          <Callout tone="err" title={t("error.arranqueTitulo")} actions={<Button variant="dark" onClick={() => location.reload()}>{t("comun.reintentar")}</Button>}>
+            {m.loadError}
+          </Callout>
+        ) : (
+          <Skeleton rows={4} />
+        )}
+        <Toaster />
+      </main>
+    );
+  }
+  if (!m.appSettings.onboarding_completed) return <FirstRun m={m} />;
+
+  const Screen = SCREENS[route.section];
   return (
-    <main className="shell">
-      <section className="workspace">
-        <aside className="sidebar">
-          <div className="brand">CumpleFactura</div>
-          <nav aria-label="Principal">
-            {NAV_ITEMS.map(({ id, label }) => (
-              <button
-                key={id}
-                type="button"
-                className={section === id ? "active" : undefined}
-                aria-current={section === id ? "page" : undefined}
-                onClick={() => setSection(id)}
-              >
-                {label}
-              </button>
-            ))}
-          </nav>
-        </aside>
-        <section className="content">
-          <header>
-            <div>
-              <h1>Facturacion local-first</h1>
-              <p>
-                {model.flowState} - {model.status}
-              </p>
-            </div>
-            <div className="headerActions">
-              <button className="iconButton" onClick={() => void model.refreshData()} title="Refrescar">
-                <Icon name="refresh" size={18} />
-              </button>
-              <button className="primary" onClick={() => void model.issueInvoice()} disabled={!model.canIssue}>
-                Emitir
-              </button>
-            </div>
-          </header>
-          <Section {...model} />
-        </section>
-      </section>
-    </main>
+    <Shell m={m} route={route}>
+      <Screen m={m} vf={vf} docs={docs} rec={rec} route={route} />
+    </Shell>
   );
 }

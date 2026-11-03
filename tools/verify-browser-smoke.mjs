@@ -1,462 +1,227 @@
-// Browser smoke: Playwright against mocked Tauri invoke (local MVP flows).
-import { spawn } from "node:child_process";
-import { createWriteStream, existsSync } from "node:fs";
+// Browser smoke: Playwright against mocked Tauri invoke (local MVP flows) on the BDR UI (design.md).
+// Recorrido: primer arranque → cliente → producto → editor → emitir con confirmación → filtros →
+// XML → contraseña en memoria → comprobación previa → envío (CSV ficticio) → copias → presupuesto
+// → recurrente → modo oscuro. Mantiene el formato de evidencia (latest-browser-smoke.json/png).
 import { mkdir, writeFile } from "node:fs/promises";
-import http from "node:http";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, expect } from "@playwright/test";
+import { installTauriMock, withViteServer } from "./browser-tauri-mock.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const evidenceDir = resolve(root, "tests", "regulatory", "evidence");
-const host = "127.0.0.1";
 const port = Number(process.env.CUMPLEFACTURA_BROWSER_SMOKE_PORT ?? "1421");
-const url = `http://${host}:${port}`;
 const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
 const screenshotPath = resolve(evidenceDir, `browser-smoke-${timestamp}.png`);
 const latestJsonPath = resolve(evidenceDir, "latest-browser-smoke.json");
 const latestScreenshotPath = resolve(evidenceDir, "latest-browser-smoke.png");
+const serverLogPath = resolve(evidenceDir, `browser-smoke-vite-${timestamp}.log`);
 
-async function waitForServer(targetUrl, timeoutMs = 30_000) {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    const ok = await new Promise((resolveOk) => {
-      const req = http.get(targetUrl, (res) => {
-        res.resume();
-        resolveOk(res.statusCode && res.statusCode < 500);
-      });
-      req.on("error", () => resolveOk(false));
-      req.setTimeout(1000, () => {
-        req.destroy();
-        resolveOk(false);
-      });
-    });
-    if (ok) return;
-    await new Promise((resolveLater) => setTimeout(resolveLater, 300));
-  }
-  throw new Error(`Vite dev server did not become ready at ${targetUrl}`);
-}
-
-async function withServer(action) {
-  const vite = resolve(root, "node_modules", "vite", "bin", "vite.js");
-  if (!existsSync(vite)) {
-    throw new Error(`Missing Vite binary: ${vite}`);
-  }
-
-  const logPath = resolve(evidenceDir, `browser-smoke-vite-${timestamp}.log`);
-  const log = createWriteStream(logPath, { flags: "a" });
-  const child = spawn(process.execPath, [vite, "--host", host, "--port", String(port), "--strictPort"], {
-    cwd: root,
-    env: { ...process.env, BROWSER: "none" },
-    shell: false,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  child.stdout.pipe(log);
-  child.stderr.pipe(log);
-
-  try {
-    await waitForServer(url);
-    return await action(logPath);
-  } finally {
-    child.kill();
-    log.end();
-  }
-}
-
-function installTauriMock(page) {
-  return page.addInitScript(() => {
-    const state = {
-      companies: [],
-      customers: [],
-      products: [],
-      invoices: [],
-      seriesConfigs: [],
-      audit: [],
-      fiscalRecords: [],
-      nextId: 1,
-      nextInvoiceNumber: 1,
-      exportDir: "C:\\CumpleFactura\\Evidence",
-      settings: {
-        export_dir: null,
-        default_territory_flags: ["CommonTerritory", "VeriFactu"],
-        onboarding_completed: false,
-        verifactu_endpoint_name: "SistemaVerifactuPruebas",
-        updated_at: new Date().toISOString(),
-      },
-      lastXmlPath: "C:\\CumpleFactura\\Evidence\\cumplefactura-verifactu-e2e.xml",
-    };
-
-    function id(prefix) {
-      state.nextId += 1;
-      return `${prefix}-${state.nextId}`;
-    }
-
-    function fiscalChain() {
-      const head = state.fiscalRecords[0];
-      return {
-        valid: true,
-        total_records: state.fiscalRecords.length,
-        issue_count: 0,
-        last_hash_by_company: head ? [{ company_id: head.company_id, last_hash: head.fiscal_hash }] : [],
-        issues: [],
-      };
-    }
-
-    function invoiceTotals(lines) {
-      return lines.reduce((totals, line) => {
-        const quantity = Number(line.quantity);
-        const unit = Number(line.unit_price_cents);
-        const discount = Number(line.discount_rate_basis_points ?? 0);
-        const taxRate = Number(line.tax_rate_basis_points);
-        const withholdingRate = Number(line.withholding_rate_basis_points ?? 0);
-        const base = Math.trunc((quantity * unit * (10000 - discount)) / 10000);
-        const tax = Math.trunc((base * taxRate) / 10000);
-        const withholding = Math.trunc((base * withholdingRate) / 10000);
-        return {
-          taxable_base_cents: totals.taxable_base_cents + base,
-          tax_cents: totals.tax_cents + tax,
-          withholding_cents: totals.withholding_cents + withholding,
-          total_cents: totals.total_cents + base + tax - withholding,
-        };
-      }, { taxable_base_cents: 0, tax_cents: 0, withholding_cents: 0, total_cents: 0 });
-    }
-
-    async function invoke(cmd, args = {}) {
-      if (cmd === "plugin:dialog|open") {
-        return args.options?.directory ? state.exportDir : `${state.exportDir}\\cumplefactura-restore.sqlite3`;
-      }
-      if (cmd === "plugin:dialog|save") {
-        return args.options?.defaultPath || `${state.exportDir}\\cumplefactura-selected.json`;
-      }
-      if (cmd === "app_defaults_get") {
-        return {
-          app_data_dir: "C:\\CumpleFactura\\Data",
-          export_dir: state.exportDir,
-          generated_at: new Date().toISOString(),
-          notes: ["browser smoke mock"],
-        };
-      }
-      if (cmd === "app_settings_get") {
-        return state.settings;
-      }
-      if (cmd === "app_settings_update") {
-        state.settings = { ...args.input, updated_at: new Date().toISOString() };
-        state.exportDir = args.input.export_dir || state.exportDir;
-        return state.settings;
-      }
-      if (cmd === "company_create") {
-        const company = { id: id("company"), created_at: new Date().toISOString(), ...args.input };
-        state.companies = [company];
-        return company;
-      }
-      if (cmd === "company_update") {
-        const company = { created_at: new Date().toISOString(), ...args.input };
-        state.companies = [company, ...state.companies.filter((item) => item.id !== company.id)];
-        return company;
-      }
-      if (cmd === "product_list") {
-        return state.products.filter((item) => item.company_id === args.companyId);
-      }
-      if (cmd === "product_upsert") {
-        const product = {
-          id: args.input.id || id("product"),
-          updated_at: new Date().toISOString(),
-          ...args.input,
-          sku: String(args.input.sku).trim().toUpperCase(),
-        };
-        state.products = [product, ...state.products.filter((item) => item.id !== product.id)];
-        return product;
-      }
-      if (cmd === "company_series_list") {
-        return state.seriesConfigs.filter((item) => item.company_id === args.companyId && item.fiscal_year === args.fiscalYear);
-      }
-      if (cmd === "company_series_configure") {
-        const input = args.input;
-        const code = String(input.series_code).trim().toUpperCase();
-        const resolved = input.include_year ? `${code}${input.fiscal_year}` : code;
-        const preview = `${resolved}${input.separator}${String(input.next_number).padStart(input.padding, "0")}`;
-        const config = {
-          id: id("series"),
-          company_id: input.company_id,
-          label: input.label || code,
-          series_code: code,
-          fiscal_year: input.fiscal_year,
-          include_year: input.include_year,
-          separator: input.separator,
-          padding: input.padding,
-          next_number: input.next_number,
-          is_default: input.is_default,
-          active: true,
-          resolved_series: resolved,
-          preview,
-          created_at: new Date().toISOString(),
-        };
-        state.seriesConfigs = [config, ...state.seriesConfigs.filter((item) => item.series_code !== code)];
-        state.nextInvoiceNumber = input.next_number;
-        state.companies = state.companies.map((company) => company.id === input.company_id ? { ...company, default_series: resolved } : company);
-        return config;
-      }
-      if (cmd === "invoice_next_number_preview") {
-        return {
-          company_id: args.companyId,
-          fiscal_year: args.fiscalYear,
-          series: args.series,
-          next_number: state.nextInvoiceNumber,
-          source: "browser-smoke-sequence",
-        };
-      }
-      if (cmd === "customer_upsert") {
-        const customer = { ...args.input, id: args.input.id || id("customer"), updated_at: new Date().toISOString() };
-        state.customers = [customer, ...state.customers.filter((item) => item.id !== customer.id)];
-        return customer;
-      }
-      if (cmd === "invoice_draft_create") {
-        return { id: id("draft"), series: args.input.series, number: null, totals: invoiceTotals(args.input.lines) };
-      }
-      if (cmd === "invoice_issue") {
-        const totals = invoiceTotals(args.input.draft.lines);
-        const invoice = {
-          id: id("invoice"),
-          company_id: args.input.draft.company_id,
-          customer_id: args.input.draft.customer_id,
-          fiscal_year: args.input.draft.fiscal_year,
-          series: args.input.draft.series,
-          number: state.nextInvoiceNumber,
-          kind: args.input.draft.kind,
-          status: "Issued",
-          total_cents: totals.total_cents,
-          fiscal_hash: "ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890",
-        };
-        state.nextInvoiceNumber += 1;
-        state.invoices = [invoice, ...state.invoices];
-        state.audit = [{ id: id("audit"), action: "invoice_issue", actor: "local-user", hash: invoice.fiscal_hash, occurred_at: new Date().toISOString() }, ...state.audit];
-        state.fiscalRecords = [{
-          id: id("fiscal"),
-          company_id: invoice.company_id,
-          invoice_id: invoice.id,
-          record_type: "Alta",
-          generated_at: new Date().toISOString(),
-          fiscal_hash: invoice.fiscal_hash,
-          previous_fiscal_hash: null,
-          xml_path: null,
-          status: "issued",
-        }, ...state.fiscalRecords];
-        return { invoice: { id: invoice.id, series: invoice.series, number: invoice.number, totals: { total_cents: invoice.total_cents } }, fiscal_hash: invoice.fiscal_hash, audit_hash: invoice.fiscal_hash };
-      }
-      if (cmd === "company_list") return state.companies;
-      if (cmd === "customer_list") return state.customers;
-      if (cmd === "invoice_list") {
-        const filters = args.filters || {};
-        const pagination = args.pagination || { limit: 5, offset: 0 };
-        const search = String(filters.search || "").toLowerCase();
-        return state.invoices.filter((invoice) => {
-          if (filters.company_id && invoice.company_id !== filters.company_id) return false;
-          if (filters.customer_id && invoice.customer_id !== filters.customer_id) return false;
-          if (filters.fiscal_year && invoice.fiscal_year !== filters.fiscal_year) return false;
-          if (filters.series && invoice.series !== filters.series) return false;
-          if (filters.status && invoice.status !== filters.status) return false;
-          if (filters.kind && invoice.kind !== filters.kind) return false;
-          if (!search) return true;
-          return [invoice.series, invoice.number, invoice.kind, invoice.status, invoice.fiscal_hash]
-            .some((value) => String(value || "").toLowerCase().includes(search));
-        }).slice(pagination.offset || 0, (pagination.offset || 0) + (pagination.limit || 5));
-      }
-      if (cmd === "audit_list") {
-        const pagination = args.pagination || { limit: 5, offset: 0 };
-        return state.audit.slice(pagination.offset || 0, (pagination.offset || 0) + (pagination.limit || 5));
-      }
-      if (cmd === "fiscal_record_list") {
-        const pagination = args.pagination || { limit: 5, offset: 0 };
-        return state.fiscalRecords.slice(pagination.offset || 0, (pagination.offset || 0) + (pagination.limit || 5));
-      }
-      if (cmd === "fiscal_chain_verify") return fiscalChain();
-      if (cmd === "backup_export") return { target_path: args.targetPath, status: "created", notes: ["browser smoke mock"] };
-      if (cmd === "backup_restore") return { source_path: args.sourcePath, status: "validated-only", destructive_restore_performed: false, notes: ["browser smoke mock"] };
-      if (cmd === "invoice_export_pdf") return args.targetPath;
-      if (cmd === "invoice_export_json") return { target_path: args.targetPath, status: "created", notes: ["browser smoke mock"] };
-      if (cmd === "invoice_export_csv") return { target_path: args.targetPath, status: "created", notes: ["browser smoke mock"] };
-      if (cmd === "fiscal_audit_export") return { target_path: args.targetPath, status: "created", notes: ["browser smoke mock"] };
-      if (cmd === "verifactu_xml_draft_export") {
-        state.lastXmlPath = args.targetPath;
-        return {
-          target_path: args.targetPath,
-          status: "draft-created-xsd-valid",
-          xsd_validated: true,
-          export_id: id("export"),
-          xml_sha256: "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF",
-          xml_bytes: 2048,
-          notes: ["browser smoke mock"],
-        };
-      }
-      if (cmd === "verifactu_submit_preflight") {
-        return {
-          status: "ready",
-          blockers: [],
-          warnings: [],
-          endpoint_name: state.settings.verifactu_endpoint_name,
-          endpoint_allowed: true,
-          certificate_loaded: true,
-          certificate_source: "pkcs12_vault",
-          aeat_calls_enabled: true,
-          production_enabled: false,
-          external_call_performed: false,
-        };
-      }
-      if (cmd === "verifactu_submit") {
-        return {
-          invoice_id: args.input.invoice_id,
-          export_id: args.input.export_id,
-          submission_id: id("submission"),
-          xml_sha256: args.input.xml_sha256,
-          endpoint_name: state.settings.verifactu_endpoint_name,
-          operation: "RegFactuSistemaFacturacion",
-          status: "accepted",
-          http_status: 200,
-          csv: "MOCK-CSV",
-          estado_envio: "Correcto",
-          estado_registro: "Correcto",
-          codigo_error: null,
-          descripcion_error: null,
-          tiempo_espera_envio_seconds: 60,
-          soap_fault: null,
-          external_call_performed: true,
-        };
-      }
-      throw new Error(`Unexpected E2E command: ${cmd}`);
-    }
-
-    window.__TAURI_INTERNALS__ = {
-      invoke,
-      transformCallback: () => Math.floor(Math.random() * 1_000_000),
-      unregisterCallback: () => undefined,
-      convertFileSrc: (path) => path,
-    };
-  });
-}
-
-async function clickByRole(page, name) {
-  const locator = page.getByRole("button", { name, exact: true });
+async function clickByRole(page, name, role = "button") {
+  const locator = page.getByRole(role, { name, exact: true });
+  // Un enlace de creación puede estar en el hero y en el vacío; los botones deben ser únicos.
+  if (role === "link") return locator.first().click();
   await expect(locator).toHaveCount(1);
   await locator.click();
 }
 
 async function goToSection(page, name) {
-  await clickByRole(page, name);
+  await page.getByRole("navigation", { name: "Secciones" }).getByRole("link", { name, exact: true }).click();
 }
 
 async function expectTextVisible(page, text) {
   await expect(page.getByText(text).first()).toBeVisible();
 }
 
+/** Abre «Herramientas técnicas»: los límites del sidecar solo viven ahí. */
+async function openTechnical(page) {
+  const details = page.locator("details.cf-tech").first();
+  if (!(await details.evaluate((element) => element.open))) await details.locator("summary").click();
+}
+
+const bodyHas = (page, texts) =>
+  page.locator("body").evaluate((body, list) => Object.fromEntries(Object.entries(list).map(([key, text]) => [key, body.textContent?.includes(text) ?? false])), texts);
+
 await mkdir(evidenceDir, { recursive: true });
 
-const result = await withServer(async (serverLogPath) => {
+const result = await withViteServer({ root, port, logPath: serverLogPath }, async (url) => {
   // CUMPLEFACTURA_CHROMIUM_PATH: Chromium del sistema cuando no coincide con la version de Playwright.
   const browser = await chromium.launch({ headless: true, executablePath: process.env.CUMPLEFACTURA_CHROMIUM_PATH || undefined });
-  const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
+  const page = await browser.newPage({ viewport: { width: 1366, height: 900 }, locale: "es-ES" });
   const consoleEntries = [];
   page.on("console", (msg) => {
-    if (["error", "warning"].includes(msg.type())) {
-      consoleEntries.push({ type: msg.type(), text: msg.text() });
-    }
+    if (["error", "warning"].includes(msg.type())) consoleEntries.push({ type: msg.type(), text: msg.text() });
   });
-  page.on("pageerror", (error) => {
-    consoleEntries.push({ type: "pageerror", text: error.message });
-  });
+  page.on("pageerror", (error) => consoleEntries.push({ type: "pageerror", text: error.message }));
 
   await installTauriMock(page);
-  await page.goto(url, { waitUntil: "networkidle" });
+  let initialVisibleLimits;
+  let finalVisibleLimits;
+  let passwordPersisted;
+  try {
+    await page.goto(url, { waitUntil: "networkidle" });
 
-  await expect(page).toHaveTitle(/CumpleFactura/);
-  await expectTextVisible(page, "Facturacion local-first");
-  await expectTextVisible(page, "external_blocked");
+    await expect(page).toHaveTitle(/CumpleFactura/);
+    await expect(page.locator("html")).toHaveAttribute("data-producto", "violeta");
 
-  await goToSection(page, "Fiscal");
-  await expectTextVisible(page, "Borrador tecnico: XSD local, sin envio.");
-  await expectTextVisible(page, "Frontera final: solo el sidecar local con HMAC y certificado puede invocar AEAT");
-  await expect(page.getByRole("button", { name: "Preflight envio", exact: true })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Enviar", exact: true })).toBeDisabled();
-  const initialVisibleLimits = await page.locator("body").evaluate((body) => ({
-    noSend: body.textContent?.includes("sin envio") ?? false,
-    gateNoAeat: body.textContent?.includes("el gate no llama a AEAT") ?? false,
-  }));
-  await goToSection(page, "Panel");
-  initialVisibleLimits.externalBlocked = await page.locator("body").evaluate(
-    (body) => body.textContent?.includes("external_blocked") ?? false,
-  );
+    // Primer arranque: empresa → fiscalidad → serie → certificado y carpeta.
+    await expectTextVisible(page, "Prepara CumpleFactura");
+    await clickByRole(page, "Rellenar con datos de ejemplo");
+    await expectTextVisible(page, "Datos de ejemplo cargados");
+    await expect(page.getByLabel("Nombre legal")).toHaveValue("Demo CumpleFactura SL");
+    await clickByRole(page, "Guardar y seguir");
+    await expectTextVisible(page, "Empresa creada.");
+    await clickByRole(page, "Siguiente");
+    await clickByRole(page, "Guardar serie y seguir");
+    await expectTextVisible(page, "Serie guardada.");
+    await expectTextVisible(page, "Solo durante esta sesión");
+    await expect(page.getByRole("radio", { name: /Recordar en este equipo/ })).toBeDisabled();
+    await expectTextVisible(page, "Pendiente de aprobar");
+    await clickByRole(page, "Elegir carpeta");
+    await expectTextVisible(page, "Evidence");
+    await clickByRole(page, "Empezar a facturar");
+    await expectTextVisible(page, "Factura para");
 
-  await goToSection(page, "Panel");
-  await clickByRole(page, "Rellenar demo");
-  await expectTextVisible(page, "Datos demo cargados");
+    // Shell: 7 secciones, chip de cadena, paleta Ctrl K.
+    await expect(page.getByRole("navigation", { name: "Secciones" }).getByRole("link")).toHaveCount(7);
+    await expectTextVisible(page, "Sin registros");
+    await page.keyboard.press("Control+k");
+    await expect(page.getByRole("dialog", { name: "Buscar en CumpleFactura" })).toBeVisible();
+    await page.keyboard.press("Escape");
 
-  await goToSection(page, "Ajustes");
-  await clickByRole(page, "Elegir carpeta");
-  await expect(page.getByLabel("Carpeta export")).toHaveValue("C:\\CumpleFactura\\Evidence");
+    await goToSection(page, "Documentos");
+    await expectTextVisible(page, "Aún no hay presupuestos. Crea el primero.");
 
-  await goToSection(page, "Empresas");
-  await clickByRole(page, "Guardar emisor");
-  await expect(page.getByLabel("Nombre legal empresa")).toHaveValue("Demo CumpleFactura SL");
-  await clickByRole(page, "Guardar producto");
-  await expect(page.locator(".productRow").getByText("SVC-DEMO - Servicio mensual")).toBeVisible();
-  await clickByRole(page, "Usar en linea");
-  await clickByRole(page, "Guardar serie");
-  await expectTextVisible(page, "General - A-001");
+    // Verifactu antes de emitir: botones deshabilitados y límites honestos.
+    await goToSection(page, "Verifactu");
+    await expectTextVisible(page, "Esta versión no envía sola.");
+    await expect(page.getByRole("button", { name: "Comprobación previa", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Enviar a la AEAT", exact: true })).toBeDisabled();
+    await openTechnical(page);
+    initialVisibleLimits = await bodyHas(page, {
+      noSend: "Esta versión no envía sola",
+      gateNoAeat: "el gate no llama a AEAT",
+      externalBlocked: "sin llamada AEAT real ni CSV",
+    });
 
-  await goToSection(page, "Facturas");
-  await expect(page.getByLabel("Precio EUR linea 1")).toHaveValue("250");
-  await expect(page.getByLabel("Descuento linea 1")).toHaveValue("10");
-  await expect(page.getByLabel("IRPF linea 1")).toHaveValue("15");
+    // Cliente y producto.
+    await goToSection(page, "Clientes");
+    await clickByRole(page, "Nuevo cliente", "link");
+    await page.getByLabel("Nombre", { exact: true }).fill("Cliente Demo");
+    await page.getByLabel("NIF", { exact: true }).fill("12345678Z");
+    await page.getByLabel("Dirección", { exact: true }).fill("Calle Cliente 2");
+    await page.getByLabel("Código postal", { exact: true }).fill("28002");
+    await page.getByLabel("Municipio", { exact: true }).fill("Madrid");
+    await page.getByLabel("Provincia", { exact: true }).fill("Madrid");
+    await page.getByLabel("País", { exact: true }).fill("ES");
+    await clickByRole(page, "Guardar cliente");
+    await expectTextVisible(page, "Cliente creado.");
+    await expect(page.getByRole("table", { name: "Clientes" }).getByText("Cliente Demo")).toBeVisible();
 
-  await goToSection(page, "Ajustes");
-  await clickByRole(page, "Guardar onboarding");
-  await expectTextVisible(page, "Completado");
+    await goToSection(page, "Productos");
+    await clickByRole(page, "Nuevo producto", "link");
+    await page.getByLabel("Código", { exact: true }).fill("svc-demo");
+    await page.getByLabel("Nombre", { exact: true }).fill("Servicio mensual");
+    await page.getByLabel("Descripción en la línea").fill("Servicio mensual de mantenimiento");
+    await page.getByLabel(/^Precio/).fill("250");
+    await page.getByLabel("IRPF %").fill("15");
+    await page.getByLabel("Descuento %").fill("10");
+    await clickByRole(page, "Guardar producto");
+    const productRow = page.getByRole("table", { name: "Productos" }).getByRole("row").filter({ hasText: "SVC-DEMO" });
+    await expect(productRow).toBeVisible();
+    await productRow.locator("summary").click();
+    await clickByRole(page, "Usar en factura", "menuitem");
 
-  await goToSection(page, "Clientes");
-  await clickByRole(page, "Guardar cliente");
-  await expect(page.getByLabel("Nombre cliente")).toHaveValue("Cliente Demo");
+    // Editor: líneas con descuento e IRPF, borrador y confirmación de emisión.
+    await expect(page.getByLabel("Precio línea 1")).toHaveValue("250");
+    await expect(page.getByLabel("Descuento línea 1")).toHaveValue("10");
+    await expect(page.getByLabel("IRPF línea 1")).toHaveValue("15");
+    await page.getByLabel("Descripción línea 1").fill("Servicio editable con descuento");
+    await expectTextVisible(page, "238,50");
+    await expect(page.getByRole("button", { name: "Emitir factura", exact: true })).toBeDisabled();
+    await clickByRole(page, "Guardar borrador");
+    await expectTextVisible(page, "Borrador guardado.");
+    await clickByRole(page, "Emitir factura");
+    const confirm = page.getByRole("dialog", { name: /¿Emitir la factura A-1\?/ });
+    await expect(confirm).toBeVisible();
+    await expect(confirm.getByText("No se envía a la AEAT al emitir", { exact: false })).toBeVisible();
+    await expect(confirm.getByRole("button", { name: "Emitir", exact: true })).toBeDisabled();
+    await confirm.getByLabel("Lo entiendo").check();
+    await confirm.getByRole("button", { name: "Emitir", exact: true }).click();
+    await expectTextVisible(page, "Factura A-1 emitida.");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("A-1");
+    await expectTextVisible(page, "Registro de alta guardado · XML sin exportar");
 
-  await goToSection(page, "Facturas");
-  await page.getByLabel("Descripcion linea 1").fill("Servicio editable con descuento");
-  await expect(page.getByLabel("Serie de esta factura")).toHaveValue(/series-/);
-  await expectTextVisible(page, "238,50");
+    // Lista con búsqueda al escribir y filtro de estado.
+    await goToSection(page, "Facturas");
+    await page.getByPlaceholder("Número, cliente, NIF o huella").fill("A");
+    await page.getByLabel("Estado", { exact: true }).selectOption("Issued");
+    await expectTextVisible(page, "1 en esta página");
 
-  await clickByRole(page, "Crear borrador");
-  await expectTextVisible(page, "Borrador persistido");
-  await expectTextVisible(page, "238,50");
+    // Verifactu: XML → contraseña en memoria → comprobación previa → envío (CSV ficticio del mock).
+    await goToSection(page, "Verifactu");
+    await clickByRole(page, "Exportar XML");
+    await expectTextVisible(page, "XML preparado y validado.");
+    await expect(page.getByRole("button", { name: "Comprobación previa", exact: true })).toBeDisabled();
+    await page.getByLabel("Contraseña del certificado").fill("mock-pass-123");
+    await openTechnical(page);
+    finalVisibleLimits = await bodyHas(page, { noAeatCsv: "sin llamada AEAT real ni CSV", gateNoAeat: "el gate no llama a AEAT" });
+    await clickByRole(page, "Comprobación previa");
+    await expectTextVisible(page, "Todo listo para enviar.");
+    await clickByRole(page, "Enviar a la AEAT");
+    await expectTextVisible(page, "Aceptada por la AEAT · A-1.");
+    await expect(page.getByRole("table", { name: "Envíos a la AEAT" }).getByText("MOCK-CSV")).toBeVisible();
+    passwordPersisted = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }).includes("mock-pass-123"));
+    if (passwordPersisted) throw new Error("La contraseña del certificado no puede guardarse en el almacenamiento del navegador.");
 
-  await clickByRole(page, "Emitir factura");
-  await expectTextVisible(page, "Factura emitida");
+    // Copias: validar y restaurar con confirmación.
+    await goToSection(page, "Ajustes");
+    await clickByRole(page, "Copias", "link");
+    await clickByRole(page, "Crear copia de seguridad");
+    await expectTextVisible(page, "Copia creada.");
+    await clickByRole(page, "Elegir copia…");
+    await clickByRole(page, "Validar copia");
+    await expectTextVisible(page, "La copia es válida.");
+    await clickByRole(page, "Restaurar");
+    const restoreDialog = page.getByRole("dialog", { name: /¿Restaurar la copia/ });
+    await restoreDialog.getByLabel("Lo entiendo").check();
+    await restoreDialog.getByRole("button", { name: "Restaurar", exact: true }).click();
+    await expectTextVisible(page, "Copia restaurada.");
 
-  await goToSection(page, "Fiscal");
-  await expectTextVisible(page, "Cadena fiscal OK");
-  await expectTextVisible(page, "Auditoria fiscal local");
-  await clickByRole(page, "Verificar cadena");
-  await expectTextVisible(page, "Registros fiscales verificados");
-  await expectTextVisible(page, "Ultimo hash por empresa");
-  await clickByRole(page, "Elegir auditoria");
-  await clickByRole(page, "Exportar auditoria");
-  await expectTextVisible(page, "created -");
+    // Documentos: presupuesto → enviado → aceptado → borrador de factura.
+    await goToSection(page, "Documentos");
+    await clickByRole(page, "Nuevo presupuesto", "link");
+    await page.getByLabel("Cliente", { exact: true }).selectOption({ label: "Cliente Demo" });
+    await clickByRole(page, "Guardar borrador");
+    await expectTextVisible(page, "Borrador guardado.");
+    await clickByRole(page, "Enviar");
+    await expectTextVisible(page, "P-2026-0001");
+    await clickByRole(page, "Marcar como aceptado");
+    await clickByRole(page, "Convertir en factura");
+    await expectTextVisible(page, "Borrador de factura creado. Revísalo y emítelo.");
+    await expectTextVisible(page, "Factura para");
 
-  await goToSection(page, "Facturas");
-  await page.getByLabel("Buscar texto factura").fill("A");
-  await page.getByLabel("Filtro estado factura").selectOption("Issued");
-  await clickByRole(page, "Buscar facturas");
-  await expectTextVisible(page, "1 resultado(s) con filtros actuales.");
+    // Recurrentes: plantilla con próximas fechas antes de guardar.
+    await goToSection(page, "Recurrentes");
+    await clickByRole(page, "Nueva plantilla", "link");
+    await page.getByLabel("Nombre de la plantilla").fill("Cuota mantenimiento web");
+    await page.getByLabel("Cliente", { exact: true }).selectOption({ label: "Cliente Demo" });
+    await expect(page.locator(".bdr-log li").first()).toBeVisible();
+    await clickByRole(page, "Guardar plantilla");
+    await expect(page.getByRole("table", { name: "Recurrentes" }).getByText("Cuota mantenimiento web")).toBeVisible();
 
-  await goToSection(page, "Fiscal");
-  await clickByRole(page, "Exportar XML");
-  await expectTextVisible(page, "XSD OK");
+    // Apariencia: el panel ⚙ cambia el modo al momento.
+    await clickByRole(page, "Apariencia y color");
+    await page.locator("#cf-appearance").getByRole("button", { name: "Oscuro", exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-apariencia", "oscuro");
+    await page.keyboard.press("Escape");
+    await goToSection(page, "Verifactu");
 
-  const finalVisibleLimits = await page.locator("body").evaluate((body) => ({
-    noAeatCsv: body.textContent?.includes("sin llamada AEAT real ni CSV") ?? false,
-    gateNoAeat: body.textContent?.includes("el gate no llama a AEAT") ?? false,
-  }));
-
-  await clickByRole(page, "Preflight envio");
-  await expectTextVisible(page, "ready - SistemaVerifactuPruebas - certificado OK - AEAT NO - sin bloqueos");
-  await clickByRole(page, "Enviar");
-  await expectTextVisible(page, "accepted - SistemaVerifactuPruebas - AEAT SI - CSV MOCK-CSV");
-
+  } catch (error) {
+    // Captura del fallo para depurar (no se versiona: tests/regulatory/evidence se limpia).
+    await page.screenshot({ path: resolve(evidenceDir, "browser-smoke-failure.png"), fullPage: true }).catch(() => undefined);
+    throw error;
+  }
   await page.screenshot({ path: screenshotPath, fullPage: true });
   await page.screenshot({ path: latestScreenshotPath, fullPage: true });
 
@@ -482,13 +247,15 @@ const result = await withServer(async (serverLogPath) => {
     viewport: "1366x900",
     browser: "Playwright Chromium headless",
     browser_plugin_note: "Repeatable npm gate uses Playwright because MCP Browser cannot be invoked from npm scripts.",
-    flow: "app loads -> create company/customer/series -> edit invoice line with discount/IRPF -> draft -> issue -> export VERI*FACTU XML -> sidecar preflight -> submit (mocked AEAT CSV)",
+    flow:
+      "first run (company/series/folder) -> customer -> product to line with discount/IRPF -> draft -> confirm issue -> filters -> export VERI*FACTU XML -> session password -> sidecar preflight -> submit (mocked AEAT CSV) -> backup validate/restore -> quote to invoice draft -> recurring template -> dark mode",
     checks: {
       page_identity: true,
       not_blank: true,
       framework_overlay_absent: true,
       console_health: true,
       interaction_proof: true,
+      certificate_password_not_persisted: !passwordPersisted,
       visible_limits: {
         initial: initialVisibleLimits,
         final: finalVisibleLimits,

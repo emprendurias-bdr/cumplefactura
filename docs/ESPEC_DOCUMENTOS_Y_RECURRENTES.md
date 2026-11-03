@@ -207,7 +207,11 @@ Navegación (design.md §5.1, máximo 7): **Facturas · Documentos · Recurrente
 8. Toda transición inválida devuelve `transition_not_allowed:<de>→<a>` y no cambia nada.
 9. Cada pantalla pasa la lista de design.md §12 en los 4 modos.
 
-## 9. Decisiones pendientes (Ricardo)
+## 9. Decisiones (Ricardo, 03-11)
+
+Resueltas: 1 → no se rellena `FechaOperacion` en recapitulativas hasta confirmarlo con la norma; 2 → el anticipo se registra como **cobro** (trae el módulo de cobros); 3 → series configurables con `P`, `PF`, `AL` por defecto; 4 → se factura y la emisión se bloquea mientras haya líneas «pendiente de precio». Detalle en `docs/PLAN_TRABAJO_2026-11-03.md` §4b.
+
+Texto original de las preguntas:
 
 1. **Fecha de operación en la recapitulativa.** El registro VERI\*FACTU tiene un solo campo `FechaOperacion`. Con albaranes de varias fechas, ¿se usa la última fecha de entrega, se omite el campo, o se pregunta al asesor? Propuesta: omitirlo y poner las fechas en las líneas del PDF, **pendiente de confirmar con la norma y la FAQ de la AEAT**.
 2. **Proforma «pagada»**: ¿registrar el anticipo como cobro (y luego descontarlo en la factura) o solo como nota? Propuesta v1: nota.

@@ -2,6 +2,8 @@
 
 Fecha: 2026-11-03. Autor: Fable 5.1 (sesión «Plan de trabajo optimizado»). Decide: Ricardo. Revisan: Bilel y David.
 
+**Actualización 2026-11-03 (respuestas de Ricardo).** PR #7 fusionado en `main` (ADR-001 aceptada). Interfaz alineada con `design.md` desde el primer PR (ADR-003). Contraseña del certificado: la elige el cliente, con la opción recomendada por defecto (ADR-002). Documentos y Recurrentes especificados para Bilel y David en `docs/ESPEC_DOCUMENTOS_Y_RECURRENTES.md`. Primero lo fiscal, siempre (F3 antes que F4). Queda abierta la pregunta sobre la evidencia (§3).
+
 Fuentes: sesiones «Arrancar servidor frontend local» (3-nov), «Vilel branch merge review» (30-oct → 2-nov, PR #7) y «Repo UX/UI analysis» (30-oct, `docs/ANALISIS_REPO_UX_UI_2026-10-30.md` + `docs/PLAN_UX_UI_2026-10-30.md` + `docs/PROMPT_SESION_SUITE_BDR.md`), más verificación directa del repo en esta sesión.
 
 ---
@@ -33,7 +35,7 @@ Lo que las tres sesiones dejaron pendiente y sigue pendiente:
 - Envío real a la AEAT de pruebas con certificado (`tools/homolog-verifactu.mjs --enviar`) y manifiesto de aceptación redactado.
 - Decisión sobre la contraseña del certificado (hoy variable de entorno).
 - Fase-2 nunca pasó CI Windows (WebDriver) y no se fusionó.
-- Las preguntas P1–P6 del análisis UX (6 pasos vs sin firma, nav de 7, Empresa · Serie, nativos vs propios, fase 3 vs 4).
+- Las preguntas P1–P6 del análisis UX: respondidas el 03-11 (ver §7), salvo los pasos del Stepper, que chocan con `design.md`.
 
 ---
 
@@ -41,7 +43,7 @@ Lo que las tres sesiones dejaron pendiente y sigue pendiente:
 
 ### ADR-001 — Tronco único: PR #7
 
-**Estado:** propuesta. **Decide:** Ricardo.
+**Estado:** aceptada (Ricardo, 03-11). PR #7 fusionado en `main` el 03-11. **Decide:** Ricardo.
 
 | Opción | Complejidad | Código resultante | Dependencias | Riesgo | Coste |
 |---|---|---|---|---|---|
@@ -63,13 +65,34 @@ Lo que las tres sesiones dejaron pendiente y sigue pendiente:
 
 **Decisión:** A. Pendientes de producto, con recomendación (§5, F3):
 
-- **Contraseña del certificado.** Hoy `CUMPLEFACTURA_CERT_PASSWORD[_<ID>]` en el entorno. Recomendación de mínimo código: la app la pide en «Ajustes › Certificado» al empezar la sesión, la guarda **solo en memoria** del proceso de la app y la envía en el cuerpo HMAC de `submit-preflight` / `invoke-submit` (campo `certificate_password`), que ya viaja por loopback con secreto por sesión. El sidecar no la persiste ni la registra. Cero dependencias. Alternativa `keyring` (una dependencia nativa por SO) solo si Ricardo quiere «recordar contraseña».
+- **Contraseña del certificado** (decidido 03-11: **la elige el cliente, con la recomendada por defecto**). Hoy sale de `CUMPLEFACTURA_CERT_PASSWORD[_<ID>]` en el entorno. En «Ajustes › Certificado», al cargar el certificado, la persona elige dónde se guarda:
+
+  | Opción | Qué hace | Por defecto | Coste |
+  |---|---|---|---|
+  | **Solo durante esta sesión** (recomendada) | La app la pide la primera vez que hace falta, la guarda solo en la memoria del proceso de la app y la envía en el cuerpo firmado con HMAC de `submit-preflight` / `invoke-submit` (campo nuevo `certificate_password`). Al cerrar la app se olvida. | ✓ | 0 dependencias |
+  | Recordar en este equipo | La guarda en el llavero del sistema (Administrador de credenciales en Windows, Llavero en macOS). No se vuelve a pedir. | | 1 dependencia (`keyring`): protocolo design.md §0.2 |
+  | Variable de entorno (avanzado) | La de hoy. Solo para `tools/homolog-verifactu.mjs` y pruebas; no aparece en la interfaz. | | 0 |
+
+  El texto bajo la opción recomendada: «Más seguro: nadie puede leerla después de cerrar la app.» En los tres casos el sidecar nunca guarda ni registra la contraseña, y la app nunca la escribe en SQLite ni en logs.
 - **Caducidad del certificado.** `native-tls` no la expone. Opción sin dependencias: leer `notAfter` del PKCS#12 con un parseo DER mínimo (~80 líneas) en `vault.rs`; opción con dependencia: `x509-parser`. Recomendación: parseo mínimo, solo para avisar en el preflight (`certificate_expires_in_days`), nunca para bloquear.
 - **`TiempoEsperaEnvio`.** La AEAT pide esperar N segundos entre envíos. Se guarda en `verifactu_submissions`; falta imponerlo en la app (`verifactu_submit::submit` compara `submitted_at + tiempo_espera` con ahora). ~20 líneas, sin dependencias.
 
-### ADR-003 — Interfaz BDR sin librería de componentes
+### ADR-003 — Interfaz BDR alineada con `design.md` desde el primer PR, sin librería de componentes
 
-**Estado:** propuesta. **Decide:** Ricardo; protocolo 0.2 con Bilel y David.
+**Estado:** aceptada (Ricardo, 03-11: «tiene que estar alineado desde el principio con el design.md»). Protocolo 0.2 con Bilel y David antes de F2.1 y F2.2, como exige `design.md` §11.
+
+**Dónde está `design.md`.** En el repo `emprendurias-bdr/bdr-ui`, todavía **sin fusionar**: PR #1 (v1.2), PR #2 (v1.3, movimiento y puzle) y PR #4 (propuesta v1.4). `bdr-ui/SUITE_PLAN_2026-11-02.md` ya decidió (Ricardo, 02-11) **copiar** `tokens.css`, `bdr.css` y `motion.css` con la versión en un comentario, y publicar `@bdr/ui` 1.0 como paquete en la Ola 2. Requisito previo: fusionar PR #1 y #2 de `bdr-ui` (tarea 0.1 del SUITE_PLAN); si no, F2.1 copia de la rama de PR #2 y anota el commit.
+
+**Qué significa «alineado desde el principio» en cada PR de F2:**
+
+- F2.1 copia **tal cual** `tokens.css` (Anexo A), `motion.css` (Anexo B) y el script anti-parpadeo de `design.md` a `src/styles/bdr/`, con `/* bdr-ui design.md v1.3 · commit <sha> */`. Cero valores propios.
+- Fuentes Host Grotesk y Geist Mono: los `.woff2` ya están en el repo (`docs/mockups/_assets/fonts/`, con licencia OFL); se mueven a `src/assets/fonts/`. Sin npm. Pasa por §0.2 porque `design.md` §4.7 lo exige.
+- Iconos (`design.md` §4.9: Lucide, trazo 1,75): los trazos de Lucide se copian en `src/components/Icon.tsx`, que ya existe en PR #7. Sin `lucide-react`.
+- Componentes con los **nombres exactos** de `design.md` §7 (`Button`, `StatusChip`, `DataTable`, `ConfirmDialog`, `Stepper`, `DocPreview`…), cada uno con su comentario de cabecera (§0.3), para que pasar a `@bdr/ui` 1.0 sea cambiar imports.
+- Textos en `src/i18n/es.ts` desde el primer componente (§8).
+- Cada pantalla pasa la lista de §12 en los 4 modos antes de pedir revisión.
+
+**Conflicto encontrado que hay que resolver en `design.md`.** El §10 fija para CumpleFactura un `Stepper` de 6 pasos: Emitida → Registro → XML → **Firmando** → Enviada → Aceptada. PR #7 envía sin firma XAdES (RD 1007/2023 art. 16.3), así que «Firmando» no ocurre nunca, y §7.8 prohíbe colorear un paso que no ha ocurrido. Propuesta para `design.md` v1.4, por §0.4 punto 7: **5 pasos** (Emitida → Registro → XML → Enviada → Aceptada); «Firmando» vuelve solo si algún día se implementa el modo «No VERI\*FACTU». Hasta que se decida, F2 implementa los 5 pasos y lo dice en el PR.
 
 | Opción | Dependencias nuevas | Código | Control del diseño |
 |---|---|---|---|
@@ -77,7 +100,7 @@ Lo que las tres sesiones dejaron pendiente y sigue pendiente:
 | B. `@bdr/ui` 0.1.0 vendorizado como tarball | `@bdr/ui` + `@tanstack/react-table` (+ sus transitivas) y `lucide-react`. | Menos componentes propios, pero «puente» de tokens y envoltorios (PR 1 y 3 del plan UX ya lo preveían). | Parcial: el tarball no se edita desde este repo y aún no sigue `design.md`. |
 | C. Esperar a `bdr-ui` publicado con `design.md` | 1 (cuando exista). | Mínimo. | Total, pero bloquea toda F2. |
 
-**Decisión:** A ahora; migrar a C cuando `bdr-ui` exista y esté alineado (sustitución 1:1 de imports). **Consecuencia:** cada componente de `src/ui/` lleva en cabecera el nombre que tiene en `design.md` §7 para que la migración sea mecánica.
+**Decisión:** A, con los tokens de `design.md` copiados desde el primer día; migrar a C cuando `@bdr/ui` 1.0 exista (Ola 2 del SUITE_PLAN), cambiando imports.
 
 ---
 
@@ -91,7 +114,15 @@ Lo que las tres sesiones dejaron pendiente y sigue pendiente:
 | Rust sidecar | `native-tls`, `roxmltree`, `serde`, `serde_json`, `fiscal-contract` (+ `rcgen` test) | **igual** | Toda red sale por `aeat_client.rs`. |
 | Rust contrato | `hmac`, `sha2`, `serde`, `serde_json`, `uuid` | igual | |
 | Frontend | 3.416 líneas | ≤ 5.000 con toda la UI BDR | Un fichero por pantalla o componente, ≤ 300 líneas, cabecera con lógica/estado/estructura. Sin `any`. |
-| `tests/regulatory/evidence/` | 452 ficheros, 6,3 MB versionados | Solo `latest-*` versionados; históricos en `.gitignore` | Decisión de Ricardo (toca el ledger). |
+| `tests/regulatory/evidence/` | 452 ficheros, 6,3 MB versionados | Ver «Evidencia del gate» abajo | Pendiente de Ricardo. |
+
+**Evidencia del gate (pregunta abierta).** Cada vez que alguien ejecuta `npm run validate:regulatory` en Windows, el gate escribe en `tests/regulatory/evidence/` unos 14 registros con la fecha en el nombre (`20260604-142025-cargo_test.log`, `…-tauri_build.log`…) y sobrescribe unos 20 resúmenes `latest-*` (JSON, Markdown, PNG, el XML y el PDF de prueba). Hoy hay 35 ejecuciones guardadas: 452 ficheros y 6,3 MB en el repo. El gate y el ledger solo leen los `latest-*` y los registros de la **última** ejecución; los de las 34 anteriores no los usa nada. Problemas: cada PR que pasa el gate añade unos 30 ficheros al diff, y los históricos engordan el repo sin aportar. Opciones:
+
+| Opción | Qué se sube al repo | Qué se pierde |
+|---|---|---|
+| A. Solo la última ejecución (recomendada) | Los `latest-*` y los registros de esa ejecución. Los anteriores se ignoran con `.gitignore` y se borran una vez. | El historial de ejecuciones antiguas (sigue en el historial de git). |
+| B. Todo, como hoy | Todo. | Nada; diffs ruidosos y repo creciendo. |
+| C. Nada | La evidencia se adjunta a cada PR o release como fichero. | Trazabilidad dentro del repo; el ledger tendría que leerla de fuera. |
 
 Regla general: **antes de añadir una librería se escribe en el PR cuántas líneas ahorra, qué trae transitivamente y la frase del protocolo 0.2** («Por favor, pregúntale a Bilel y a Dabiz qué les parece este enfoque antes de aplicarlo»).
 
@@ -129,24 +160,27 @@ Sigue el orden y los criterios de `docs/PLAN_UX_UI_2026-10-30.md` (tokens → sh
 | PR | Contenido | Se rescata de fase-2 (copiar, sin dependencias) | Días |
 |---|---|---|---|
 | F2.1 Tokens y modos | `src/styles/tokens.css` (Anexo A de `design.md` tal cual), `type.css`, `appearance.ts`, script anti-parpadeo en `index.html`, `AppearancePanel.tsx`; preferencias en `app_settings` (ya existe; sin tabla nueva). Un único hex permitido fuera de tokens: ninguno. | `tools/verify-phase2-visual.mjs` → `tools/verify-modes-visual.mjs` (Playwright ya instalado). | 1 |
-| F2.2 Shell | `src/shell/{Shell,TopBar,SideNav,ChainChip}.tsx`, `Hero.tsx`, `Toast.tsx` + store con `useSyncExternalStore`. Nav de 7 (Documentos y Recurrentes ocultos hasta F4; ver pregunta P2). | `shared/routes.ts` + `tests/ui/routes.test.mjs` (node:test). | 1,5 |
+| F2.2 Shell | `src/shell/{Shell,TopBar,SideNav,ChainChip}.tsx`, `Hero.tsx`, `Toast.tsx` + store con `useSyncExternalStore`. Nav de 7 (`design.md` §5.1): Facturas · Documentos · Recurrentes · Clientes · Productos · Verifactu · Ajustes. Documentos y Recurrentes con su `EmptyState` explicativo hasta F4. | `shared/routes.ts` + `tests/ui/routes.test.mjs` (node:test). | 1,5 |
 | F2.3 Componentes | `src/ui/`: Button, StatusChip + `status.ts`, Field/Select/MoneyInput/DateInput, DataTable (HTML+CSS), Card/StatCard, Callout, ConfirmDialog (`<dialog>`), Stepper, DocPreview, EmptyState, ActivityLog, SourceBreakdown, Skeleton; `src/i18n/es.ts`; galería `#/_galeria` solo en dev. | `shared/moneyFormat.ts`, `invoiceDate.ts`, `numberProposal.ts` y sus 3 tests. | 1,5 |
 | F2.4 Facturas | Lista con filtros en una fila, menú ⋯, ficha `#/facturas/:id` con Stepper, DocPreview (`invoice_pdf_preview` existe en fase-2: portar el comando Rust, ~60 líneas, sin dependencias), ActivityLog. | Estructura de `InvoiceTable.tsx`, `InvoiceDetail` (nuevo). | 1,5 |
 | F2.5 Editor, emisión y Verifactu | Editor partido 1fr/420 px, ConfirmDialog de emisión con «Lo entiendo», `Ctrl+Enter`, asistente de rectificativa en 4 pasos; pantalla Verifactu con el flujo real de PR #7 (Exportar XML → Comprobación previa → Enviar → Respuesta AEAT) y técnico en `<details>`. | `RectificationWizard.tsx`, `FiscalProgress` → `progress.ts` + test. | 1,5 |
 | F2.6 Ajustes, primer arranque, clientes y productos | Subpáginas de Ajustes (Empresa, Series, Fiscalidad, Certificado, Copias, Avanzado); `FirstRun` a pantalla completa; Clientes y Productos como tabla + formulario lateral. | `FirstRun.tsx`, `Onboarding.tsx` (estructura). | 1 |
 
-Pasos del Stepper Verifactu: **5**, no 6: Emitida → Registro → XML → Enviada → Aceptada. «Firmando» desaparece porque PR #7 no firma (responde la pregunta P1 del análisis). Pasos 4 y 5 solo se colorean con fila en `verifactu_submissions`.
+Pasos del Stepper Verifactu: **5**, no los 6 de `design.md` §10, hasta que se resuelva el conflicto descrito en ADR-003. Pasos 4 y 5 solo se colorean con fila en `verifactu_submissions`.
 
 ### F3 — Cierre fiscal y local-first (4 PR, ~4 días; empieza tras F1.2)
 
 | PR | Contenido | Dependencias | Días |
 |---|---|---|---|
-| F3.1 Contraseña, caducidad y espera | Según ADR-002: `certificate_password` en memoria y en el cuerpo HMAC; `certificate_expires_in_days` en el preflight; `TiempoEsperaEnvio` impuesto en la app. Tests en `handlers`, `vault` y `verifactu_submit`. Actualizar `sidecar/ARQUITECTURA.md` §Contrato. | 0 | 1,5 |
+| F3.1 Contraseña, caducidad y espera | Según ADR-002: selector de tres opciones con «Solo durante esta sesión» por defecto; `certificate_password` en el cuerpo HMAC; llavero solo si se aprueba `keyring` por §0.2; `certificate_expires_in_days` en el preflight; `TiempoEsperaEnvio` impuesto en la app. Tests en `handlers`, `vault` y `verifactu_submit`, incluido uno que comprueba que la contraseña no aparece en respuestas, logs ni SQLite. Actualizar `sidecar/ARQUITECTURA.md` §Contrato. | 0 (+1 si llavero) | 2 |
 | F3.2 QR tributario y PDF | QR en PDF y en la ficha: obligatorio en la factura (RD 1007/2023 art. 6; especificaciones en Orden HAC/1177/2024). Citar artículo y versión desde `C:\03 LEGISLACION` antes de implementar, como exige la regla de oro. Rescatar `services/qr.rs` y el PDF de `claude/cf-funcionalidades-estrella` sin `image`: solo matriz → vectores PDF. | `qrcode` (sin features) **o** codificador propio; protocolo 0.2. | 1 |
 | F3.3 Cola y reintento manual | `verifactu_submissions.status = transport_error` → la lista muestra «Sin confirmar» y botón «Reintentar» que repite preflight + envío **solo a petición del usuario** (sin reintentos automáticos, como exige la spec). Sin tabla nueva. | 0 | 0,5 |
 | F3.4 Restore real de copia | Hoy `backup_restore` solo valida. Flujo: verificar → copia previa → sustituir fichero con la app cerrada a datos → reabrir → verificar cadena. ConfirmDialog con motivo. | 0 | 1 |
 
-### F4 — Comercial (cantera `claude/cf-funcionalidades-estrella`; después de F3; decide Ricardo el orden)
+### F4 — Comercial (después de F3: «primero lo fiscal siempre», Ricardo 03-11)
+
+Especificación completa para Bilel y David: **`docs/ESPEC_DOCUMENTOS_Y_RECURRENTES.md`** (qué es cada documento, reglas, modelo de datos, estados, comandos, flujos, pantallas, criterios de aceptación y reparto). Hasta que se implementen, Documentos y Recurrentes se ven en el menú con un `EmptyState` que explica qué son y cómo funcionarán (texto en §6 de esa especificación).
+
 
 Rebasar solo backend, renumerando la migración 009 → 010 y adaptando a la DB dividida de PR #7: cobros y vencimientos, recurrentes (borrador al abrir), presupuestos → factura. **Email SMTP no entra** (`lettre` + `keyring`): en su lugar «Enviar por correo» abre el cliente del sistema con el PDF guardado (`mailto:` + `plugin-dialog`), cero dependencias; se revisa si los usuarios lo piden. Cada entidad es un PR con su pantalla en `src/ui/`.
 
@@ -181,11 +215,14 @@ Formato de PR: título `<fase>(<área>): <qué>`, cuerpo con objetivo, ficheros,
 
 ---
 
-## 7. Preguntas para Ricardo (responder antes de F0.2)
+## 7. Preguntas para Ricardo
 
-1. ¿Confirmas ADR-001 (PR #7 tronco, fase-2 se porta y no se fusiona)?
-2. ¿Confirmas ADR-003 (sin `@bdr/ui` hasta que exista `bdr-ui` publicado con `design.md`)?
-3. Contraseña del certificado: ¿en memoria por sesión (recomendado) o recordada con `keyring`?
-4. Nav: ¿Documentos y Recurrentes ocultos hasta F4 (recomendado) o visibles con «Próximamente»?
-5. Evidencia: ¿versionar solo `latest-*` y dejar de subir históricos?
-6. ¿F3 antes que F4 (recomendado: primero lo legal) o al revés?
+| # | Pregunta | Respuesta (03-11) |
+|---|---|---|
+| 1 | ¿PR #7 como tronco? | Sí. Fusionado en `main`. |
+| 2 | ¿Librería de componentes? | Alineado con `design.md` desde el principio (ADR-003). |
+| 3 | ¿Dónde se guarda la contraseña del certificado? | La elige el cliente; por defecto, solo durante la sesión (ADR-002). |
+| 4 | ¿Documentos y Recurrentes en el menú? | Visibles con explicación; especificados para Bilel y David. |
+| 5 | ¿Qué evidencia se versiona? | Pendiente: contexto y opciones en §3, «Evidencia del gate». |
+| 6 | ¿Fiscal o comercial primero? | Fiscal siempre. |
+| 7 | ¿Stepper de 5 o 6 pasos? | Nueva: conflicto con `design.md` §10 (ADR-003). Decide Ricardo con Bilel y Dabiz. |

@@ -31,12 +31,17 @@ pub fn invoice_draft_create(
 }
 
 /// Emite: reserva secuencia, calcula huella, audit trail y registro fiscal.
+/// `draft_id` (opcional): borrador del que sale; sus albaranes enlazados pasan a `invoiced`.
 #[tauri::command]
 pub fn invoice_issue(
     state: State<'_, AppState>,
     input: InvoiceIssueInput,
+    draft_id: Option<String>,
 ) -> Result<IssuedInvoice, String> {
     let mut conn = state.lock()?;
+    if let Some(draft_id) = draft_id.as_deref() {
+        db::check_commercial_links_for_issue(&conn, draft_id, &input.draft.customer_id)?;
+    }
     let previous_hash = match input.previous_audit_hash.clone() {
         Some(hash) => Some(hash),
         None => db::latest_audit_hash(&conn)?,
@@ -100,6 +105,11 @@ pub fn invoice_issue(
         previous_fiscal_hash.as_deref(),
         &audit_event,
     )?;
+    // shortcut: fuera de la transacción de emisión (comprobado antes); si fallara, el albarán
+    // queda reservado en el borrador y no se puede refacturar. Mover a la misma tx si ocurre.
+    if let Some(draft_id) = draft_id.as_deref() {
+        db::link_commercial_documents_to_issued(&mut conn, draft_id, &invoice.id)?;
+    }
 
     Ok(IssuedInvoice {
         invoice,

@@ -60,6 +60,26 @@ impl AuditEvent {
         }
     }
 
+    /// Evento de documento comercial (alta, estado, conversión, anulación); misma cadena.
+    pub fn commercial_document(
+        entity_id: String,
+        action: &str,
+        actor: String,
+        payload_hash: String,
+        previous_hash: Option<String>,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            entity_type: "commercial_document".to_string(),
+            entity_id,
+            action: action.to_string(),
+            actor,
+            occurred_at: Utc::now().to_rfc3339(),
+            payload_hash,
+            previous_hash,
+        }
+    }
+
     /// SHA-256 del contenido del evento + previous_hash (eslabón de la trail).
     pub fn chain_hash(&self) -> String {
         let mut hasher = Sha256::new();

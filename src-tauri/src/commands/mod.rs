@@ -4,6 +4,7 @@
 //! `domain` / `db` / `services`. El registro vive en `lib.rs` (`invoke_handler`).
 
 pub mod app;
+pub mod commercial_documents;
 pub mod company;
 pub mod customers;
 pub mod fiscal;

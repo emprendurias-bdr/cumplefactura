@@ -1,5 +1,6 @@
-//! Settings de app: carpeta export, flags territoriales, onboarding.
+//! Settings de app: carpeta export, flags territoriales, onboarding y entorno VERI*FACTU.
 
+use fiscal_contract::endpoints::{EndpointName, DEFAULT_ENDPOINT};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -7,6 +8,9 @@ pub struct AppSettings {
     pub export_dir: Option<String>,
     pub default_territory_flags: Vec<String>,
     pub onboarding_completed: bool,
+    /// Puerto SOAP de la AEAT al que envía el sidecar. Por defecto, pruebas.
+    #[serde(default = "default_endpoint_name")]
+    pub verifactu_endpoint_name: String,
     pub updated_at: String,
 }
 
@@ -15,6 +19,8 @@ pub struct AppSettingsInput {
     pub export_dir: Option<String>,
     pub default_territory_flags: Vec<String>,
     pub onboarding_completed: bool,
+    #[serde(default = "default_endpoint_name")]
+    pub verifactu_endpoint_name: String,
 }
 
 impl Default for AppSettings {
@@ -23,6 +29,7 @@ impl Default for AppSettings {
             export_dir: None,
             default_territory_flags: default_flags(),
             onboarding_completed: false,
+            verifactu_endpoint_name: default_endpoint_name(),
             updated_at: chrono::Utc::now().to_rfc3339(),
         }
     }
@@ -52,10 +59,20 @@ impl AppSettingsInput {
                 return Err(format!("unsupported territory flag: {flag}"));
             }
         }
+        if EndpointName::parse(&self.verifactu_endpoint_name).is_none() {
+            return Err(format!(
+                "unsupported VERI*FACTU endpoint: {}",
+                self.verifactu_endpoint_name
+            ));
+        }
         Ok(())
     }
 }
 
 pub fn default_flags() -> Vec<String> {
     vec!["CommonTerritory".to_string(), "VeriFactu".to_string()]
+}
+
+pub fn default_endpoint_name() -> String {
+    DEFAULT_ENDPOINT.as_str().to_string()
 }

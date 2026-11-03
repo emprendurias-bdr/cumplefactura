@@ -3,7 +3,7 @@ name = "cumplefactura"
 version = "0.1.0"
 description = "Desktop local-first invoicing app for Spanish fiscal compliance."
 authors = ["CumpleFactura"]
-edition = "2021"
+edition.workspace = true
 
 [lib]
 name = "cumplefactura_lib"
@@ -17,13 +17,12 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-chrono = { version = "0.4", features = ["serde"] }
-hex = "0.4"
-hmac = "0.12"
+fiscal-contract.workspace = true
+chrono.workspace = true
 rusqlite = { version = "0.40.0", features = ["bundled"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sha2 = "0.10"
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
-uuid = { version = "1", features = ["serde", "v4"] }
+uuid.workspace = true

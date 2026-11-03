@@ -60,7 +60,7 @@ pub fn advise(input: RectificationAdviceInput) -> RectificationAdvice {
         ),
     };
 
-    let method = input.method_preference.unwrap_or_else(|| {
+    let method = input.method_preference.unwrap_or({
         if input.replaces_full_invoice {
             RectificationMethod::S
         } else {

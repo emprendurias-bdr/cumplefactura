@@ -14,7 +14,7 @@ Specs de aceptación + fixtures + evidencia generada por `tools/`.
 | `verifactu_xsd_contract.spec.md` | P1 |
 | `rectification_flow.spec.md` | P1 |
 | `territory_flags.spec.md` | P1 |
-| `xades_sidecar_preflight.spec.md` | P1 |
+| `verifactu_sidecar_submission.spec.md` | P1 |
 | `audit_export.spec.md` | P2 |
 
 ## Subcarpetas

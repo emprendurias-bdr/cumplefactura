@@ -1,5 +1,6 @@
 //! Factura: draft/issue, líneas, totales, rectificativas y payload fiscal placeholder.
 
+use super::require;
 use crate::domain::tax::TerritoryFlag;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -119,16 +120,6 @@ pub struct IssuedInvoice {
     pub audit_hash: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FiscalPayload {
-    pub invoice_id: String,
-    pub provider: String,
-    pub environment: String,
-    pub payload_version: String,
-    pub transmission_required: bool,
-    pub notes: Vec<String>,
-}
-
 impl Invoice {
     pub fn draft(input: InvoiceDraftInput) -> Result<Self, String> {
         validate_draft(&input)?;
@@ -183,7 +174,7 @@ impl Invoice {
     pub fn fiscal_hash(&self) -> Result<String, String> {
         let material = serde_json::to_vec(self).map_err(|err| err.to_string())?;
         let digest = Sha256::digest(material);
-        Ok(hex::encode(digest))
+        Ok(fiscal_contract::to_hex(&digest))
     }
 }
 
@@ -265,13 +256,6 @@ fn calculate_totals(lines: &[InvoiceLine]) -> InvoiceTotals {
     }
 }
 
-fn require(field: &str, value: &str) -> Result<(), String> {
-    if value.trim().is_empty() {
-        Err(format!("{field} is required"))
-    } else {
-        Ok(())
-    }
-}
 #[cfg(test)]
 mod tests {
     use super::*;

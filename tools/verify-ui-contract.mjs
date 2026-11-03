@@ -1,4 +1,5 @@
-// UI contract: parse src/**/*.{ts,tsx} invoke() names vs registered Tauri commands.
+// UI contract: invoke() names in src/**/*.{ts,tsx} vs Tauri commands registered in src-tauri/src/lib.rs,
+// plus visible labels, guards and limits of the fiscal workflow.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,26 +46,11 @@ for (const file of sourceFiles) {
   visit(sourceFile);
 }
 
-/** Accept bare identifiers or `p.`-prefixed after App section split. */
+/** Las secciones reciben el estado como `p`; se compara sin ese prefijo. */
+const unprefixedSource = sourceText.replace(/\bp\./g, "");
+
 function includesGuard(snippet) {
-  if (sourceText.includes(snippet)) return true;
-  const variants = {
-    "disabled={!canDraft}": "disabled={!p.canDraft}",
-    "disabled={!onboardingReady}": "disabled={!p.onboardingReady}",
-    "disabled={!canIssue}": "disabled={!p.canIssue}",
-    "disabled={!canRectify}": "disabled={!p.canRectify}",
-    "disabled={!canExportXml}": "disabled={!p.canExportXml}",
-    "disabled={!xmlResult && !cancelXmlResult}": "disabled={!p.xmlResult && !p.cancelXmlResult}",
-    "disabled={!submission}": "disabled={!p.submission}",
-    "disabled={!submission || !xadesPreflight?.ready}":
-      "disabled={!p.submission || !p.xadesPreflight?.ready}",
-    'disabled={!submission || submission.signature_status !== "signed_xades"}':
-      'disabled={!p.submission || p.submission.signature_status !== "signed_xades"}',
-    "disabled={!submission || !submitPreflight?.ready}":
-      "disabled={!p.submission || !p.submitPreflight?.ready}",
-  };
-  const alt = variants[snippet];
-  return Boolean(alt && sourceText.includes(alt));
+  return unprefixedSource.includes(snippet);
 }
 
 function includesText(text) {
@@ -91,9 +77,6 @@ const checks = [
     "invoice_export_json",
     "invoice_export_csv",
     "fiscal_audit_export",
-    "fiscal_sidecar_capabilities_get",
-    "sii_submit_sidecar_preflight",
-    "ticketbai_submit_sidecar_preflight",
     "audit_list",
     "fiscal_record_list",
     "fiscal_chain_verify",
@@ -101,12 +84,8 @@ const checks = [
     "backup_restore",
     "verifactu_xml_draft_export",
     "verifactu_xml_anulacion_draft_export",
-    "verifactu_submission_prepare",
-    "verifactu_xades_sidecar_preflight",
-    "verifactu_xades_sidecar_sign",
-    "verifactu_transport_preflight",
-    "verifactu_submit_sidecar_preflight",
-    "verifactu_submit_sidecar_invoke",
+    "verifactu_submit_preflight",
+    "verifactu_submit",
     "rectification_advice",
   ].map((command) => ({
     id: `invoke:${command}`,
@@ -190,75 +169,70 @@ const checks = [
     "Elegir XML",
     "Ruta XML anulacion",
     "Elegir anulacion",
-    "Ruta XML firmado",
-    "Elegir firmado",
     "Exportar PDF",
     "Exportar JSON",
     "Exportar CSV",
     "Exportar auditoria",
-    "Canales ContaPro sidecar",
-    "Resumen canales sidecar",
-    "Recargar sidecar",
-    "Libro SII",
-    "Endpoint SII",
-    "URL sidecar SII",
-    "Preflight SII sidecar",
-    "Territorio TicketBAI",
-    "Endpoint TicketBAI",
-    "URL sidecar TicketBAI",
-    "Preflight TicketBAI sidecar",
     "Validar restore",
     "Exportar XML",
     "Exportar anulacion",
-    "Preparar",
-    "Preflight XAdES",
-    "Firmar XAdES",
-    "Preflight AEAT",
-    "Preflight envio sidecar",
-    "Enviar via sidecar",
+    "Entorno VERI*FACTU",
+    "Envio VERI*FACTU",
+    "Certificado vault",
+    "Preflight envio",
+    "Enviar",
   ].map((label) => ({
     id: `label:${label}`,
     ok: includesText(label),
     detail: `Visible fiscal workflow label '${label}' exists.`,
   })),
   ...[
-    "disabled={!canDraft}",
-    "disabled={!onboardingReady}",
-    "disabled={!canIssue}",
-    "disabled={!canRectify}",
-    "disabled={!canExportXml}",
-    "disabled={!xmlResult && !cancelXmlResult}",
-    "disabled={!submission}",
-    "disabled={!submission || !xadesPreflight?.ready}",
-    "disabled={!submission || submission.signature_status !== \"signed_xades\"}",
-    "disabled={!submission || !submitPreflight?.ready}",
+    'disabled={!canDraft}',
+    'disabled={!onboardingReady}',
+    'disabled={!canIssue}',
+    'disabled={!canRectify}',
+    'disabled={!canExportXml}',
+    'disabled={!submission}',
+    'disabled={!submission || submitPreflight?.status !== "ready"}',
   ].map((snippet) => ({
     id: `guard:${snippet}`,
     ok: includesGuard(snippet),
     detail: `UI guard '${snippet}' exists.`,
   })),
   ...[
-    "sin firma ni envio",
+    "sin envio",
     "external_blocked",
     "Pre-MVP local-first",
     "Configura continuar numeracion anterior",
     "discount_rate_basis_points",
-    "pendiente de XAdES/envio",
-    "no llama al sidecar",
-    "exige XAdES real",
     "Selector tecnico R1-R5/I-S",
-    "no llama a AEAT",
     "sin llamada AEAT real ni CSV",
-    "gate usa sidecar falso",
-    "Importado de ContaPro",
-    "sin SOAP AEAT",
-    "homologacion foral sigue bloqueada",
+    "el gate no llama a AEAT",
+    "solo el sidecar local con HMAC y certificado puede invocar AEAT",
   ].map((text) => ({
     id: `limit:${text}`,
     ok: includesText(text),
     detail: `Visible limit '${text}' exists.`,
   })),
 ];
+
+// Registro Rust: cada comando invocado existe y cada comando registrado se usa.
+const libRs = fs.readFileSync(path.join(root, "src-tauri", "src", "lib.rs"), "utf8");
+const registeredCommands = new Set([...libRs.matchAll(/commands::\w+::(\w+)/g)].map((match) => match[1]));
+const notRegistered = [...invokedCommands].filter((command) => !registeredCommands.has(command));
+const notInvoked = [...registeredCommands].filter((command) => !invokedCommands.has(command));
+checks.push(
+  {
+    id: "registry:invoked_commands_are_registered",
+    ok: notRegistered.length === 0,
+    detail: `UI invokes only registered commands. Missing: ${notRegistered.join(", ") || "none"}.`,
+  },
+  {
+    id: "registry:registered_commands_are_invoked",
+    ok: notInvoked.length === 0,
+    detail: `Every registered command is used by the UI. Unused: ${notInvoked.join(", ") || "none"}.`,
+  },
+);
 
 const failed = checks.filter((check) => !check.ok);
 const summary = {
@@ -267,6 +241,7 @@ const summary = {
   source: srcDir,
   scanned_files: sourceFiles.map((file) => path.relative(root, file)),
   invoked_commands: [...invokedCommands].sort(),
+  registered_commands: [...registeredCommands].sort(),
   checks,
   failed: failed.map((check) => check.id),
 };

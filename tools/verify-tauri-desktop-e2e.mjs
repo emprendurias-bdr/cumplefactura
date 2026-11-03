@@ -1,62 +1,35 @@
-// Desktop E2E preflight (real WebDriver opt-in via env flag).
-import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+// Desktop E2E preflight (real WebDriver opt-in via CUMPLEFACTURA_TAURI_DESKTOP_E2E_REAL=1).
+import { spawn } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { download as downloadEdgeDriver } from "edgedriver";
+import { commandExists, evidenceDir, pathInfo, root, windowsDriverCandidates, writeEvidence } from "./lib.mjs";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const evidenceDir = resolve(root, "tests/regulatory/evidence");
-const outputJson = resolve(evidenceDir, "latest-tauri-desktop-e2e.json");
-const outputMd = resolve(evidenceDir, "latest-tauri-desktop-e2e.md");
-const releaseExe = resolve(root, "src-tauri/target/release/cumplefactura.exe");
+const windows = process.platform === "win32";
+// CUMPLEFACTURA_DESKTOP_APP permite probar otro build (por ejemplo target/debug).
+const releaseExe = process.env.CUMPLEFACTURA_DESKTOP_APP?.trim() || resolve(root, `target/release/cumplefactura${windows ? ".exe" : ""}`);
 const realMode = ["1", "true", "yes", "on"].includes(
   (process.env.CUMPLEFACTURA_TAURI_DESKTOP_E2E_REAL ?? "").trim().toLowerCase(),
 );
-let resolvedEdgeDriverPath = "";
-try {
-  resolvedEdgeDriverPath = await downloadEdgeDriver();
-} catch {
-  resolvedEdgeDriverPath = "";
-}
+const resolvedEdgeDriverPath = windows ? await downloadEdgeDriver().catch(() => "") : "";
 
-function pathInfo(path) {
-  if (!path || !existsSync(path)) {
-    return { exists: false };
-  }
-  const stat = statSync(path);
-  return { exists: true, is_file: stat.isFile(), is_dir: stat.isDirectory(), bytes: stat.size };
-}
-
-function localCommandCandidates(command) {
-  const home = process.env.USERPROFILE ?? process.env.HOME ?? "";
-  const candidates = [];
-  if (command === "tauri-driver.exe" && home) {
-    candidates.push(resolve(home, ".cargo/bin/tauri-driver.exe"));
-  }
-  if (command === "chromedriver.exe") {
-    candidates.push(resolve(root, "node_modules/.bin/chromedriver.cmd"));
-    candidates.push(resolve(root, "node_modules/chromedriver/lib/chromedriver/chromedriver.exe"));
-  }
-  if (command === "msedgedriver.exe") {
-    candidates.push(resolve(root, "node_modules/.bin/msedgedriver.cmd"));
-    candidates.push(resolve(root, "node_modules/msedgedriver/bin/msedgedriver.exe"));
-    if (resolvedEdgeDriverPath) candidates.push(resolvedEdgeDriverPath);
-  }
-  return candidates.filter((path) => existsSync(path));
-}
-
-function commandExists(command) {
-  const result = spawnSync("where.exe", [command], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const wherePaths = result.status === 0
-    ? result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
-    : [];
-  const paths = [...new Set([...wherePaths, ...localCommandCandidates(command)])];
-  return { ok: paths.length > 0, paths };
-}
+/**
+ * Recorrido real: sección de la barra lateral, botón y texto esperado en la barra de
+ * estado. Cada pantalla solo existe mientras su sección está activa.
+ */
+const steps = [
+  { section: "Empresas", button: "Nueva empresa" },
+  { section: "Clientes", button: "Nuevo cliente" },
+  { section: "Panel", button: "Rellenar demo" },
+  // Cada paso exige su propio resultado: "Refrescar: OK" ya está en pantalla y no prueba nada.
+  { section: "Empresas", button: "Guardar emisor", expect: ["Emisor creado"] },
+  { section: "Clientes", button: "Guardar cliente", expect: ["Emisor y cliente creados"] },
+  { section: "Facturas", button: "Crear borrador", expect: ["Borrador persistido"] },
+  { section: "Facturas", button: "Emitir factura", expect: ["Factura emitida"] },
+  { section: "Fiscal", button: "Exportar XML", expect: ["XML VERI*FACTU: OK"] },
+  // Arranca el sidecar real junto al exe; sin certificado ni --allow-aeat responde "blocked".
+  { section: "Fiscal", button: "Preflight envio", expect: ["Preflight envio: OK"] },
+];
 
 async function wait(ms) {
   await new Promise((resolveWait) => setTimeout(resolveWait, ms));
@@ -99,11 +72,33 @@ async function waitFor(port, sessionId, label, script, timeoutMs = 20_000, args 
   throw new Error(`Timed out waiting for ${label}. Body head: ${bodyText.slice(0, 1200)} Body tail: ${bodyText.slice(-1200)}`);
 }
 
+/** Pulsa el botón habilitado con ese texto exacto (incluye los de la barra lateral). Espera hasta 10 s. */
 async function clickButton(port, sessionId, text) {
   const escaped = text.replace(/'/g, "\\'");
-  const elementId = await findElement(port, sessionId, "xpath", `//button[normalize-space(.)='${escaped}' and not(@disabled)]`);
-  await webdriver(port, sessionId, "POST", `/element/${elementId}/click`, {});
-  return true;
+  const xpath = `//button[normalize-space(.)='${escaped}' and not(@disabled)]`;
+  const start = Date.now();
+  for (;;) {
+    try {
+      const elementId = await findElement(port, sessionId, "xpath", xpath);
+      // Algunos drivers (WebKitWebDriver) no desplazan el botón a la vista antes de pulsar.
+      await execute(port, sessionId, "arguments[0].scrollIntoView({ block: 'center' });", [
+        { "element-6066-11e4-a52e-4f735466cecf": elementId },
+      ]);
+      await webdriver(port, sessionId, "POST", `/element/${elementId}/click`, {});
+      return true;
+    } catch (error) {
+      if (Date.now() - start > 10_000) {
+        const buttons = await execute(
+          port,
+          sessionId,
+          "return [...document.querySelectorAll('button')].map((b) => `${b.innerText.trim()}${b.disabled ? ' [disabled]' : ''}`).join(' | ');",
+        ).catch(() => "?");
+        const status = await execute(port, sessionId, "return document.querySelector('header p')?.innerText ?? '';").catch(() => "?");
+        throw new Error(`Button not clickable: ${text} (${error.message}). Status: ${status}. Buttons: ${buttons}`);
+      }
+      await wait(300);
+    }
+  }
 }
 
 async function realDesktopSmoke(tauriDriverPath, nativeDriverPath) {
@@ -145,25 +140,22 @@ async function realDesktopSmoke(tauriDriverPath, nativeDriverPath) {
     );
 
     const completedSteps = [];
-    for (const button of ["Nueva empresa", "Nuevo cliente", "Rellenar demo", "Guardar emisor", "Guardar cliente", "Crear borrador", "Emitir factura", "Exportar XML", "Preparar"]) {
-      const clicked = await clickButton(port, sessionId, button);
-      if (!clicked) {
-        throw new Error(`Could not click enabled button: ${button}`);
-      }
-      if (["Nueva empresa", "Nuevo cliente", "Rellenar demo"].includes(button)) {
-        await wait(500);
+    for (const step of steps) {
+      await clickButton(port, sessionId, step.section);
+      await clickButton(port, sessionId, step.button);
+      if (step.expect) {
+        await waitFor(
+          port,
+          sessionId,
+          step.expect.join(" or "),
+          `return arguments[0].some((text) => document.body?.innerText.includes(text));`,
+          30_000,
+          [step.expect],
+        );
       } else {
-        const expected =
-          button === "Exportar XML" ? ["XML VERI*FACTU: OK"] :
-          button === "Preparar" ? ["Preparar firma/envio: OK"] :
-          button === "Guardar emisor" ? ["Emisor creado", "Refrescar: OK"] :
-          button === "Guardar cliente" ? ["Cliente creado", "Refrescar: OK"] :
-          button === "Crear borrador" ? ["Borrador persistido", "Refrescar: OK"] :
-          button === "Emitir factura" ? ["Factura emitida", "Refrescar: OK"] :
-          [`${button}: OK`];
-        await waitFor(port, sessionId, expected.join(" or "), `return arguments[0].some((text) => document.body?.innerText.includes(text));`, 30_000, [expected]);
-        completedSteps.push(button);
+        await wait(500);
       }
+      completedSteps.push(step.button);
     }
 
     const screenshot = await webdriver(port, sessionId, "GET", "/screenshot");
@@ -181,13 +173,13 @@ async function realDesktopSmoke(tauriDriverPath, nativeDriverPath) {
         ui_text_detected: true,
         real_rust_commands_executed: true,
         verifactu_xml_exported: completedSteps.includes("Exportar XML"),
-        submission_prepared: completedSteps.includes("Preparar"),
+        sidecar_preflight_executed: completedSteps.includes("Preflight envio"),
       },
       completed_steps: completedSteps,
       screenshot_path: screenshotPath,
       limits: [
-        "Real mode launches the release executable via tauri-driver and Microsoft Edge WebDriver.",
-        "It executes local UI events that call real Rust/Tauri commands for company, customer, draft, issue, VERI*FACTU XML export and local signature/submission preparation.",
+        "Real mode launches the release executable via tauri-driver and the platform WebDriver (msedgedriver on Windows, WebKitWebDriver on Linux).",
+        "It executes local UI events that call real Rust/Tauri commands for company, customer, draft, issue, VERI*FACTU XML export and a sidecar preflight that launches the real sidecar process.",
         "It performs no AEAT call and uses no secrets.",
       ],
     };
@@ -196,11 +188,13 @@ async function realDesktopSmoke(tauriDriverPath, nativeDriverPath) {
   }
 }
 
-mkdirSync(evidenceDir, { recursive: true });
-
-const tauriDriver = commandExists("tauri-driver.exe");
-const chromeDriver = commandExists("chromedriver.exe");
-const edgeDriver = commandExists("msedgedriver.exe");
+// Windows: WebView2 + msedgedriver. Linux: WebKitGTK + WebKitWebDriver.
+const tauriDriver = windows
+  ? commandExists("tauri-driver.exe", windowsDriverCandidates("tauri-driver.exe"))
+  : commandExists("tauri-driver");
+const edgeDriver = windows
+  ? commandExists("msedgedriver.exe", windowsDriverCandidates("msedgedriver.exe", resolvedEdgeDriverPath))
+  : commandExists("WebKitWebDriver");
 const checks = {
   release_exe_exists: pathInfo(releaseExe).exists,
   tauri_driver_available: tauriDriver.ok,
@@ -216,8 +210,7 @@ let result = {
   checks,
   evidence: {
     tauri_driver_paths: tauriDriver.paths,
-    chromedriver_paths: chromeDriver.paths,
-    msedgedriver_paths: edgeDriver.paths,
+    native_webdriver_paths: edgeDriver.paths,
   },
   limits: [
     "Preflight mode proves release binary and driver prerequisites only.",
@@ -240,8 +233,6 @@ if (result.status === "passed" && realMode) {
   }
 }
 
-writeFileSync(outputJson, `${JSON.stringify(result, null, 2)}\n`, "utf8");
-
 const md = [
   "# CumpleFactura Tauri desktop E2E",
   "",
@@ -257,16 +248,15 @@ const md = [
   "## Limits",
   "",
   ...result.limits.map((limit) => `- ${limit}`),
-  "",
 ];
-writeFileSync(outputMd, md.join("\n"), "utf8");
+const { jsonPath, mdPath } = writeEvidence("tauri-desktop-e2e", result, md);
 
 if (result.status !== "passed") {
   console.error("CumpleFactura Tauri desktop E2E FAILED");
-  console.error(outputJson);
+  console.error(jsonPath);
   process.exit(1);
 }
 
 console.log("CumpleFactura Tauri desktop E2E OK");
-console.log(outputJson);
-console.log(outputMd);
+console.log(jsonPath);
+console.log(mdPath);

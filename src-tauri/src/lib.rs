@@ -1,6 +1,6 @@
 //! Crate library CumpleFactura: arranque Tauri + registro de comandos IPC.
 //!
-//! Capas: `commands` (IPC) → `domain` / `db` / `services` (fiscal local + sidecars).
+//! Capas: `commands` (IPC) → `domain` / `db` / `services` (fiscal local + sidecar).
 
 use tauri::Manager;
 
@@ -11,7 +11,7 @@ mod db;
 mod domain;
 mod services;
 
-/// Inicializa SQLite, plugin dialog y el `invoke_handler` de la app desktop.
+/// Inicializa SQLite, plugin dialog, el gestor del sidecar y el `invoke_handler`.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -19,6 +19,7 @@ pub fn run() {
         .setup(|app| {
             let state = db::init_app_state(app)?;
             app.manage(state);
+            app.manage(services::sidecar_process::SidecarManager::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -39,10 +40,6 @@ pub fn run() {
             commands::invoices::invoice_next_number_preview,
             commands::invoices::invoice_list,
             commands::invoices::invoice_export_pdf,
-            commands::fiscal::fiscal_prepare_verifactu,
-            commands::fiscal::fiscal_sidecar_capabilities_get,
-            commands::fiscal::sii_submit_sidecar_preflight,
-            commands::fiscal::ticketbai_submit_sidecar_preflight,
             commands::fiscal::rectification_advice,
             commands::fiscal::backup_export,
             commands::fiscal::backup_restore,
@@ -54,13 +51,15 @@ pub fn run() {
             commands::fiscal::audit_list,
             commands::fiscal::fiscal_record_list,
             commands::fiscal::fiscal_chain_verify,
-            commands::fiscal::verifactu_submission_prepare,
-            commands::fiscal::verifactu_xades_sidecar_preflight,
-            commands::fiscal::verifactu_xades_sidecar_sign,
-            commands::fiscal::verifactu_transport_preflight,
-            commands::fiscal::verifactu_submit_sidecar_preflight,
-            commands::fiscal::verifactu_submit_sidecar_invoke,
+            commands::fiscal::verifactu_submit_preflight,
+            commands::fiscal::verifactu_submit,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running CumpleFactura");
+        .build(tauri::generate_context!())
+        .expect("error while building CumpleFactura")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                app.state::<services::sidecar_process::SidecarManager>()
+                    .shutdown();
+            }
+        });
 }

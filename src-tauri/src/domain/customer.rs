@@ -1,5 +1,6 @@
 //! Cliente receptor (tipos, input, entidad).
 
+use super::require;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -68,13 +69,5 @@ impl Customer {
             country_code: input.country_code,
             updated_at: Utc::now().to_rfc3339(),
         }
-    }
-}
-
-fn require(field: &str, value: &str) -> Result<(), String> {
-    if value.trim().is_empty() {
-        Err(format!("{field} is required"))
-    } else {
-        Ok(())
     }
 }

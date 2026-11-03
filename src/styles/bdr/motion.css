@@ -1,0 +1,81 @@
+/* bdr-ui design.md v1.3 · commit 4aa365c */
+/* BDR · movimiento v1.0 (design.md §4.11) — usa solo variables; sin librerías.
+   Se importa después de tokens.css y bdr.css. Vale igual para Next (Tailwind v4) y Tauri (CSS plano). */
+
+/* ── Tokens de duración y curva ──────────────────────────────────────────────
+   Una entrada usa --mov-ease-out; una salida, --mov-ease-in y ~2/3 de su entrada. */
+:root{
+  --mov-instant: 0ms;     /* atajos de teclado, paleta de comandos, selección de fila */
+  --mov-micro:   100ms;   /* hover, foco, press, cambio de color */
+  --mov-short:   150ms;   /* tooltip, popover, menú, interruptor */
+  --mov-medium:  200ms;   /* expandir/colapsar, toast, aviso en línea, encaje de piezas */
+  --mov-large:   250ms;   /* entrada de diálogo, hoja o panel lateral */
+  --mov-exit-short:  100ms;
+  --mov-exit-medium: 130ms;
+  --mov-exit-large:  170ms;
+  --mov-brand:   700ms;   /* solo marca: montaje del puzle al entrar (web y Cuenta BDR) */
+  --mov-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --mov-ease-in:  cubic-bezier(0.3, 0, 1, 1);
+}
+
+/* ── Microinteracciones: solo transform, opacity y color; nunca `transition: all` ── */
+.bdr-btn,.bdr-icon-btn,.bdr-chip,.bdr-seg button,.bdr-side a,.bdr-tabs a{
+  transition: background-color var(--mov-micro) var(--mov-ease-out),
+              color var(--mov-micro) var(--mov-ease-out),
+              box-shadow var(--mov-micro) var(--mov-ease-out),
+              transform var(--mov-micro) var(--mov-ease-out);
+}
+.bdr-btn:active:not(:disabled){transform: scale(0.98)}
+
+/* ── Diálogo y popover nativos: entrada y salida sin JavaScript (Baseline 2024) ──
+   Funciona con <dialog> y [popover]: @starting-style da el estado inicial y
+   allow-discrete deja animar display/overlay al cerrar. */
+dialog.bdr-dialog,[popover].bdr-panel{
+  opacity: 1; transform: none;
+  transition: opacity var(--mov-exit-large) var(--mov-ease-in),
+              transform var(--mov-exit-large) var(--mov-ease-in),
+              display var(--mov-exit-large) allow-discrete,
+              overlay var(--mov-exit-large) allow-discrete;
+}
+dialog.bdr-dialog:not([open]),[popover].bdr-panel:not(:popover-open){opacity: 0; transform: scale(0.98)}
+dialog.bdr-dialog[open],[popover].bdr-panel:popover-open{
+  transition-duration: var(--mov-large); transition-timing-function: var(--mov-ease-out);
+}
+@starting-style{
+  dialog.bdr-dialog[open],[popover].bdr-panel:popover-open{opacity: 0; transform: scale(0.98)}
+}
+dialog.bdr-dialog::backdrop{transition: opacity var(--mov-large) var(--mov-ease-out), display var(--mov-large) allow-discrete, overlay var(--mov-large) allow-discrete}
+@starting-style{dialog.bdr-dialog[open]::backdrop{opacity: 0}}
+
+/* Hoja inferior en móvil (design.md §5.2): sube desde abajo */
+@media (max-width: 767px){
+  dialog.bdr-dialog.bdr-dialog--sheet:not([open]){transform: translateY(24px)}
+  @starting-style{dialog.bdr-dialog.bdr-dialog--sheet[open]{transform: translateY(24px)}}
+}
+
+/* ── Toast: entra 200 ms, sale 130 ms ── */
+.bdr-toast{transition: opacity var(--mov-exit-medium) var(--mov-ease-in), transform var(--mov-exit-medium) var(--mov-ease-in)}
+.bdr-toast.is-on{transition-duration: var(--mov-medium); transition-timing-function: var(--mov-ease-out)}
+
+/* ── Carga: el esqueleto aparece solo si la espera pasa de 300 ms y se queda al menos 400 ms.
+   El retraso lo pone el componente (data-cargando tras 300 ms); aquí solo el pulso. */
+.bdr-skel{animation: bdr-pulso 1.4s var(--mov-ease-out) infinite}
+@keyframes bdr-pulso{0%,100%{opacity: 1}50%{opacity: .55}}
+
+/* ── Cambio de estado de una fila o chip: destello de 200 ms, sin desplazamiento ── */
+.bdr-destello{animation: bdr-destello var(--mov-medium) var(--mov-ease-out)}
+@keyframes bdr-destello{from{background-color: var(--surface-2)}}
+
+/* ── Movimiento reducido: reducir, no eliminar ──────────────────────────────
+   Fuera desplazamientos, escalados y bucles; se quedan fundidos y cambios de color cortos. */
+@media (prefers-reduced-motion: reduce){
+  :root{--mov-large: 120ms; --mov-medium: 120ms; --mov-brand: 0ms}
+  .bdr-btn:active:not(:disabled){transform: none}
+  dialog.bdr-dialog:not([open]),[popover].bdr-panel:not(:popover-open),
+  dialog.bdr-dialog.bdr-dialog--sheet:not([open]){transform: none}
+  @starting-style{
+    dialog.bdr-dialog[open],[popover].bdr-panel:popover-open,dialog.bdr-dialog.bdr-dialog--sheet[open]{transform: none}
+  }
+  .bdr-skel{animation: none}
+  .bdr-toast,.bdr-toast.is-on{transform: none}
+}

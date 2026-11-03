@@ -195,3 +195,69 @@ node tools/build-sidecar.mjs --debug       # compila y copia a src-tauri/binarie
 node tools/verify-sidecar-smoke.mjs        # smoke del binario empaquetado (gate)
 node tools/homolog-verifactu.mjs --help    # envío real a la AEAT de pruebas (manual)
 ```
+
+## Secuencias
+
+Las tres interacciones completas, con el fichero que ejecuta cada paso. La estructura de ficheros y el orden de lectura están en [`README.md`](README.md).
+
+### Arranque y handshake
+
+```
+App (sidecar_process.rs)                      Sidecar (main.rs)
+──────────────────────────                    ─────────────────────────────
+spawn("cumplefactura-sidecar",
+      ["--vault-dir", <certs>, "--allow-aeat"?])
+  stdin  ◀──────────── tubería ────────────▶  parse_args (config.rs)
+escribe 64 hex (32 bytes aleatorios) + "\n" ─▶ parse_secret → SidecarConfig
+                                              TcpListener::bind(127.0.0.1:0)
+  ◀─ stdout: {"port":P,"pid":N,"version":V} ─  handshake JSON (una sola línea)
+comprueba pid == child.id()                   hilo vigilante: stdin EOF → exit(0)
+guarda SidecarClient { port, secret }         server::serve(listener) hasta morir
+```
+
+Si la app muere, el sistema cierra la tubería y el sidecar sale solo. Si el sidecar muere, la app lo relanza con un secreto nuevo en la siguiente llamada.
+
+### Comprobación previa (`POST /verifactu/submit-preflight`)
+
+```
+verifactu_submit::preflight        server.rs            handlers::preflight        vault.rs
+────────────────────────────       ─────────────        ───────────────────        ────────────
+read_checked_xml (SHA-256 igual
+al exportado)
+post_json_loopback (firma HMAC) ─▶ par loopback?
+                                   read_http_message
+                                   verify_hmac_hex ──▶  EndpointName::parse
+                                                        producción sin flag?
+                                                        Backend::load_certificate ─▶ certificate_id
+                                                                                     <vault>/<id>.p12|.pfx
+                                                                                     contraseña (env)
+                                                                                     Identity::from_pkcs12
+                                                        --allow-aeat?
+                                   ◀── 200 {status: ready|blocked, blockers[], …,
+                                            external_call_performed: false}
+rechaza si external_call_performed == true
+```
+
+### Envío (`POST /verifactu/invoke-submit`)
+
+```
+verifactu_submit::submit   server.rs      handlers::invoke_submit   soap.rs            aeat_client.rs          AEAT
+──────────────────────     ─────────      ───────────────────────   ────────────       ─────────────────       ────
+read_checked_xml
+post_json_loopback ──────▶ HMAC ok ─────▶ 1 endpoint en lista
+                                          2 producción solo con flag
+                                          3 sha256(xml) == xml_sha256
+                                          4 wrap_regfactu ─────────▶ raíz RegFactu…
+                                                                     sobre SOAP 1.1
+                                          5 --allow-aeat
+                                          6 load_certificate
+                                          7 post_soap ──────────────────────────────▶ TLS 1.2+ mTLS ──▶ POST
+                                                                                      read_http_message ◀── 200|500
+                                          parse_response ◀────────── AeatOutcome
+                           ◀── 200 {status, csv, estado_*, …, external_call_performed: true}
+sha256 devuelto == enviado?
+¿filtra cert ref o secreto?
+aeat_answered → insert verifactu_submissions
+```
+
+Cualquier fallo en 1–6 devuelve `409 {error, external_call_performed:false}` **antes** del paso 7. Un fallo en 7 devuelve 200 con `status: transport_error` y `external_call_performed: true`: la AEAT pudo recibir el registro, así que la app lo muestra como «sin confirmar» y no lo reintenta sola.

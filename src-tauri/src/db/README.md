@@ -6,6 +6,7 @@
 | `settings.rs`, `companies.rs`, `customers.rs`, `products.rs` | Ajustes, emisores y series, clientes, catálogo |
 | `invoices.rs` | Borradores, emisión con numeración reservada, listados, datos para PDF/XML |
 | `fiscal.rs` | Registros fiscales, auditoría, exportaciones y respuestas AEAT (`verifactu_submissions`) |
+| `backup.rs` | Restaurar copia: validar, copia previa, sustituir, migrar, verificar cadena; vuelta atrás si falla |
 | `tests.rs` | Tests con SQLite en memoria (`db::test_conn()`) |
 | `migrations/*.sql` | Esquema versionado (series, descuentos, fiscal…) |
 

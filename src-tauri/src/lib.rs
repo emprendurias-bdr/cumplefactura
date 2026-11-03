@@ -53,6 +53,7 @@ pub fn run() {
             commands::fiscal::fiscal_chain_verify,
             commands::fiscal::verifactu_submit_preflight,
             commands::fiscal::verifactu_submit,
+            commands::fiscal::verifactu_submission_list,
         ])
         .build(tauri::generate_context!())
         .expect("error while building CumpleFactura")

@@ -6,17 +6,25 @@
 //! 2. `read_checked_xml`: antes de preflight o envío, relee el fichero y exige que
 //!    su SHA-256 siga siendo el exportado. Así no hace falta volver a validar el XSD
 //!    y nadie puede cambiar el XML entre la exportación y el envío.
-//! 3. `preflight` y `submit` hablan con el sidecar por el canal loopback firmado.
+//! 3. `check_wait_time`: si la última respuesta de la AEAT para esa empresa y ese
+//!    endpoint pidió esperar (`TiempoEsperaEnvio`) y no ha pasado el tiempo, no se envía.
+//! 4. `preflight` y `submit` hablan con el sidecar por el canal loopback firmado.
+//!    Toda respuesta del envío, también `transport_error`, se guarda en
+//!    `verifactu_submissions`. Reintentar es siempre una decisión manual: aquí no
+//!    hay reintentos automáticos.
 //!
 //! Qué comprueba de la respuesta del sidecar (defensa en profundidad):
 //! - el preflight nunca dice haber llamado a la AEAT;
 //! - el envío devuelve el mismo SHA-256 que se mandó;
-//! - la respuesta no contiene la referencia del certificado ni el secreto de sesión.
+//! - la respuesta no contiene la referencia del certificado, el secreto de sesión
+//!   ni la contraseña del certificado.
 //!
 //! Qué no hace nunca: firmar, abrir certificados o hablar con la AEAT. Eso es el sidecar.
+//! Tampoco guarda ni registra `certificate_password`: solo la reenvía al sidecar.
 //! Sin firma XAdES: RD 1007/2023 art. 16.3 (ver `sidecar/ARQUITECTURA.md`).
 
 use crate::services::sidecar_process::SidecarClient;
+use chrono::{DateTime, Utc};
 use fiscal_contract::messages::{
     InvokeSubmitRequest, InvokeSubmitResponse, SubmitPreflightRequest, SubmitPreflightResponse,
 };
@@ -32,6 +40,9 @@ pub const PAYLOAD_VERSION: &str = "verifactu-xml-v1";
 const AEAT_TIMEOUT_SECONDS: u64 = 30;
 /// Margen del canal local sobre el tiempo de la AEAT.
 const LOOPBACK_TIMEOUT: Duration = Duration::from_secs(AEAT_TIMEOUT_SECONDS + 15);
+/// Por debajo de esta longitud, buscar la contraseña en la respuesta daría falsos
+/// positivos (un «1234» aparece en cualquier código) y bloquearía un envío ya hecho.
+const MIN_PASSWORD_LEAK_CHECK_LEN: usize = 8;
 
 /// Exportación XML registrada, lista para enviar.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +60,9 @@ pub struct SubmitInput {
     pub xml_path: String,
     pub xml_sha256: String,
     pub certificate_ref: String,
+    /// Contraseña del certificado en modo «solo durante esta sesión». Nunca se serializa.
+    #[serde(default, skip_serializing)]
+    pub certificate_password: Option<String>,
 }
 
 /// SHA-256 en mayúsculas, como las huellas de la AEAT.
@@ -110,6 +124,7 @@ pub fn preflight(
     let request = SubmitPreflightRequest {
         endpoint_name: endpoint_name.to_string(),
         certificate_ref: input.certificate_ref.clone(),
+        certificate_password: input.certificate_password.clone(),
     };
     let response: SubmitPreflightResponse = post(client, PATH_SUBMIT_PREFLIGHT, &request, input)?;
     if response.external_call_performed {
@@ -131,6 +146,7 @@ pub fn submit(
         endpoint_name: endpoint_name.to_string(),
         certificate_ref: input.certificate_ref.clone(),
         timeout_seconds: AEAT_TIMEOUT_SECONDS,
+        certificate_password: input.certificate_password.clone(),
     };
     let response: InvokeSubmitResponse = post(client, PATH_INVOKE_SUBMIT, &request, input)?;
     if !response
@@ -145,9 +161,30 @@ pub fn submit(
     Ok(response)
 }
 
-/// `true` si la AEAT contestó; solo entonces se guarda como evidencia.
-pub fn aeat_answered(response: &InvokeSubmitResponse) -> bool {
-    response.status != "transport_error"
+/// Rechaza con `aeat_wait_time_pending:<segundos>` si la AEAT pidió esperar y no ha pasado el tiempo.
+pub fn check_wait_time(
+    conn: &Connection,
+    invoice_id: &str,
+    endpoint_name: &str,
+    now: DateTime<Utc>,
+) -> Result<(), String> {
+    let Some((submitted_at, wait_seconds)) =
+        crate::db::latest_verifactu_wait(conn, invoice_id, endpoint_name)?
+    else {
+        return Ok(());
+    };
+    let submitted_at = DateTime::parse_from_rfc3339(&submitted_at)
+        .map_err(|err| format!("submitted_at invalido: {err}"))?;
+    let elapsed_ms = (now - submitted_at.with_timezone(&Utc)).num_milliseconds();
+    let pending_ms = wait_seconds * 1_000 - elapsed_ms;
+    if pending_ms > 0 {
+        // Redondeo hacia arriba: nunca decir «0 segundos» si aún falta algo.
+        return Err(format!(
+            "aeat_wait_time_pending:{}",
+            (pending_ms + 999) / 1_000
+        ));
+    }
+    Ok(())
 }
 
 fn post<Req: Serialize, Res: serde::de::DeserializeOwned>(
@@ -171,6 +208,17 @@ fn post<Req: Serialize, Res: serde::de::DeserializeOwned>(
     }
     if text.contains(&fiscal_contract::to_hex(&client.secret)) {
         return Err("sidecar_response_leaked_shared_secret".to_string());
+    }
+    // shortcut: contraseñas de menos de 8 caracteres no se buscan; si el sidecar
+    // llegara a devolverlas, esto no lo vería. El sidecar no las devuelve (tests en `handlers`).
+    if input
+        .certificate_password
+        .as_deref()
+        .is_some_and(|password| {
+            password.chars().count() >= MIN_PASSWORD_LEAK_CHECK_LEN && text.contains(password)
+        })
+    {
+        return Err("sidecar_response_leaked_certificate_password".to_string());
     }
     serde_json::from_value(raw).map_err(|err| format!("sidecar_json_error: {err}"))
 }
@@ -203,6 +251,7 @@ mod tests {
             xml_path: xml_path.to_string(),
             xml_sha256: xml_sha256.to_string(),
             certificate_ref: "vault://certs/empresa".to_string(),
+            certificate_password: None,
         }
     }
 
@@ -277,7 +326,6 @@ mod tests {
         let xml = read_checked_xml(&request).unwrap();
         let response = submit(&client, &request, xml, "SistemaVerifactuPruebas").unwrap();
         assert_eq!(response.csv.as_deref(), Some("A-CSV"));
-        assert!(aeat_answered(&response));
         let (start_line, body) = server.join().unwrap();
         assert!(start_line.starts_with("POST /verifactu/invoke-submit "));
         assert_eq!(body["xml"], "<sfLR:RegFactuSistemaFacturacion/>");
@@ -361,5 +409,85 @@ mod tests {
         );
         server.join().unwrap();
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn password_goes_to_sidecar_but_never_back_or_into_serialized_input() {
+        const PASSWORD: &str = "contrasena-larga-1";
+        let (path, sha) = write_xml("password");
+        let mut request = input(&path, &sha);
+        request.certificate_password = Some(PASSWORD.to_string());
+        assert!(!serde_json::to_string(&request).unwrap().contains(PASSWORD));
+        let from_ui: SubmitInput = serde_json::from_value(serde_json::json!({
+            "invoice_id": "i1", "export_id": "e1", "xml_path": path, "xml_sha256": sha,
+            "certificate_ref": "vault://certs/empresa", "certificate_password": PASSWORD
+        }))
+        .unwrap();
+        assert_eq!(from_ui.certificate_password.as_deref(), Some(PASSWORD));
+
+        let (client, server) = fake_sidecar(|body| accepted(body["xml_sha256"].as_str().unwrap()));
+        let xml = read_checked_xml(&request).unwrap();
+        submit(&client, &request, xml, "SistemaVerifactuPruebas").unwrap();
+        let (_, body) = server.join().unwrap();
+        assert_eq!(body["certificate_password"], PASSWORD);
+
+        let (client, server) = fake_sidecar(|body| {
+            let mut reply = accepted(body["xml_sha256"].as_str().unwrap());
+            reply["descripcion_error"] = Value::String(format!("eco {PASSWORD}"));
+            reply
+        });
+        let xml = read_checked_xml(&request).unwrap();
+        let err = submit(&client, &request, xml, "SistemaVerifactuPruebas").unwrap_err();
+        assert_eq!(err, "sidecar_response_leaked_certificate_password");
+        assert!(!err.contains(PASSWORD));
+        server.join().unwrap();
+
+        // Contraseña corta: no se busca (evita falsos positivos con códigos como «1100»).
+        request.certificate_password = Some("1100".to_string());
+        let (client, server) = fake_sidecar(|body| {
+            let mut reply = accepted(body["xml_sha256"].as_str().unwrap());
+            reply["codigo_error"] = Value::String("1100".to_string());
+            reply
+        });
+        let xml = read_checked_xml(&request).unwrap();
+        assert!(submit(&client, &request, xml, "SistemaVerifactuPruebas").is_ok());
+        server.join().unwrap();
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn wait_time_blocks_until_elapsed_per_company_and_endpoint() {
+        use crate::db::tests::issued_invoice_with_export;
+        let mut conn = crate::db::test_conn();
+        let (invoice_id, export_id) = issued_invoice_with_export(&mut conn);
+        let now = Utc::now();
+        check_wait_time(&conn, &invoice_id, "SistemaVerifactuPruebas", now).unwrap();
+
+        let mut response: InvokeSubmitResponse =
+            serde_json::from_value(accepted(&"A".repeat(64))).unwrap();
+        response.status = "rejected".to_string();
+        crate::db::insert_verifactu_submission(
+            &conn,
+            crate::db::VerifactuSubmissionRecord {
+                invoice_id: &invoice_id,
+                fiscal_export_id: &export_id,
+                response: &response,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            check_wait_time(&conn, &invoice_id, "SistemaVerifactuPruebas", now).unwrap_err(),
+            "aeat_wait_time_pending:60"
+        );
+        let later = now + chrono::Duration::seconds(59);
+        assert!(
+            check_wait_time(&conn, &invoice_id, "SistemaVerifactuPruebas", later)
+                .unwrap_err()
+                .starts_with("aeat_wait_time_pending:")
+        );
+        let after = now + chrono::Duration::seconds(61);
+        check_wait_time(&conn, &invoice_id, "SistemaVerifactuPruebas", after).unwrap();
+        // Otro endpoint no hereda la espera.
+        check_wait_time(&conn, &invoice_id, "SistemaVerifactuSelloPruebas", now).unwrap();
     }
 }

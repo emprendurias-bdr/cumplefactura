@@ -316,6 +316,7 @@ fn persists_app_settings_for_onboarding() {
             default_territory_flags: vec!["CommonTerritory".to_string(), "VeriFactu".to_string()],
             onboarding_completed: true,
             verifactu_endpoint_name: "SistemaVerifactuSelloPruebas".to_string(),
+            certificate_password_mode: "env".to_string(),
         },
     )
     .expect("save settings");
@@ -334,19 +335,42 @@ fn persists_app_settings_for_onboarding() {
         loaded.verifactu_endpoint_name,
         "SistemaVerifactuSelloPruebas"
     );
+    assert_eq!(loaded.certificate_password_mode, "env");
+    assert!(!loaded.sends_certificate_password());
+    assert_eq!(defaults.certificate_password_mode, "session");
+    assert!(defaults.sends_certificate_password());
 
     let legacy: AppSettings = serde_json::from_str(
         r#"{"export_dir":null,"default_territory_flags":["VeriFactu"],"onboarding_completed":true,"updated_at":"x"}"#,
     )
     .expect("settings saved before the endpoint field still load");
     assert_eq!(legacy.verifactu_endpoint_name, "SistemaVerifactuPruebas");
+    assert_eq!(legacy.certificate_password_mode, "session");
+    let old_input: AppSettingsInput = serde_json::from_str(
+        r#"{"export_dir":null,"default_territory_flags":["VeriFactu"],"onboarding_completed":true}"#,
+    )
+    .expect("old UI input without the new fields still deserializes");
+    assert_eq!(old_input.certificate_password_mode, "session");
+    let keychain = AppSettingsInput {
+        certificate_password_mode: "keychain".to_string(),
+        ..old_input.clone()
+    };
+    let saved = update_app_settings(&conn, keychain).expect("keychain accepted");
+    assert_eq!(saved.certificate_password_mode, "keychain");
+    assert!(
+        saved.sends_certificate_password(),
+        "keychain behaves as session"
+    );
     let invalid = AppSettingsInput {
-        export_dir: None,
-        default_territory_flags: vec!["VeriFactu".to_string()],
-        onboarding_completed: true,
         verifactu_endpoint_name: "https://otro.example".to_string(),
+        ..old_input.clone()
     };
     assert!(update_app_settings(&conn, invalid).is_err());
+    let invalid_mode = AppSettingsInput {
+        certificate_password_mode: "disk".to_string(),
+        ..old_input
+    };
+    assert!(update_app_settings(&conn, invalid_mode).is_err());
 }
 
 #[test]
@@ -790,6 +814,97 @@ fn fiscal_export_and_aeat_submission_are_recorded_once() {
         insert_verifactu_submission(&conn, record(&issued.id, &export_id, &response)).is_err(),
         "a second acceptance of the same XML must be refused by the unique index"
     );
+}
+
+/// Empresa, cliente, factura emitida y exportación XML. Devuelve (factura, exportación).
+pub(crate) fn issued_invoice_with_export(conn: &mut Connection) -> (String, String) {
+    let company = company();
+    let customer = customer();
+    insert_company(conn, &company).expect("company insert");
+    upsert_customer(conn, &customer).expect("customer upsert");
+    let mut issued = invoice(company.id.clone(), customer.id.clone());
+    issued.number = Some(1);
+    issued.status = InvoiceStatus::Issued;
+    issued.issued_at = Some("2026-05-28T10:00:00Z".to_string());
+    let audit_event = AuditEvent::invoice_issued(
+        issued.id.clone(),
+        "tester".to_string(),
+        "F".repeat(64),
+        None,
+    );
+    insert_issued_invoice(conn, &issued, &"F".repeat(64), None, &audit_event).expect("issued");
+    let export_id = insert_fiscal_export(
+        conn,
+        &issued.id,
+        "AEAT-VERIFACTU",
+        "local",
+        "verifactu-xml-v1",
+        &"A".repeat(64),
+        "xml_exported",
+    )
+    .expect("fiscal export");
+    (issued.id, export_id)
+}
+
+#[test]
+fn transport_errors_are_stored_listed_newest_first_and_allow_retry() {
+    let mut conn = memory_conn();
+    let (invoice_id, export_id) = issued_invoice_with_export(&mut conn);
+    let response = fiscal_contract::messages::InvokeSubmitResponse {
+        xml_sha256: "A".repeat(64),
+        endpoint_name: "SistemaVerifactuPruebas".to_string(),
+        operation: "RegFactuSistemaFacturacion".to_string(),
+        status: "transport_error".to_string(),
+        http_status: None,
+        csv: None,
+        estado_envio: None,
+        estado_registro: None,
+        codigo_error: None,
+        descripcion_error: Some("timeout".to_string()),
+        tiempo_espera_envio_seconds: None,
+        soap_fault: None,
+        external_call_performed: true,
+    };
+    let record = |response| VerifactuSubmissionRecord {
+        invoice_id: &invoice_id,
+        fiscal_export_id: &export_id,
+        response,
+    };
+    let first = insert_verifactu_submission(&conn, record(&response)).expect("transport_error");
+    assert!(!verifactu_xml_already_accepted(&conn, &"A".repeat(64)).unwrap());
+    assert_eq!(
+        latest_verifactu_wait(&conn, &invoice_id, "SistemaVerifactuPruebas").unwrap(),
+        None
+    );
+    let mut retry = response.clone();
+    retry.status = "accepted".to_string();
+    retry.csv = Some("CSV-1".to_string());
+    retry.tiempo_espera_envio_seconds = Some(60);
+    let second = insert_verifactu_submission(&conn, record(&retry)).expect("retry accepted");
+
+    let all = list_verifactu_submissions(&conn, None).unwrap();
+    assert_eq!(
+        all.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
+        vec![second.as_str(), first.as_str()]
+    );
+    assert_eq!(all[0].csv.as_deref(), Some("CSV-1"));
+    assert_eq!(all[0].tiempo_espera_envio_seconds, Some(60));
+    assert_eq!(all[1].status, "transport_error");
+    assert_eq!(all[1].descripcion_error.as_deref(), Some("timeout"));
+    assert_eq!(
+        list_verifactu_submissions(&conn, Some(&invoice_id))
+            .unwrap()
+            .len(),
+        2
+    );
+    assert!(list_verifactu_submissions(&conn, Some("otra"))
+        .unwrap()
+        .is_empty());
+    let (submitted_at, seconds) =
+        latest_verifactu_wait(&conn, &invoice_id, "SistemaVerifactuPruebas")
+            .unwrap()
+            .expect("wait");
+    assert_eq!((submitted_at, seconds), (all[0].submitted_at.clone(), 60));
 }
 
 #[test]

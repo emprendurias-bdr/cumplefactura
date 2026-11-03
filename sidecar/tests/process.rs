@@ -55,6 +55,7 @@ fn handshake_signed_calls_and_exit_on_stdin_close() {
     let request = SubmitPreflightRequest {
         endpoint_name: "SistemaVerifactuPruebas".to_string(),
         certificate_ref: "vault://certs/no-existe".to_string(),
+        certificate_password: None,
     };
     let body = serde_json::to_vec(&request).unwrap();
     let preflight: SubmitPreflightResponse = post_json_loopback(

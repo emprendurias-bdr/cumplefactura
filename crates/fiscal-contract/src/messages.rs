@@ -3,8 +3,11 @@
 //! Qué hace: un único juego de structs serializables que usan los dos extremos.
 //! Si un campo cambia aquí, la app y el sidecar dejan de compilar a la vez.
 //!
-//! Qué no lleva nunca: rutas del vault, contraseñas, bytes del certificado ni el
-//! secreto de sesión. La app solo conoce `certificate_ref` (`vault://certs/<id>`).
+//! Qué no lleva nunca: rutas del vault, bytes del certificado ni el secreto de
+//! sesión. La app solo conoce `certificate_ref` (`vault://certs/<id>`). La única
+//! contraseña es `certificate_password` en las peticiones (modo «solo durante esta
+//! sesión», ADR-002): viaja en el cuerpo firmado con HMAC por loopback y ninguna
+//! respuesta la devuelve.
 //!
 //! Por qué `endpoint_name` es `String` y no `EndpointName`: un nombre desconocido
 //! debe producir un bloqueo explicado (`endpoint_name_not_allowed`), no un error de
@@ -43,6 +46,9 @@ pub struct ErrorResponse {
 pub struct SubmitPreflightRequest {
     pub endpoint_name: String,
     pub certificate_ref: String,
+    /// Contraseña del PKCS#12 para esta petición. `None`: el sidecar la busca en el entorno.
+    #[serde(default)]
+    pub certificate_password: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -56,6 +62,12 @@ pub struct SubmitPreflightResponse {
     pub certificate_loaded: bool,
     /// `pkcs12_vault` cuando el certificado se ha podido abrir.
     pub certificate_source: Option<String>,
+    /// `notAfter` del certificado (`AAAA-MM-DDTHH:MM:SSZ`); `None` si no se pudo leer.
+    #[serde(default)]
+    pub certificate_expires_at: Option<String>,
+    /// Días completos hasta `notAfter` (negativo si ya caducó).
+    #[serde(default)]
+    pub certificate_expires_in_days: Option<i64>,
     pub aeat_calls_enabled: bool,
     pub production_enabled: bool,
     /// Siempre `false`: el preflight nunca sale a internet.
@@ -72,6 +84,9 @@ pub struct InvokeSubmitRequest {
     pub endpoint_name: String,
     pub certificate_ref: String,
     pub timeout_seconds: u64,
+    /// Igual que en `SubmitPreflightRequest`.
+    #[serde(default)]
+    pub certificate_password: Option<String>,
 }
 
 /// Resultado de un envío que llegó a salir hacia la AEAT.

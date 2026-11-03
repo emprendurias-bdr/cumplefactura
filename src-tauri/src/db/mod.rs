@@ -11,6 +11,7 @@
 //! | `products`  | `products`                                                     |
 //! | `invoices`  | `invoices`, `invoice_lines`, numeración                        |
 //! | `fiscal`    | `fiscal_records`, `audit_events`, `fiscal_exports`, `verifactu_submissions` |
+//! | `backup`    | restaurar una copia sobre la base activa (con copia previa y vuelta atrás) |
 //!
 //! Todo se reexporta aquí: el resto de la app usa `db::<función>` sin conocer el módulo.
 
@@ -31,6 +32,7 @@ use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 use tauri::Manager;
 
+mod backup;
 mod companies;
 mod customers;
 mod fiscal;
@@ -38,6 +40,7 @@ mod invoices;
 mod products;
 mod settings;
 
+pub use backup::*;
 pub use companies::*;
 pub use customers::*;
 pub use fiscal::*;
@@ -117,13 +120,18 @@ pub fn migrations() -> Vec<Migration> {
 pub fn init_app_state(app: &tauri::App) -> Result<AppState, Box<dyn Error>> {
     let app_data_dir = app.path().app_data_dir()?;
     fs::create_dir_all(&app_data_dir)?;
-    let db_path = app_data_dir.join("cumplefactura.sqlite3");
-    let conn = Connection::open(db_path)?;
-    conn.pragma_update(None, "foreign_keys", "ON")?;
-    apply_migrations(&conn)?;
+    let conn = open_database(&app_data_dir.join("cumplefactura.sqlite3"))?;
     Ok(AppState {
         conn: Mutex::new(conn),
     })
+}
+
+/// Abre (o crea) la base en `path` con claves foráneas y todas las migraciones.
+pub fn open_database(path: &std::path::Path) -> Result<Connection, rusqlite::Error> {
+    let conn = Connection::open(path)?;
+    conn.pragma_update(None, "foreign_keys", "ON")?;
+    apply_migrations(&conn)?;
+    Ok(conn)
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -222,4 +230,4 @@ fn clean_optional(value: Option<String>) -> Option<String> {
         .filter(|item| !item.is_empty())
 }
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

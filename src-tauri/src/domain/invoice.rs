@@ -1,4 +1,7 @@
 //! Factura: draft/issue, líneas, totales, rectificativas y payload fiscal placeholder.
+//!
+//! `notes` (observaciones) y `price_pending` (línea de albarán sin precio) son operativos: nunca
+//! entran en la huella AEAT ni en el XML; la huella técnica de `fiscal_hash` también los ignora.
 
 use super::require;
 use crate::domain::tax::TerritoryFlag;
@@ -45,6 +48,9 @@ pub struct InvoiceLineInput {
     pub discount_rate_basis_points: Option<i32>,
     pub tax_rate_basis_points: i32,
     pub withholding_rate_basis_points: Option<i32>,
+    /// `None` en `invoice_draft_update` conserva la marca de la línea en esa posición.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub price_pending: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,6 +66,8 @@ pub struct InvoiceDraftInput {
     pub rectifies_invoice_id: Option<String>,
     pub rectification_reason_code: Option<RectificationReasonCode>,
     pub rectification_method: Option<RectificationMethod>,
+    #[serde(default)]
+    pub notes: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,6 +91,8 @@ pub struct InvoiceLine {
     pub tax_cents: i64,
     pub withholding_rate_basis_points: i32,
     pub withholding_cents: i64,
+    #[serde(default)]
+    pub price_pending: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,6 +121,8 @@ pub struct Invoice {
     pub totals: InvoiceTotals,
     pub created_at: String,
     pub issued_at: Option<String>,
+    #[serde(default)]
+    pub notes: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,6 +160,7 @@ impl Invoice {
             totals,
             created_at: Utc::now().to_rfc3339(),
             issued_at: None,
+            notes: input.notes.trim().to_string(),
         })
     }
 
@@ -172,7 +185,12 @@ impl Invoice {
     }
 
     pub fn fiscal_hash(&self) -> Result<String, String> {
-        let material = serde_json::to_vec(self).map_err(|err| err.to_string())?;
+        let mut operational_free = self.clone();
+        operational_free.notes.clear();
+        for line in &mut operational_free.lines {
+            line.price_pending = false;
+        }
+        let material = serde_json::to_vec(&operational_free).map_err(|err| err.to_string())?;
         let digest = Sha256::digest(material);
         Ok(fiscal_contract::to_hex(&digest))
     }
@@ -244,6 +262,8 @@ pub(crate) fn build_line(
         tax_cents,
         withholding_rate_basis_points,
         withholding_cents,
+        // Con precio ya no está pendiente: la marca solo bloquea líneas a 0 €.
+        price_pending: input.price_pending.unwrap_or(false) && input.unit_price_cents == 0,
     })
 }
 
@@ -271,6 +291,7 @@ mod tests {
             discount_rate_basis_points: None,
             tax_rate_basis_points: 2_100,
             withholding_rate_basis_points: Some(1_500),
+            price_pending: None,
         }
     }
 
@@ -287,6 +308,7 @@ mod tests {
             rectifies_invoice_id: None,
             rectification_reason_code: None,
             rectification_method: None,
+            notes: String::new(),
         }
     }
 
@@ -362,6 +384,41 @@ mod tests {
 
         let err = Invoice::issue(input).expect_err("zero number must fail");
         assert!(err.contains("positive"));
+    }
+
+    #[test]
+    fn notes_and_price_pending_stay_out_of_the_technical_hash() {
+        let issue = |notes: &str, pending: Option<bool>| {
+            let mut draft = base_draft();
+            draft.notes = notes.to_string();
+            draft.lines[0].price_pending = pending;
+            Invoice::issue(InvoiceIssueInput {
+                draft,
+                number: 1,
+                issued_at: "2026-05-28T10:00:00Z".to_string(),
+                actor: "test".to_string(),
+                previous_audit_hash: None,
+            })
+            .expect("issue")
+        };
+        let (plain, _) = issue("", None);
+        let (noted, _) = issue("Pago a 30 días", Some(true));
+        assert_eq!(noted.notes, "Pago a 30 días");
+        // Con precio, la marca de pendiente desaparece sola.
+        assert!(!noted.lines[0].price_pending);
+        assert_eq!(plain.notes, "");
+        let mut a = plain.clone();
+        let mut b = noted.clone();
+        a.id = "same".into();
+        b.id = "same".into();
+        b.lines[0].id = a.lines[0].id.clone();
+        b.created_at = a.created_at.clone();
+        assert_eq!(a.fiscal_hash(), b.fiscal_hash());
+
+        let mut zero = base_draft();
+        zero.lines[0].unit_price_cents = 0;
+        zero.lines[0].price_pending = Some(true);
+        assert!(Invoice::draft(zero).expect("draft").lines[0].price_pending);
     }
 
     #[test]

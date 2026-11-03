@@ -162,6 +162,11 @@ mod tests {
             fiscal_hash: Some("A".repeat(64)),
             created_at: "2026-06-02T00:00:00Z".to_string(),
             issued_at: Some("2026-06-02T00:00:00Z".to_string()),
+            due_date: None,
+            paid_cents: 0,
+            payment_status: "unpaid".to_string(),
+            recurring_label: None,
+            recurring_period_key: None,
         };
 
         write_invoice_csv(target.to_str().expect("utf8"), &[invoice]).expect("csv");

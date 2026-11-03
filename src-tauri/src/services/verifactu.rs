@@ -200,7 +200,11 @@ pub fn build_verifactu_xml_draft(
     );
     push_text(&mut xml, 6, "sf:TipoFactura", invoice_type);
     push_rectification_info(&mut xml, invoice)?;
-    push_text(&mut xml, 6, "sf:FechaOperacion", &expedition_date);
+    // D5: la recapitulativa (varios albaranes) no lleva FechaOperacion; las fechas de cada
+    // albarán van en sus líneas del PDF. Pendiente de confirmar con la AEAT antes de homologar.
+    if !invoice.is_recapitulative {
+        push_text(&mut xml, 6, "sf:FechaOperacion", &expedition_date);
+    }
     push_text(&mut xml, 6, "sf:DescripcionOperacion", &description);
     xml.push_str("      <sf:Destinatarios>\n");
     xml.push_str("        <sf:IDDestinatario>\n");
@@ -688,8 +692,10 @@ mod tests {
                 taxable_base_cents: 10_000,
                 tax_rate_basis_points: 2_100,
                 tax_cents: 2_100,
+                ..Default::default()
             }],
             rectified_invoice: None,
+            ..Default::default()
         }
     }
 
@@ -713,6 +719,7 @@ mod tests {
             taxable_base_cents: -1_000,
             tax_rate_basis_points: 2_100,
             tax_cents: -210,
+            ..Default::default()
         }];
         invoice.rectified_invoice = Some(RectifiedInvoiceLink {
             company_tax_id: "B00000000".to_string(),
@@ -733,6 +740,74 @@ mod tests {
             issued_at: "2026-05-28T12:00:00Z".to_string(),
             fiscal_hash: "a".repeat(64),
         }
+    }
+
+    /// Fijados con el código anterior a R2: las facturas normales no cambian ni un byte.
+    const NORMAL_FIXTURE: &str = include_str!("testdata/verifactu_alta_normal.xml");
+    const RECTIFYING_FIXTURE: &str = include_str!("testdata/verifactu_alta_rectificativa.xml");
+    const FECHA_OPERACION: &str = "      <sf:FechaOperacion>28-05-2026</sf:FechaOperacion>\n";
+
+    fn with_operational_fields(mut invoice: InvoicePdfData) -> InvoicePdfData {
+        invoice.notes = "Observaciones que no son fiscales".to_string();
+        invoice.due_date = Some("2026-06-30".to_string());
+        invoice.paid_cents = 500;
+        invoice.recurring_label = Some("Cuota".to_string());
+        invoice.company_logo_path = Some("logo.png".to_string());
+        invoice
+    }
+
+    #[test]
+    fn normal_invoice_xml_is_byte_identical_to_pre_r2_and_ignores_notes() {
+        let normal = build_verifactu_xml_draft(&invoice(), None).expect("xml");
+        assert_eq!(normal, NORMAL_FIXTURE);
+        let with_notes =
+            build_verifactu_xml_draft(&with_operational_fields(invoice()), None).expect("xml");
+        assert_eq!(with_notes, NORMAL_FIXTURE);
+        let previous = previous_link();
+        for source in [
+            rectifying_invoice(),
+            with_operational_fields(rectifying_invoice()),
+        ] {
+            let xml = build_verifactu_xml_draft(&source, Some(&previous)).expect("xml");
+            assert_eq!(xml, RECTIFYING_FIXTURE);
+        }
+        assert_eq!(
+            calculate_invoice_registro_alta_hash(&invoice(), None).expect("hash"),
+            calculate_invoice_registro_alta_hash(&with_operational_fields(invoice()), None)
+                .expect("hash")
+        );
+    }
+
+    #[test]
+    fn recapitulative_xml_only_drops_fecha_operacion() {
+        let mut recap = invoice();
+        recap.is_recapitulative = true;
+        let xml = build_verifactu_xml_draft(&recap, None).expect("xml");
+        assert!(NORMAL_FIXTURE.contains(FECHA_OPERACION));
+        assert_eq!(xml, NORMAL_FIXTURE.replace(FECHA_OPERACION, ""));
+    }
+
+    /// Con PowerShell en el PATH (Windows o Linux con `pwsh`); si no, se salta.
+    #[test]
+    fn recapitulative_xml_passes_local_xsd_contract() {
+        if Command::new("powershell").arg("-Version").output().is_err() {
+            eprintln!("powershell no disponible: XSD de la recapitulativa sin validar");
+            return;
+        }
+        let mut recap = invoice();
+        recap.is_recapitulative = true;
+        let target =
+            std::env::temp_dir().join(format!("cumplefactura-recap-{}.xml", uuid::Uuid::new_v4()));
+        let xml = build_verifactu_xml_draft(&recap, None).expect("xml");
+        let assets = dev_verifactu_xsd_assets().expect("dev xsd assets");
+        std::fs::write(&target, &xml).expect("write");
+        let result = validate_verifactu_xml_file(&target, &assets);
+        // Control negativo: el validador de verdad rechaza un TipoFactura inexistente.
+        std::fs::write(&target, xml.replace(">F1<", ">ZZ<")).expect("write broken");
+        let broken = validate_verifactu_xml_file(&target, &assets);
+        let _ = std::fs::remove_file(&target);
+        result.expect("recapitulative XML should pass local XSD contract");
+        assert!(broken.is_err(), "validator must reject invalid XML");
     }
 
     #[test]

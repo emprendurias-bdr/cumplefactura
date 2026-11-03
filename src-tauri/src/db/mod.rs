@@ -11,8 +11,9 @@
 //! | `products`  | `products`                                                     |
 //! | `invoices`  | `invoices`, `invoice_lines`, numeración                        |
 //! | `fiscal`    | `fiscal_records`, `audit_events`, `fiscal_exports`, `verifactu_submissions` |
-//! | `commercial_documents` | `commercial_documents`, `commercial_document_lines`, `commercial_sequences` |
+//! | `commercial_documents` | `commercial_documents`, `commercial_document_lines`, `commercial_sequences`, `commercial_series_configs` |
 //! | `recurring` | `recurring_invoices`, `recurring_runs`                         |
+//! | `payments`  | `invoice_payments`, `invoices.due_date` (cobros de factura o proforma) |
 //! | `backup`    | restaurar una copia sobre la base activa (con copia previa y vuelta atrás) |
 //!
 //! Todo se reexporta aquí: el resto de la app usa `db::<función>` sin conocer el módulo.
@@ -40,6 +41,7 @@ mod companies;
 mod customers;
 mod fiscal;
 mod invoices;
+mod payments;
 mod products;
 mod recurring;
 mod settings;
@@ -50,6 +52,7 @@ pub use companies::*;
 pub use customers::*;
 pub use fiscal::*;
 pub use invoices::*;
+pub use payments::*;
 pub use products::*;
 pub use recurring::*;
 pub use settings::*;
@@ -129,6 +132,11 @@ pub fn migrations() -> Vec<Migration> {
             version: 11,
             name: "recurring_invoices",
             sql: include_str!("migrations/011_recurring_invoices.sql"),
+        },
+        Migration {
+            version: 12,
+            name: "r2_documentos_cobros_logo",
+            sql: include_str!("migrations/012_r2_documentos_cobros_logo.sql"),
         },
     ]
 }

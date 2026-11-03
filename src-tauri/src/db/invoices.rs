@@ -1,6 +1,11 @@
 //! Facturas: borradores, emisión con numeración reservada en transacción, listados y datos para PDF/XML.
+//!
+//! Observaciones (`notes`), vencimiento, cobros, origen recurrente y `price_pending` son
+//! operativos: se guardan y se listan, pero nunca entran en la huella ni en el XML. La única
+//! marca que cambia el XML es `is_recapitulative` (sin `FechaOperacion`, decisión D5).
 
 use super::*;
+use crate::domain::invoice::InvoiceDraftInput;
 
 pub fn insert_invoice_draft(conn: &mut Connection, invoice: &Invoice) -> Result<(), String> {
     let tx = conn.transaction().map_err(db_error)?;
@@ -110,6 +115,23 @@ fn consume_draft(tx: &Connection, draft_id: &str, issued: &Invoice) -> Result<()
         params![draft_id, issued.id],
     )
     .map_err(db_error)?;
+    // Marca de recapitulativa y vencimiento los pone Rust (no la UI): se heredan del borrador.
+    tx.execute(
+        "UPDATE invoices SET (is_recapitulative, due_date) =
+           (SELECT is_recapitulative, due_date FROM invoices WHERE id = ?1)
+         WHERE id = ?2",
+        params![draft_id, issued.id],
+    )
+    .map_err(db_error)?;
+    // Los cobros del borrador (anticipo de proforma) pasan a la emitida.
+    tx.execute(
+        "UPDATE invoice_payments SET invoice_id = ?2 WHERE invoice_id = ?1",
+        params![draft_id, issued.id],
+    )
+    .map_err(db_error)?;
+    if invoice_paid_cents(tx, &issued.id)? > issued.totals.total_cents {
+        return Err("payments_exceed_total".to_string());
+    }
     for table in ["invoice_territory_flags", "invoice_lines"] {
         tx.execute(
             &format!("DELETE FROM {table} WHERE invoice_id = ?1"),
@@ -120,6 +142,134 @@ fn consume_draft(tx: &Connection, draft_id: &str, issued: &Invoice) -> Result<()
     tx.execute("DELETE FROM invoices WHERE id = ?1", params![draft_id])
         .map_err(db_error)?;
     Ok(())
+}
+
+/// Líneas del borrador que siguen «pendiente de precio» (marca y 0 €).
+pub fn pending_price_lines(conn: &Connection, draft_id: &str) -> Result<i64, String> {
+    conn.query_row(
+        "SELECT COUNT(*) FROM invoice_lines
+         WHERE invoice_id = ?1 AND price_pending = 1 AND unit_price_cents = 0",
+        params![draft_id],
+        |row| row.get(0),
+    )
+    .map_err(db_error)
+}
+
+/// D8: `price_pending_lines:<n>` si el borrador guardado o la entrada de emisión tienen líneas
+/// pendientes de precio (las de texto «Albarán AL-…» nunca lo están).
+pub fn check_price_pending_for_issue(
+    conn: &Connection,
+    draft_id: Option<&str>,
+    input: &InvoiceDraftInput,
+) -> Result<(), String> {
+    let from_input = input
+        .lines
+        .iter()
+        .filter(|line| line.price_pending == Some(true) && line.unit_price_cents == 0)
+        .count() as i64;
+    let stored = match draft_id {
+        Some(id) => pending_price_lines(conn, id)?,
+        None => 0,
+    };
+    match from_input.max(stored) {
+        0 => Ok(()),
+        pending => Err(format!("price_pending_lines:{pending}")),
+    }
+}
+
+/// Reescribe cabecera y líneas de un borrador (conserva id, fecha de alta, vínculos, cobros,
+/// vencimiento y marca de recapitulativa). Una línea sin `price_pending` hereda la marca de la
+/// línea en su misma posición; con precio la marca desaparece (`build_line`).
+pub fn update_invoice_draft(
+    conn: &mut Connection,
+    draft_id: &str,
+    input: InvoiceDraftInput,
+) -> Result<Invoice, String> {
+    let tx = conn.transaction().map_err(db_error)?;
+    let (status, company_id, created_at): (String, String, String) = tx
+        .query_row(
+            "SELECT status, company_id, created_at FROM invoices WHERE id = ?1",
+            params![draft_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()
+        .map_err(db_error)?
+        .ok_or_else(|| "not_found".to_string())?;
+    if status != "Draft" {
+        return Err("not_draft".to_string());
+    }
+    if company_id != input.company_id {
+        return Err("validation_error:company_id".to_string());
+    }
+    let previous: Vec<bool> = tx
+        .prepare("SELECT price_pending FROM invoice_lines WHERE invoice_id = ?1 ORDER BY position")
+        .map_err(db_error)?
+        .query_map(params![draft_id], |row| row.get(0))
+        .map_err(db_error)?
+        .collect::<Result<_, _>>()
+        .map_err(db_error)?;
+    let mut input = input;
+    for (index, line) in input.lines.iter_mut().enumerate() {
+        if line.price_pending.is_none() {
+            line.price_pending = Some(previous.get(index).copied().unwrap_or(false));
+        }
+    }
+    let mut invoice = Invoice::draft(input)?;
+    invoice.id = draft_id.to_string();
+    invoice.created_at = created_at;
+    if invoice_paid_cents(&tx, draft_id)? > invoice.totals.total_cents {
+        return Err("payments_exceed_total".to_string());
+    }
+    tx.execute(
+        "UPDATE invoices SET customer_id = ?2, fiscal_year = ?3, series = ?4, kind = ?5,
+            rectifies_invoice_id = ?6, rectification_reason_code = ?7, rectification_method = ?8,
+            taxable_base_cents = ?9, tax_cents = ?10, withholding_cents = ?11, total_cents = ?12,
+            notes = ?13
+         WHERE id = ?1",
+        params![
+            invoice.id,
+            invoice.customer_id,
+            invoice.fiscal_year,
+            invoice.series,
+            format!("{:?}", invoice.kind),
+            invoice.rectifies_invoice_id,
+            invoice
+                .rectification_reason_code
+                .as_ref()
+                .map(|value| format!("{:?}", value)),
+            invoice
+                .rectification_method
+                .as_ref()
+                .map(|value| format!("{:?}", value)),
+            invoice.totals.taxable_base_cents,
+            invoice.totals.tax_cents,
+            invoice.totals.withholding_cents,
+            invoice.totals.total_cents,
+            invoice.notes,
+        ],
+    )
+    .map_err(db_error)?;
+    for table in ["invoice_territory_flags", "invoice_lines"] {
+        tx.execute(
+            &format!("DELETE FROM {table} WHERE invoice_id = ?1"),
+            params![draft_id],
+        )
+        .map_err(db_error)?;
+    }
+    for (position, line) in invoice.lines.iter().enumerate() {
+        insert_line(&tx, &invoice.id, position as i64 + 1, line)?;
+    }
+    for flag in &invoice.territory_flags {
+        tx.execute(
+            "INSERT INTO invoice_territory_flags (invoice_id, flag) VALUES (?1, ?2)",
+            params![invoice.id, format!("{:?}", flag)],
+        )
+        .map_err(db_error)?;
+    }
+    let payload = serde_json::to_string(&invoice).map_err(|err| err.to_string())?;
+    operational_audit(&tx, "invoice", draft_id, "invoice_draft_updated", &payload)?;
+    tx.commit().map_err(db_error)?;
+    Ok(invoice)
 }
 
 pub fn next_invoice_number_preview(
@@ -188,7 +338,21 @@ pub struct InvoiceSummary {
     pub fiscal_hash: Option<String>,
     pub created_at: String,
     pub issued_at: Option<String>,
+    pub due_date: Option<String>,
+    pub paid_cents: i64,
+    /// `unpaid` · `partial` · `paid` · `overdue` (ver `payments::payment_status`).
+    pub payment_status: String,
+    /// Plantilla y periodo si la factura salió de una recurrente («Recurrente · <plantilla> · <periodo>»).
+    pub recurring_label: Option<String>,
+    pub recurring_period_key: Option<String>,
 }
+
+/// Columnas operativas comunes a listado y ficha (alias `i` = `invoices`).
+const OPERATIONAL_COLUMNS: &str = "i.due_date,
+    COALESCE((SELECT SUM(p.amount_cents) FROM invoice_payments p WHERE p.invoice_id = i.id), 0),
+    (SELECT t.label FROM recurring_runs r JOIN recurring_invoices t ON t.id = r.recurring_id
+     WHERE r.invoice_id = i.id LIMIT 1),
+    (SELECT r.period_key FROM recurring_runs r WHERE r.invoice_id = i.id LIMIT 1)";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct InvoiceListFilters {
@@ -249,11 +413,12 @@ pub fn list_invoices_filtered_paginated(
         .search
         .as_ref()
         .map(|value| format!("%{}%", value.to_ascii_lowercase()));
+    let today = today_iso();
     let mut stmt = conn
-        .prepare(
+        .prepare(&format!(
             "SELECT i.id, i.company_id, i.customer_id, i.fiscal_year, i.series, i.number, i.kind, i.status,
                     i.rectifies_invoice_id, i.rectification_reason_code, i.rectification_method,
-                    i.total_cents, i.fiscal_hash, i.created_at, i.issued_at
+                    i.total_cents, i.fiscal_hash, i.created_at, i.issued_at, {OPERATIONAL_COLUMNS}
              FROM invoices i
              JOIN companies c ON c.id = i.company_id
              JOIN customers cu ON cu.id = i.customer_id
@@ -276,8 +441,8 @@ pub fn list_invoices_filtered_paginated(
                  OR lower(cu.tax_id) LIKE ?7
                )
              ORDER BY i.created_at DESC
-             LIMIT ?8 OFFSET ?9",
-        )
+             LIMIT ?8 OFFSET ?9"
+        ))
         .map_err(db_error)?;
     let rows = stmt
         .query_map(
@@ -293,6 +458,9 @@ pub fn list_invoices_filtered_paginated(
                 pagination.offset(),
             ],
             |row| {
+                let total_cents: i64 = row.get(11)?;
+                let due_date: Option<String> = row.get(15)?;
+                let paid_cents: i64 = row.get(16)?;
                 Ok(InvoiceSummary {
                     id: row.get(0)?,
                     company_id: row.get(1)?,
@@ -305,10 +473,21 @@ pub fn list_invoices_filtered_paginated(
                     rectifies_invoice_id: row.get(8)?,
                     rectification_reason_code: row.get(9)?,
                     rectification_method: row.get(10)?,
-                    total_cents: row.get(11)?,
+                    total_cents,
                     fiscal_hash: row.get(12)?,
                     created_at: row.get(13)?,
                     issued_at: row.get(14)?,
+                    payment_status: payment_status(
+                        total_cents,
+                        paid_cents,
+                        due_date.as_deref(),
+                        &today,
+                    )
+                    .to_string(),
+                    due_date,
+                    paid_cents,
+                    recurring_label: row.get(17)?,
+                    recurring_period_key: row.get(18)?,
                 })
             },
         )
@@ -316,7 +495,7 @@ pub fn list_invoices_filtered_paginated(
     rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct InvoicePdfLine {
     pub description: String,
     pub quantity: i64,
@@ -325,9 +504,14 @@ pub struct InvoicePdfLine {
     pub taxable_base_cents: i64,
     pub tax_rate_basis_points: i64,
     pub tax_cents: i64,
+    pub withholding_rate_basis_points: i64,
+    pub withholding_cents: i64,
+    pub price_pending: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+/// Ficha de factura (`invoice_get`), PDF y XML. Los campos tras `rectified_invoice` son
+/// operativos y el XML no los lee (salvo `is_recapitulative`).
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct InvoicePdfData {
     pub id: String,
     pub company_id: String,
@@ -350,6 +534,17 @@ pub struct InvoicePdfData {
     pub issued_at: Option<String>,
     pub lines: Vec<InvoicePdfLine>,
     pub rectified_invoice: Option<RectifiedInvoiceLink>,
+    pub withholding_cents: i64,
+    pub company_address: String,
+    pub company_logo_path: Option<String>,
+    pub customer_address: String,
+    pub notes: String,
+    pub is_recapitulative: bool,
+    pub due_date: Option<String>,
+    pub paid_cents: i64,
+    pub payment_status: String,
+    pub recurring_label: Option<String>,
+    pub recurring_period_key: Option<String>,
 }
 
 impl InvoicePdfData {
@@ -362,17 +557,33 @@ impl InvoicePdfData {
 }
 
 pub fn invoice_pdf_data(conn: &Connection, invoice_id: &str) -> Result<InvoicePdfData, String> {
+    let today = today_iso();
     let mut invoice = conn
         .query_row(
-            "SELECT i.id, i.company_id, c.legal_name, c.tax_id, cu.display_name, cu.tax_id, i.fiscal_year, i.series, i.number, i.kind, i.status,
+            &format!("SELECT i.id, i.company_id, c.legal_name, c.tax_id, cu.display_name, cu.tax_id, i.fiscal_year, i.series, i.number, i.kind, i.status,
                     i.rectifies_invoice_id, i.rectification_reason_code, i.rectification_method,
-                    i.taxable_base_cents, i.tax_cents, i.total_cents, i.fiscal_hash, i.issued_at
+                    i.taxable_base_cents, i.tax_cents, i.total_cents, i.fiscal_hash, i.issued_at,
+                    {OPERATIONAL_COLUMNS},
+                    i.withholding_cents, i.notes, i.is_recapitulative, c.logo_path,
+                    c.address, c.postal_code, c.municipality, c.province,
+                    cu.address, cu.postal_code, cu.municipality, cu.province
              FROM invoices i
              JOIN companies c ON c.id = i.company_id
              JOIN customers cu ON cu.id = i.customer_id
-             WHERE i.id = ?1",
+             WHERE i.id = ?1"),
             params![invoice_id],
             |row| {
+                let total_cents: i64 = row.get(16)?;
+                let due_date: Option<String> = row.get(19)?;
+                let paid_cents: i64 = row.get(20)?;
+                let address = |first: usize| -> rusqlite::Result<String> {
+                    Ok(postal_address(
+                        &row.get::<_, String>(first)?,
+                        &row.get::<_, String>(first + 1)?,
+                        &row.get::<_, String>(first + 2)?,
+                        &row.get::<_, String>(first + 3)?,
+                    ))
+                };
                 Ok(InvoicePdfData {
                     id: row.get(0)?,
                     company_id: row.get(1)?,
@@ -390,11 +601,28 @@ pub fn invoice_pdf_data(conn: &Connection, invoice_id: &str) -> Result<InvoicePd
                     rectification_method: row.get(13)?,
                     taxable_base_cents: row.get(14)?,
                     tax_cents: row.get(15)?,
-                    total_cents: row.get(16)?,
+                    total_cents,
                     fiscal_hash: row.get(17)?,
                     issued_at: row.get(18)?,
                     lines: Vec::new(),
                     rectified_invoice: None,
+                    payment_status: payment_status(
+                        total_cents,
+                        paid_cents,
+                        due_date.as_deref(),
+                        &today,
+                    )
+                    .to_string(),
+                    due_date,
+                    paid_cents,
+                    recurring_label: row.get(21)?,
+                    recurring_period_key: row.get(22)?,
+                    withholding_cents: row.get(23)?,
+                    notes: row.get(24)?,
+                    is_recapitulative: row.get(25)?,
+                    company_logo_path: row.get(26)?,
+                    company_address: address(27)?,
+                    customer_address: address(31)?,
                 })
             },
         )
@@ -402,7 +630,8 @@ pub fn invoice_pdf_data(conn: &Connection, invoice_id: &str) -> Result<InvoicePd
 
     let mut stmt = conn
         .prepare(
-            "SELECT description, quantity, unit_price_cents, discount_rate_basis_points, taxable_base_cents, tax_rate_basis_points, tax_cents
+            "SELECT description, quantity, unit_price_cents, discount_rate_basis_points, taxable_base_cents, tax_rate_basis_points, tax_cents,
+                    withholding_rate_basis_points, withholding_cents, price_pending
              FROM invoice_lines WHERE invoice_id = ?1 ORDER BY position ASC",
         )
         .map_err(db_error)?;
@@ -416,6 +645,9 @@ pub fn invoice_pdf_data(conn: &Connection, invoice_id: &str) -> Result<InvoicePd
                 taxable_base_cents: row.get(4)?,
                 tax_rate_basis_points: row.get(5)?,
                 tax_cents: row.get(6)?,
+                withholding_rate_basis_points: row.get(7)?,
+                withholding_cents: row.get(8)?,
+                price_pending: row.get(9)?,
             })
         })
         .map_err(db_error)?;
@@ -426,14 +658,200 @@ pub fn invoice_pdf_data(conn: &Connection, invoice_id: &str) -> Result<InvoicePd
     Ok(invoice)
 }
 
+/// «Calle 1, 28001 Madrid (Madrid)», omitiendo lo vacío y la provincia si coincide con el municipio.
+fn postal_address(street: &str, postal_code: &str, municipality: &str, province: &str) -> String {
+    let city = [postal_code.trim(), municipality.trim()]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut out = [street.trim(), city.as_str()]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let province = province.trim();
+    if !province.is_empty() && province != municipality.trim() {
+        out.push_str(&format!(" ({province})"));
+    }
+    out
+}
+
+/// Emisor y cliente para la cabecera del PDF (facturas y documentos comerciales).
+pub struct PartyDetails {
+    pub company_legal_name: String,
+    pub company_tax_id: String,
+    pub company_address: String,
+    pub company_logo_path: Option<String>,
+    pub customer_display_name: String,
+    pub customer_tax_id: String,
+    pub customer_address: String,
+}
+
+pub fn party_details(
+    conn: &Connection,
+    company_id: &str,
+    customer_id: &str,
+) -> Result<PartyDetails, String> {
+    conn.query_row(
+        "SELECT c.legal_name, c.tax_id, c.address, c.postal_code, c.municipality, c.province, c.logo_path,
+                cu.display_name, cu.tax_id, cu.address, cu.postal_code, cu.municipality, cu.province
+         FROM companies c, customers cu WHERE c.id = ?1 AND cu.id = ?2",
+        params![company_id, customer_id],
+        |row| {
+            let address = |first: usize| -> rusqlite::Result<String> {
+                Ok(postal_address(
+                    &row.get::<_, String>(first)?,
+                    &row.get::<_, String>(first + 1)?,
+                    &row.get::<_, String>(first + 2)?,
+                    &row.get::<_, String>(first + 3)?,
+                ))
+            };
+            Ok(PartyDetails {
+                company_legal_name: row.get(0)?,
+                company_tax_id: row.get(1)?,
+                company_address: address(2)?,
+                company_logo_path: row.get(6)?,
+                customer_display_name: row.get(7)?,
+                customer_tax_id: row.get(8)?,
+                customer_address: address(9)?,
+            })
+        },
+    )
+    .map_err(db_error)
+}
+
+/// `invoice_get`: la misma forma que `Invoice` (la del editor) más los campos operativos.
+#[derive(Debug, Clone, Serialize)]
+pub struct InvoiceDetail {
+    #[serde(flatten)]
+    pub invoice: Invoice,
+    pub is_recapitulative: bool,
+    pub due_date: Option<String>,
+    pub paid_cents: i64,
+    pub payment_status: String,
+    pub recurring_label: Option<String>,
+    pub recurring_period_key: Option<String>,
+    pub void_reason: Option<String>,
+}
+
+/// Enum guardado con `format!("{:?}")` → valor serde (mismo nombre de variante).
+fn stored_enum<T: serde::de::DeserializeOwned>(value: String) -> rusqlite::Result<T> {
+    serde_json::from_value(serde_json::Value::String(value)).map_err(|err| {
+        rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(err))
+    })
+}
+
+pub fn get_invoice_detail(conn: &Connection, invoice_id: &str) -> Result<InvoiceDetail, String> {
+    let today = today_iso();
+    let mut detail = conn
+        .query_row(
+            &format!(
+                "SELECT i.id, i.company_id, i.customer_id, i.fiscal_year, i.series, i.number, i.kind, i.status,
+                        i.rectifies_invoice_id, i.rectification_reason_code, i.rectification_method,
+                        i.taxable_base_cents, i.tax_cents, i.withholding_cents, i.total_cents,
+                        i.created_at, i.issued_at, i.notes, i.is_recapitulative, i.void_reason,
+                        {OPERATIONAL_COLUMNS}
+                 FROM invoices i WHERE i.id = ?1"
+            ),
+            params![invoice_id],
+            |row| {
+                let total_cents: i64 = row.get(14)?;
+                let due_date: Option<String> = row.get(20)?;
+                let paid_cents: i64 = row.get(21)?;
+                Ok(InvoiceDetail {
+                    invoice: Invoice {
+                        id: row.get(0)?,
+                        company_id: row.get(1)?,
+                        customer_id: row.get(2)?,
+                        fiscal_year: row.get(3)?,
+                        series: row.get(4)?,
+                        number: row.get(5)?,
+                        kind: stored_enum(row.get(6)?)?,
+                        status: stored_enum(row.get(7)?)?,
+                        territory_flags: Vec::new(),
+                        rectifies_invoice_id: row.get(8)?,
+                        rectification_reason_code: row
+                            .get::<_, Option<String>>(9)?
+                            .map(stored_enum)
+                            .transpose()?,
+                        rectification_method: row
+                            .get::<_, Option<String>>(10)?
+                            .map(stored_enum)
+                            .transpose()?,
+                        lines: Vec::new(),
+                        totals: crate::domain::invoice::InvoiceTotals {
+                            taxable_base_cents: row.get(11)?,
+                            tax_cents: row.get(12)?,
+                            withholding_cents: row.get(13)?,
+                            total_cents,
+                        },
+                        created_at: row.get(15)?,
+                        issued_at: row.get(16)?,
+                        notes: row.get(17)?,
+                    },
+                    is_recapitulative: row.get(18)?,
+                    void_reason: row.get(19)?,
+                    payment_status: payment_status(
+                        total_cents,
+                        paid_cents,
+                        due_date.as_deref(),
+                        &today,
+                    )
+                    .to_string(),
+                    due_date,
+                    paid_cents,
+                    recurring_label: row.get(22)?,
+                    recurring_period_key: row.get(23)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(db_error)?
+        .ok_or_else(|| "not_found".to_string())?;
+    detail.invoice.territory_flags = conn
+        .prepare("SELECT flag FROM invoice_territory_flags WHERE invoice_id = ?1 ORDER BY rowid")
+        .map_err(db_error)?
+        .query_map(params![invoice_id], |row| stored_enum(row.get(0)?))
+        .map_err(db_error)?
+        .collect::<Result<_, _>>()
+        .map_err(db_error)?;
+    detail.invoice.lines = conn
+        .prepare(
+            "SELECT id, description, quantity, unit_price_cents, discount_rate_basis_points, taxable_base_cents,
+                    tax_rate_basis_points, tax_cents, withholding_rate_basis_points, withholding_cents, price_pending
+             FROM invoice_lines WHERE invoice_id = ?1 ORDER BY position",
+        )
+        .map_err(db_error)?
+        .query_map(params![invoice_id], |row| {
+            Ok(InvoiceLine {
+                id: row.get(0)?,
+                description: row.get(1)?,
+                quantity: row.get(2)?,
+                unit_price_cents: row.get(3)?,
+                discount_rate_basis_points: row.get(4)?,
+                taxable_base_cents: row.get(5)?,
+                tax_rate_basis_points: row.get(6)?,
+                tax_cents: row.get(7)?,
+                withholding_rate_basis_points: row.get(8)?,
+                withholding_cents: row.get(9)?,
+                price_pending: row.get(10)?,
+            })
+        })
+        .map_err(db_error)?
+        .collect::<Result<_, _>>()
+        .map_err(db_error)?;
+    Ok(detail)
+}
+
 pub(super) fn insert_invoice(
     tx: &Transaction<'_>,
     invoice: &Invoice,
     fiscal_hash: Option<&str>,
 ) -> Result<(), String> {
     tx.execute(
-        "INSERT INTO invoices (id, company_id, customer_id, fiscal_year, series, number, kind, status, rectifies_invoice_id, rectification_reason_code, rectification_method, taxable_base_cents, tax_cents, withholding_cents, total_cents, fiscal_hash, created_at, issued_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+        "INSERT INTO invoices (id, company_id, customer_id, fiscal_year, series, number, kind, status, rectifies_invoice_id, rectification_reason_code, rectification_method, taxable_base_cents, tax_cents, withholding_cents, total_cents, fiscal_hash, created_at, issued_at, notes)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
         params![
             invoice.id,
             invoice.company_id,
@@ -459,6 +877,7 @@ pub(super) fn insert_invoice(
             fiscal_hash,
             invoice.created_at,
             invoice.issued_at,
+            invoice.notes,
         ],
     )
     .map_err(db_error)?;
@@ -517,8 +936,8 @@ pub(super) fn insert_line(
     line: &InvoiceLine,
 ) -> Result<(), String> {
     tx.execute(
-        "INSERT INTO invoice_lines (id, invoice_id, position, description, quantity, unit_price_cents, discount_rate_basis_points, taxable_base_cents, tax_rate_basis_points, tax_cents, withholding_rate_basis_points, withholding_cents)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        "INSERT INTO invoice_lines (id, invoice_id, position, description, quantity, unit_price_cents, discount_rate_basis_points, taxable_base_cents, tax_rate_basis_points, tax_cents, withholding_rate_basis_points, withholding_cents, price_pending)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
         params![
             line.id,
             invoice_id,
@@ -532,6 +951,7 @@ pub(super) fn insert_line(
             line.tax_cents,
             line.withholding_rate_basis_points,
             line.withholding_cents,
+            line.price_pending,
         ],
     )
     .map(|_| ())

@@ -57,10 +57,12 @@ fn invoice(company_id: String, customer_id: String) -> Invoice {
             discount_rate_basis_points: None,
             tax_rate_basis_points: 2_100,
             withholding_rate_basis_points: None,
+            price_pending: None,
         }],
         rectifies_invoice_id: None,
         rectification_reason_code: None,
         rectification_method: None,
+        notes: String::new(),
     })
     .expect("draft")
 }
@@ -151,10 +153,12 @@ fn filters_invoices_by_series_kind_status_and_search() {
             discount_rate_basis_points: None,
             tax_rate_basis_points: 2_100,
             withholding_rate_basis_points: None,
+            price_pending: None,
         }],
         rectifies_invoice_id: None,
         rectification_reason_code: None,
         rectification_method: None,
+        notes: String::new(),
     })
     .expect("simplified draft");
     insert_invoice_draft(&mut conn, &complete).expect("complete insert");
@@ -607,17 +611,41 @@ fn fiscal_records_track_issued_and_voided_chain() {
         "2026-05-28T10:05:00Z",
         "C:\\tmp\\anulacion.xml",
         &anulacion_event,
+        "Error en el importe",
     )
     .expect("anulacion record");
 
-    let status: String = conn
+    let (status, reason): (String, String) = conn
         .query_row(
-            "SELECT status FROM invoices WHERE id = ?1",
+            "SELECT status, void_reason FROM invoices WHERE id = ?1",
             params![&issued.id],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .expect("invoice status");
-    assert_eq!(status, "Void");
+    assert_eq!(
+        (status.as_str(), reason.as_str()),
+        ("Void", "Error en el importe")
+    );
+    // El motivo queda en un evento propio detrás de `invoice_voided`, que no cambia.
+    let actions: Vec<(String, String)> = conn
+        .prepare(
+            "SELECT action, payload_hash FROM audit_events WHERE entity_id = ?1 ORDER BY rowid",
+        )
+        .expect("stmt")
+        .query_map(params![&issued.id], |row| Ok((row.get(0)?, row.get(1)?)))
+        .expect("rows")
+        .collect::<Result<_, _>>()
+        .expect("actions");
+    let names: Vec<&str> = actions.iter().map(|(action, _)| action.as_str()).collect();
+    assert_eq!(
+        names,
+        ["invoice_issued", "invoice_voided", "invoice_void_reason"]
+    );
+    assert_eq!(actions[1].1, anulacion_hash);
+    assert_eq!(
+        actions[2].1,
+        fiscal_contract::sha256_hex(br#"{"reason":"Error en el importe"}"#)
+    );
 
     let records = list_fiscal_records(&conn).expect("fiscal records after anulacion");
     assert_eq!(records.len(), 2);
@@ -706,10 +734,12 @@ fn rectifying_invoice_marks_source_rectified_and_keeps_link() {
                 discount_rate_basis_points: None,
                 tax_rate_basis_points: 2_100,
                 withholding_rate_basis_points: None,
+                price_pending: None,
             }],
             rectifies_invoice_id: Some(source.id.clone()),
             rectification_reason_code: Some(RectificationReasonCode::R4),
             rectification_method: Some(RectificationMethod::I),
+            notes: String::new(),
         },
         number: 2,
         issued_at: "2026-05-28T10:10:00Z".to_string(),
@@ -932,4 +962,74 @@ fn loads_invoice_pdf_data() {
     assert_eq!(data.company_tax_id, company.tax_id);
     assert_eq!(data.customer_tax_id, customer.tax_id);
     assert_eq!(data.lines.len(), 1);
+}
+
+#[test]
+fn anulacion_requires_a_reason() {
+    let mut conn = memory_conn();
+    let event = AuditEvent::invoice_voided("x".to_string(), "t".to_string(), "h".to_string(), None);
+    let err = insert_anulacion_record(
+        &mut conn,
+        "x",
+        "h",
+        None,
+        "2026-05-28T10:05:00Z",
+        "a.xml",
+        &event,
+        "  ",
+    )
+    .expect_err("blank reason");
+    assert_eq!(err, "reason_required");
+}
+
+#[test]
+fn company_logo_is_copied_validated_and_cleared() {
+    let mut conn = memory_conn();
+    let company = company();
+    insert_company(&conn, &company).expect("company");
+    let dir = std::env::temp_dir().join(format!("cumplefactura-logo-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).expect("dir");
+    let logos = dir.join("logos");
+    let source = dir.join("mi logo.png");
+    std::fs::write(
+        &source,
+        crate::services::logo::tests::png(4, 4, 2, &[1, 2, 3]),
+    )
+    .expect("png");
+
+    let stored = set_company_logo(&mut conn, &company.id, &source, &logos).expect("set");
+    assert_eq!(
+        stored,
+        logos.join(format!("{}.png", company.id)).to_string_lossy()
+    );
+    assert_eq!(
+        std::fs::read(&stored).expect("copy"),
+        std::fs::read(&source).expect("src")
+    );
+    let listed = list_companies(&conn).expect("list").remove(0);
+    assert_eq!(listed.logo_path.as_deref(), Some(stored.as_str()));
+
+    let alpha = dir.join("alpha.png");
+    std::fs::write(
+        &alpha,
+        crate::services::logo::tests::png(2, 2, 6, &[0, 0, 0, 0]),
+    )
+    .expect("png");
+    let err = set_company_logo(&mut conn, &company.id, &alpha, &logos).expect_err("alpha");
+    assert!(err.starts_with("logo_format_not_supported:"), "{err}");
+    let big = dir.join("big.jpg");
+    std::fs::write(&big, vec![0xFF; crate::services::logo::MAX_LOGO_BYTES + 1]).expect("big");
+    assert_eq!(
+        set_company_logo(&mut conn, &company.id, &big, &logos).expect_err("big"),
+        "logo_too_large:1MB"
+    );
+    assert_eq!(
+        list_companies(&conn).expect("list")[0].logo_path.as_deref(),
+        Some(stored.as_str())
+    );
+
+    clear_company_logo(&mut conn, &company.id).expect("clear");
+    assert!(list_companies(&conn).expect("list")[0].logo_path.is_none());
+    assert!(!std::path::Path::new(&stored).exists());
+    std::fs::remove_dir_all(dir).expect("cleanup");
 }

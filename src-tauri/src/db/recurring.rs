@@ -136,6 +136,7 @@ fn draft_input(
         rectifies_invoice_id: None,
         rectification_reason_code: None,
         rectification_method: None,
+        notes: item.template.notes.clone(),
     }
 }
 
@@ -597,6 +598,7 @@ mod tests {
                     discount_rate_basis_points: None,
                     tax_rate_basis_points: 2_100,
                     withholding_rate_basis_points: None,
+                    price_pending: None,
                 }],
                 notes: "Pago por transferencia".to_string(),
             },
@@ -722,6 +724,43 @@ mod tests {
         assert!(again.created.is_empty());
         assert_eq!(again.skipped, vec!["2026-11".to_string()]);
         assert_eq!(count(&conn, "SELECT COUNT(*) FROM invoices"), 1);
+    }
+
+    #[test]
+    fn generated_draft_carries_template_notes_and_recurring_origin() {
+        let (mut conn, input) = setup();
+        save_recurring(&mut conn, input, day("2026-11-03")).expect("save");
+        let created = generate_due_recurring(&mut conn, day("2026-11-05")).expect("generate");
+        let draft_id = &created.created[0];
+
+        let detail = get_invoice_detail(&conn, draft_id).expect("detail");
+        assert_eq!(detail.invoice.notes, "Pago por transferencia");
+        assert_eq!(
+            detail.recurring_label.as_deref(),
+            Some("Cuota mantenimiento")
+        );
+        assert_eq!(detail.recurring_period_key.as_deref(), Some("2026-11"));
+        let row = list_invoices(&conn).expect("list").remove(0);
+        assert_eq!(row.recurring_label.as_deref(), Some("Cuota mantenimiento"));
+        assert_eq!(row.recurring_period_key.as_deref(), Some("2026-11"));
+        assert_eq!((row.payment_status.as_str(), row.paid_cents), ("unpaid", 0));
+
+        // Al emitir, el periodo pasa a la factura emitida y el origen se sigue viendo.
+        let item = list_recurring(&conn, None).expect("list").remove(0);
+        let (issued, hash) = Invoice::issue(crate::domain::invoice::InvoiceIssueInput {
+            draft: draft_input(&item, 2026, Vec::new()),
+            number: 1,
+            issued_at: "2026-11-05T10:00:00Z".to_string(),
+            actor: "test".to_string(),
+            previous_audit_hash: None,
+        })
+        .expect("issue");
+        let event = AuditEvent::invoice_issued(issued.id.clone(), "t".into(), hash.clone(), None);
+        insert_issued_invoice_from_draft(&mut conn, &issued, &hash, None, &event, Some(draft_id))
+            .expect("insert");
+        let detail = get_invoice_detail(&conn, &issued.id).expect("issued detail");
+        assert_eq!(detail.recurring_period_key.as_deref(), Some("2026-11"));
+        assert_eq!(detail.invoice.notes, "Pago por transferencia");
     }
 
     #[test]

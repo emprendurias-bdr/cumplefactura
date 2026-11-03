@@ -40,7 +40,7 @@ Reglas: comandos y campos en `snake_case`; importes en céntimos (`*_cents`); fe
 Contratos de `docs/ESPEC_DOCUMENTOS_Y_RECURRENTES.md` §4, con estas precisiones de forma:
 
 - `CommercialDocument`: campos de §3.1 + `lines: CommercialDocumentLine[]` + `display_number: string | null` (`P-2026-0014`).
-- `CommercialDocumentLine`: mismos campos que la línea de factura que hoy envía la interfaz (`description, quantity_milli, unit_price_cents, discount_basis_points, vat_rate_basis_points, irpf_rate_basis_points, product_id`, con los nombres exactos que use `invoice_draft_create`) + `position`.
+- `CommercialDocumentLine`: los mismos campos que `InvoiceLineInput` (`description, quantity, unit_price_cents, discount_rate_basis_points, tax_rate_basis_points, withholding_rate_basis_points`) + `position`. La conversión a factura copia esos campos tal cual.
 - `commercial_document_list` devuelve `{ items: CommercialDocumentSummary[], total: number }`; el resumen no lleva líneas.
 - `commercial_document_to_invoice_draft(ids: string[])` devuelve el `Invoice` del borrador creado, con la misma forma que `invoice_draft_create`.
 - `RecurringInvoice`: campos de §3.5 + `template: { lines, notes }` (en vez de `template_json` crudo) + `last_period_key: string | null`.

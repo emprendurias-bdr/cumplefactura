@@ -177,7 +177,14 @@ export function lineToInput(line: InvoiceLineForm): InvoiceLineInput {
     discount_rate_basis_points: discount > 0 ? discount : null,
     tax_rate_basis_points: percentToBasisPoints(line.tax_rate_percent),
     withholding_rate_basis_points: withholding > 0 ? withholding : null,
+    // Se reenvía la marca de Rust; omitida, Rust conserva la de esa posición (contrato R2).
+    ...(line.price_pending ? { price_pending: true } : {}),
   };
+}
+
+/** D8: líneas marcadas «pendiente de precio» que siguen a 0 € (bloquean la emisión, `price_pending_lines:<n>`). */
+export function pendingPriceLines(lines: InvoiceLineForm[]): number {
+  return lines.filter((line) => line.price_pending && !(eurosToCents(line.unit_price_euros) > 0)).length;
 }
 
 /** “Usar en línea”: rellena la primera línea editable desde el catálogo. */
@@ -206,6 +213,7 @@ export function invoiceToLines(invoice: Pick<Invoice, "lines">): InvoiceLineForm
     discount_rate_percent: percent(line.discount_rate_basis_points) || "0",
     tax_rate_percent: percent(line.tax_rate_basis_points) || "0",
     withholding_rate_percent: percent(line.withholding_rate_basis_points),
+    ...(line.price_pending ? { price_pending: true } : {}),
   }));
 }
 

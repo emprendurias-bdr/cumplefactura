@@ -9,6 +9,8 @@ export type Company = {
   province: string;
   country_code: string;
   default_series: string;
+  /** R2 (D1): copia del logo para el PDF en la carpeta de datos de la app. */
+  logo_path?: string | null;
   created_at?: string;
 };
 export type InvoiceSeriesConfig = {
@@ -64,6 +66,8 @@ export type InvoiceLine = {
   tax_rate_basis_points: number;
   withholding_rate_basis_points?: number | null;
   taxable_base_cents?: number;
+  /** R2 (D8): línea de albarán sin precio; la emisión se bloquea mientras siga a 0 €. */
+  price_pending?: boolean | null;
 };
 /** Factura completa (`invoice_draft_create`, `invoice_issue`, `commercial_document_to_invoice_draft`). */
 export type Invoice = {
@@ -79,6 +83,56 @@ export type Invoice = {
   totals: InvoiceTotals | { total_cents: number };
   created_at?: string;
   issued_at?: string | null;
+  /** R2 (D2): observaciones del PDF; no entran en la huella ni en el XML. */
+  notes?: string;
+};
+export type PaymentStatus = "unpaid" | "partial" | "paid" | "overdue";
+/** R2: lo que Rust sabe de cobros, vencimiento y origen recurrente (lista y ficha). */
+type InvoiceOps = {
+  due_date: string | null;
+  paid_cents: number;
+  payment_status: PaymentStatus;
+  recurring_label: string | null;
+  recurring_period_key: string | null;
+};
+/** Ficha completa (`invoice_get`), borrador o emitida. */
+export type InvoiceDetail = Invoice &
+  InvoiceOps & {
+    lines: InvoiceLine[];
+    totals: InvoiceTotals;
+    notes: string;
+    is_recapitulative: boolean;
+    void_reason: string | null;
+  };
+export const PAYMENT_METHODS = ["transferencia", "tarjeta", "efectivo", "domiciliacion", "bizum", "otros"] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+/** Exactamente uno de `invoice_id` / `commercial_document_id`. */
+export type PaymentInput = {
+  invoice_id?: string | null;
+  commercial_document_id?: string | null;
+  amount_cents: number;
+  paid_at: string;
+  method: PaymentMethod;
+  reference?: string | null;
+};
+export type Payment = {
+  id: string;
+  invoice_id: string | null;
+  commercial_document_id: string | null;
+  amount_cents: number;
+  paid_at: string;
+  method: string;
+  reference: string | null;
+  created_at: string;
+};
+/** R2 (D7): serie de presupuestos, proformas o albaranes (`configured = false`: P/PF/AL por defecto). */
+export type CommercialSeriesConfig = {
+  company_id: string;
+  kind: CommercialKind;
+  series_code: string;
+  padding: number;
+  configured: boolean;
+  preview: string;
 };
 export type IssuedInvoice = { invoice: Invoice; fiscal_hash: string; audit_hash: string };
 export type InvoiceSummary = {
@@ -97,7 +151,7 @@ export type InvoiceSummary = {
   fiscal_year?: number;
   created_at?: string;
   issued_at?: string | null;
-};
+} & Partial<InvoiceOps>;
 export type AuditSummary = { id: string; action: string; actor: string; hash: string; occurred_at: string };
 export type FiscalRecordSummary = {
   id: string;
@@ -179,6 +233,8 @@ export type InvoiceLineForm = {
   discount_rate_percent: string;
   tax_rate_percent: string;
   withholding_rate_percent: string;
+  /** R2 (D8): viene marcada de Rust; se reenvía tal cual (al poner precio, Rust la borra). */
+  price_pending?: boolean | null;
 };
 export type InvoiceLineInput = {
   description: string;
@@ -187,8 +243,9 @@ export type InvoiceLineInput = {
   discount_rate_basis_points: number | null;
   tax_rate_basis_points: number;
   withholding_rate_basis_points: number | null;
+  price_pending?: boolean | null;
 };
-export type CompanyForm = Omit<Company, "id" | "created_at">;
+export type CompanyForm = Omit<Company, "id" | "created_at" | "logo_path">;
 export type CustomerForm = Omit<Customer, "id" | "updated_at">;
 export type ProductForm = {
   sku: string;

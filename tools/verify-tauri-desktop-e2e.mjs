@@ -20,8 +20,12 @@ const resolvedEdgeDriverPath = windows ? await downloadEdgeDriver().catch(() => 
  * (toast o pantalla). Cada paso exige su propio resultado.
  */
 const steps = [
-  { click: "Rellenar con datos de ejemplo", expect: ["Datos de ejemplo cargados"] },
-  { click: "Guardar y seguir", expect: ["Empresa creada."] },
+  // El botón de datos de ejemplo solo existe en desarrollo (D4); el build de release se rellena a mano.
+  {
+    fill: { "Nombre legal": "Empresa E2E SL", NIF: "B12345678", "Dirección": "Calle Fiscal 1", "Código postal": "28001", Municipio: "Madrid", Provincia: "Madrid", "País": "ES" },
+    click: "Guardar y seguir",
+    expect: ["Empresa creada."],
+  },
   { click: "Siguiente" },
   { click: "Guardar serie y seguir", expect: ["Serie guardada."] },
   // La carpeta de exportación por defecto la da Rust (app_defaults_get): no se abre el diálogo nativo.

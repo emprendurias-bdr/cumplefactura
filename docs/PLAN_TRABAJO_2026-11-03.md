@@ -214,6 +214,8 @@ Rebasar solo backend, renumerando la migración 009 → 010 y adaptando a la DB 
 | R5 | Visto bueno de Bilel y Dabiz (protocolo `design.md` §0.2: tokens, shell, fuentes, `qrcode`); gate completo en Windows; fusión en `main` | Ricardo, Bilel, Dabiz |
 | R6 | Homologación con la AEAT de pruebas (certificado de Ricardo) | Ricardo |
 
+**Estado a 04-11:** R1, R2 y R3 hechos e integrados en `claude/adoring-brown-zw9671`. Rust: 142 tests; interfaz: 40 tests, 56/56 comandos conectados, smoke del navegador en verde; E2E con la ventana real de Tauri en Linux en verde (13 pasos, sidecar real). R4: Ricardo marcó 15 de 16 pantallas como «Bien» en la página de revisión, sin notas; la segunda versión (22 pantallas) está publicada. Quedan R5 (visto bueno de Bilel y Dabiz, gate completo en Windows, fusión en `main`) y R6 (homologación). Pendientes menores: vista del logo en pantalla (necesita el protocolo `asset` de Tauri), `FechaOperacion` de las recapitulativas por confirmar con la norma, estado de cobro de rectificativas negativas.
+
 Fuera de esta ronda, para decidir después: email (hoy `mailto:`), importación de clientes, productos y facturas, facturas simplificadas o modo mostrador, intracomunitarias y VIES, y las decisiones abiertas de `design.md` §13 (modo por defecto, texto del panel ⚙).
 
 ## 5. Riesgos

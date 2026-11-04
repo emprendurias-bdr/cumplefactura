@@ -1,6 +1,9 @@
 // Mock de `window.__TAURI_INTERNALS__.invoke` para Playwright (smoke y capturas de modos).
 // Reproduce los contratos de Rust en memoria, incluidos F3 (envíos, contraseña, restaurar) y F4
-// (documentos comerciales y recurrentes). `seed` da el estado inicial (capturas con datos).
+// (documentos comerciales y recurrentes) y R2 (ficha `invoice_get`, `invoice_draft_update`, cobros,
+// vencimiento, series de documentos, logo, observaciones y líneas pendientes de precio).
+// `seed` da el estado inicial (capturas con datos). Las facturas se guardan completas (con líneas);
+// `invoice_list` devuelve el resumen con los campos R2 calculados como en Rust.
 // Nunca llama a la AEAT: las respuestas de envío son ficticias y lo dicen sus notas.
 import { spawn } from "node:child_process";
 import { createWriteStream, existsSync } from "node:fs";
@@ -22,6 +25,8 @@ export function installTauriMock(page, seed = null) {
         submissions: [],
         documents: [],
         recurring: [],
+        payments: [],
+        commercialSeries: [],
         nextId: 1,
         nextInvoiceNumber: 1,
         exportDir: "C:\\CumpleFactura\\Evidence",
@@ -65,7 +70,42 @@ export function installTauriMock(page, seed = null) {
         { taxable_base_cents: 0, tax_cents: 0, withholding_cents: 0, total_cents: 0 },
       );
     }
-    const withBase = (lines) => lines.map((line, index) => ({ id: `line-${index}`, ...line, taxable_base_cents: totals([line]).taxable_base_cents }));
+    const withBase = (lines) =>
+      lines.map((line, index) => ({ id: `line-${index}`, ...line, price_pending: Boolean(line.price_pending) && !(line.unit_price_cents > 0), taxable_base_cents: totals([line]).taxable_base_cents }));
+    const today = () => new Date().toISOString().slice(0, 10);
+
+    /* --- R2: cobros, ficha y resumen de factura --- */
+    const paidOf = (target) =>
+      state.payments
+        .filter((p) => (target.invoice_id ? p.invoice_id === target.invoice_id : p.commercial_document_id === target.commercial_document_id))
+        .reduce((sum, p) => sum + p.amount_cents, 0);
+    function ops(inv) {
+      const paid = paidOf({ invoice_id: inv.id });
+      const due = inv.due_date ?? null;
+      const payment_status = inv.total_cents - paid <= 0 ? "paid" : due && due < today() ? "overdue" : paid > 0 ? "partial" : "unpaid";
+      return { due_date: due, paid_cents: paid, payment_status, recurring_label: inv.recurring_label ?? null, recurring_period_key: inv.recurring_period_key ?? null };
+    }
+    function summary(inv) {
+      const { lines: _l, totals: _t, notes: _n, is_recapitulative: _r, void_reason: _v, ...rest } = inv;
+      return { ...rest, ...ops(inv) };
+    }
+    function detail(inv) {
+      const lines = withBase(inv.lines ?? []);
+      return { ...inv, lines, totals: inv.totals ?? totals(lines), notes: inv.notes ?? "", is_recapitulative: Boolean(inv.is_recapitulative), void_reason: inv.void_reason ?? null, ...ops(inv) };
+    }
+    const findInvoice = (invoiceId) => {
+      const inv = state.invoices.find((item) => item.id === invoiceId);
+      if (!inv) throw "not_found";
+      return inv;
+    };
+    const pendingCount = (lines) => lines.filter((l) => l.price_pending && !(l.unit_price_cents > 0)).length;
+    /** Una línea sin `price_pending` hereda la marca de su posición; con precio, desaparece (como Rust). */
+    const mergePending = (previous, lines) =>
+      lines.map((line, i) => ({ ...line, price_pending: Boolean(line.price_pending ?? previous?.[i]?.price_pending) && !(line.unit_price_cents > 0) }));
+    function seriesOf(companyId, kind) {
+      const saved = state.commercialSeries.find((c) => c.company_id === companyId && c.kind === kind);
+      return saved ?? { company_id: companyId, kind, series_code: { quote: "P", proforma: "PF", delivery_note: "AL" }[kind], padding: 4, configured: false };
+    }
     const hex = (n) => Array.from({ length: 64 }, (_, i) => "0123456789ABCDEF"[(n * 7 + i * 13) % 16]).join("");
 
     function chain() {
@@ -81,6 +121,9 @@ export function installTauriMock(page, seed = null) {
 
     function issue(input, draftId) {
       const draft = input.draft;
+      const stored = draftId ? state.invoices.find((item) => item.id === draftId) : null;
+      const pending = Math.max(pendingCount(draft.lines), stored ? pendingCount(stored.lines ?? []) : 0);
+      if (pending > 0) throw `price_pending_lines:${pending}`;
       const t = totals(draft.lines);
       const invoice = {
         id: id("invoice"),
@@ -96,8 +139,18 @@ export function installTauriMock(page, seed = null) {
         fiscal_hash: hex(state.nextId),
         created_at: now(),
         issued_at: input.issued_at,
+        lines: withBase(draft.lines),
+        totals: t,
+        notes: draft.notes ?? "",
+        is_recapitulative: stored?.is_recapitulative ?? false,
+        recurring_label: stored?.recurring_label ?? null,
+        recurring_period_key: stored?.recurring_period_key ?? null,
+        due_date: stored?.due_date ?? null,
       };
-      if (draftId) state.invoices = state.invoices.filter((item) => item.id !== draftId);
+      if (draftId) {
+        state.payments = state.payments.map((p) => (p.invoice_id === draftId ? { ...p, invoice_id: invoice.id } : p));
+        state.invoices = state.invoices.filter((item) => item.id !== draftId);
+      }
       state.nextInvoiceNumber += 1;
       state.invoices = [invoice, ...state.invoices];
       state.audit = [{ id: id("audit"), action: "invoice_issue", actor: "local-user", hash: invoice.fiscal_hash, occurred_at: now() }, ...state.audit];
@@ -106,7 +159,7 @@ export function installTauriMock(page, seed = null) {
         ...state.fiscalRecords,
       ];
       return {
-        invoice: { ...invoice, lines: withBase(draft.lines), totals: t, territory_flags: draft.territory_flags },
+        invoice: { ...invoice, territory_flags: draft.territory_flags },
         fiscal_hash: invoice.fiscal_hash,
         audit_hash: invoice.fiscal_hash,
       };
@@ -119,7 +172,7 @@ export function installTauriMock(page, seed = null) {
     function saveDoc(input) {
       const t = totals(input.lines);
       const existing = state.documents.find((d) => d.id === input.id);
-      const series = input.series_code || { quote: "P", proforma: "PF", delivery_note: "AL" }[input.kind];
+      const series = input.series_code || seriesOf(input.company_id, input.kind).series_code;
       const doc = {
         ...(existing || { id: id("doc"), number: null, display_number: null, status: "draft", source_document_id: null, invoice_id: null, void_reason: null, created_at: now() }),
         ...input,
@@ -136,7 +189,12 @@ export function installTauriMock(page, seed = null) {
     }
 
     const handlers = {
-      "plugin:dialog|open": (args) => (args.options?.directory ? state.exportDir : `${state.exportDir}\\cumplefactura-restore.sqlite3`),
+      "plugin:dialog|open": (args) =>
+        args.options?.directory
+          ? state.exportDir
+          : args.options?.filters?.[0]?.extensions?.includes("png")
+            ? `${state.exportDir}\\logo-talleres.png`
+            : `${state.exportDir}\\cumplefactura-restore.sqlite3`,
       "plugin:dialog|save": (args) => args.options?.defaultPath || `${state.exportDir}\\cumplefactura-selected.json`,
       app_defaults_get: () => ({ app_data_dir: "C:\\CumpleFactura\\Data", export_dir: state.exportDir, generated_at: now(), notes: ["browser smoke mock"] }),
       app_settings_get: () => state.settings,
@@ -156,6 +214,19 @@ export function installTauriMock(page, seed = null) {
         return company;
       },
       company_list: () => state.companies,
+      company_logo_set: (args) => {
+        const company = state.companies.find((c) => c.id === args.companyId);
+        if (!company) throw `company not found: ${args.companyId}`;
+        if (!/\.(png|jpe?g)$/i.test(args.sourcePath)) throw "logo_format_not_supported:formato desconocido. Usa un JPEG o un PNG sin transparencia (RGB o gris, 8 bits)";
+        company.logo_path = `C:\\CumpleFactura\\Data\\logos\\${company.id}${args.sourcePath.slice(args.sourcePath.lastIndexOf("."))}`;
+        return company.logo_path;
+      },
+      company_logo_clear: (args) => {
+        const company = state.companies.find((c) => c.id === args.companyId);
+        if (!company) throw `company not found: ${args.companyId}`;
+        company.logo_path = null;
+        return null;
+      },
       product_list: (args) => state.products.filter((item) => item.company_id === args.companyId),
       product_upsert: (args) => {
         const product = { updated_at: now(), ...args.input, id: args.input.id || id("product"), sku: String(args.input.sku).trim().toUpperCase() };
@@ -197,16 +268,90 @@ export function installTauriMock(page, seed = null) {
       customer_list: () => state.customers,
       invoice_draft_create: (args) => {
         const t = totals(args.input.lines);
-        const draft = { id: id("draft"), ...args.input, number: null, status: "Draft", lines: withBase(args.input.lines), totals: t, created_at: now(), issued_at: null };
+        const draft = { id: id("draft"), ...args.input, notes: args.input.notes ?? "", number: null, status: "Draft", lines: withBase(args.input.lines), totals: t, created_at: now(), issued_at: null };
         state.invoices = [{ ...draft, total_cents: t.total_cents, fiscal_hash: null }, ...state.invoices];
         return draft;
+      },
+      invoice_draft_update: (args) => {
+        const inv = findInvoice(args.id);
+        if (inv.status !== "Draft") throw "not_draft";
+        if (args.input.company_id !== inv.company_id) throw "validation_error:company_id";
+        const lines = withBase(mergePending(inv.lines, args.input.lines));
+        const t = totals(lines);
+        if (paidOf({ invoice_id: inv.id }) > t.total_cents) throw "payments_exceed_total";
+        Object.assign(inv, { ...args.input, id: inv.id, notes: args.input.notes ?? "", lines, totals: t, total_cents: t.total_cents });
+        const { due_date: _d, paid_cents: _p, payment_status: _s, recurring_label: _l, recurring_period_key: _k, ...invoice } = detail(inv);
+        return invoice;
+      },
+      invoice_get: (args) => detail(findInvoice(args.invoiceId)),
+      payment_register: (args) => {
+        const input = args.input;
+        if (Boolean(input.invoice_id) === Boolean(input.commercial_document_id)) throw "validation_error:target";
+        if (!(input.amount_cents > 0)) throw "validation_error:amount_cents";
+        if (!["transferencia", "tarjeta", "efectivo", "domiciliacion", "bizum", "otros"].includes(input.method)) throw "validation_error:method";
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(input.paid_at || "")) throw "validation_error:paid_at";
+        let total;
+        if (input.invoice_id) {
+          const inv = findInvoice(input.invoice_id);
+          if (!["Issued", "Rectified"].includes(inv.status)) throw "invoice_not_issued";
+          total = inv.total_cents;
+        } else {
+          const doc = state.documents.find((d) => d.id === input.commercial_document_id);
+          if (!doc) throw "not_found";
+          if (doc.kind !== "proforma" || !["sent", "paid"].includes(doc.status)) throw "payment_not_allowed";
+          total = doc.total_cents;
+        }
+        const paid = paidOf(input);
+        if (paid + input.amount_cents > total) throw `payment_exceeds_total:${Math.max(total - paid, 0)}`;
+        const row = { id: id("payment"), invoice_id: input.invoice_id ?? null, commercial_document_id: input.commercial_document_id ?? null, amount_cents: input.amount_cents, paid_at: input.paid_at, method: input.method, reference: input.reference ?? null, created_at: now() };
+        state.payments = [...state.payments, row];
+        return row;
+      },
+      payment_list: (args) => {
+        if (Boolean(args.invoiceId) === Boolean(args.commercialDocumentId)) throw "validation_error:target";
+        return state.payments
+          .filter((p) => (args.invoiceId ? p.invoice_id === args.invoiceId : p.commercial_document_id === args.commercialDocumentId))
+          .sort((a, b) => a.paid_at.localeCompare(b.paid_at));
+      },
+      payment_delete: (args) => {
+        const row = state.payments.find((p) => p.id === args.id);
+        if (!row) throw "not_found";
+        const doc = row.commercial_document_id && state.documents.find((d) => d.id === row.commercial_document_id);
+        if (doc && doc.status === "paid" && state.payments.filter((p) => p.commercial_document_id === doc.id).length === 1) throw "payment_required";
+        state.payments = state.payments.filter((p) => p.id !== args.id);
+        return null;
+      },
+      invoice_due_date_set: (args) => {
+        if (args.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(args.dueDate)) throw "validation_error:due_date";
+        findInvoice(args.invoiceId).due_date = args.dueDate || null;
+        return null;
+      },
+      commercial_series_list: (args) => {
+        if (!state.companies.some((c) => c.id === args.companyId)) throw `company not found: ${args.companyId}`;
+        const year = new Date().getFullYear();
+        return ["quote", "proforma", "delivery_note"].map((kind) => {
+          const config = seriesOf(args.companyId, kind);
+          const next = state.documents.filter((d) => d.kind === kind && d.number && d.fiscal_year === year).length + 1;
+          return { ...config, preview: `${config.series_code}-${year}-${String(next).padStart(config.padding, "0")}` };
+        });
+      },
+      commercial_series_configure: (args) => {
+        const input = args.input;
+        if (!["quote", "proforma", "delivery_note"].includes(input.kind)) throw "validation_error:kind";
+        const code = String(input.series_code || "").trim().toUpperCase();
+        if (!/^[A-Z0-9]{1,10}$/.test(code)) throw "validation_error:series_code";
+        const padding = input.padding ?? 4;
+        if (!(padding >= 1 && padding <= 10)) throw "validation_error:padding";
+        const config = { company_id: input.company_id, kind: input.kind, series_code: code, padding, configured: true };
+        state.commercialSeries = [config, ...state.commercialSeries.filter((c) => !(c.company_id === input.company_id && c.kind === input.kind))];
+        return { ...config, preview: `${code}-${new Date().getFullYear()}-${"1".padStart(padding, "0")}` };
       },
       invoice_issue: (args) => issue(args.input, args.draftId),
       invoice_list: (args) => {
         const f = args.filters || {};
         const search = String(f.search || "").toLowerCase();
         return paged(
-          state.invoices.filter((inv) => {
+          state.invoices.map(summary).filter((inv) => {
             if (f.company_id && inv.company_id !== f.company_id) return false;
             if (f.customer_id && inv.customer_id !== f.customer_id) return false;
             if (f.fiscal_year && inv.fiscal_year !== f.fiscal_year) return false;
@@ -301,12 +446,14 @@ export function installTauriMock(page, seed = null) {
         const doc = state.documents.find((d) => d.id === args.id);
         if (!doc || doc.status !== "draft") throw "not_draft";
         const number = state.documents.filter((d) => d.kind === doc.kind && d.number).length + 1;
-        Object.assign(doc, { number, display_number: `${doc.series_code}-${doc.fiscal_year}-${String(number).padStart(4, "0")}`, status: doc.kind === "delivery_note" ? "delivered" : "sent", updated_at: now() });
+        const padding = seriesOf(doc.company_id, doc.kind).padding;
+        Object.assign(doc, { number, display_number: `${doc.series_code}-${doc.fiscal_year}-${String(number).padStart(padding, "0")}`, status: doc.kind === "delivery_note" ? "delivered" : "sent", updated_at: now() });
         return doc;
       },
       commercial_document_set_status: (args) => {
         const doc = state.documents.find((d) => d.id === args.id);
         if (args.status === "void" && !args.reason) throw "reason_required";
+        if (args.status === "paid" && paidOf({ commercial_document_id: doc.id }) === 0) throw "payment_required";
         Object.assign(doc, { status: args.status, void_reason: args.reason ?? doc.void_reason, updated_at: now() });
         return doc;
       },
@@ -320,9 +467,15 @@ export function installTauriMock(page, seed = null) {
       commercial_document_to_invoice_draft: (args) => {
         const docs = state.documents.filter((d) => args.ids.includes(d.id));
         if (new Set(docs.map((d) => d.customer_id)).size > 1) throw "mixed_customers";
-        const lines = docs.flatMap((d) => d.lines.map(({ position, product_id, ...line }) => line));
+        // D8: albarán sin precios → líneas «pendiente de precio» a 0 €; D2: observaciones copiadas.
+        const notes = docs.map((d) => (d.kind === "delivery_note" ? (d.notes ? `Albarán ${d.display_number}: ${d.notes}` : "") : d.notes)).filter(Boolean).join("\n");
+        const lines = docs.flatMap((d) => {
+          const own = d.lines.map(({ position: _p, product_id: _i, ...line }) => (d.kind === "delivery_note" && !d.show_prices ? { ...line, unit_price_cents: 0, price_pending: true } : line));
+          return d.kind === "delivery_note" ? [{ description: `Albarán ${d.display_number} · ${d.delivery_date}`, quantity: 1, unit_price_cents: 0, discount_rate_basis_points: null, tax_rate_basis_points: 0, withholding_rate_basis_points: null }, ...own] : own;
+        });
         const t = totals(lines);
-        const draft = { id: id("draft"), company_id: docs[0].company_id, customer_id: docs[0].customer_id, fiscal_year: 2026, series: "A", number: null, kind: "Complete", status: "Draft", lines: withBase(lines), totals: t, created_at: now(), issued_at: null };
+        const draft = { id: id("draft"), company_id: docs[0].company_id, customer_id: docs[0].customer_id, fiscal_year: 2026, series: "A", number: null, kind: "Complete", status: "Draft", lines: withBase(lines), totals: t, notes, is_recapitulative: docs.length > 1, created_at: now(), issued_at: null };
+        state.payments = state.payments.map((p) => (docs.some((d) => d.id === p.commercial_document_id) ? { ...p, commercial_document_id: null, invoice_id: draft.id } : p));
         state.invoices = [{ ...draft, total_cents: t.total_cents, fiscal_hash: null }, ...state.invoices];
         docs.forEach((d) => Object.assign(d, { invoice_id: draft.id, status: d.kind === "delivery_note" ? d.status : "converted" }));
         return draft;
@@ -365,7 +518,30 @@ export function installTauriMock(page, seed = null) {
           return { period_key: key, run_date: `${year}-${mm}-${String(source.day_of_period).padStart(2, "0")}`, total_cents: total };
         });
       },
-      recurring_generate_due: () => ({ created: [], skipped: [] }),
+      // Un borrador por plantilla activa y periodo vencido, con su origen (D3) y sus observaciones (D2).
+      recurring_generate_due: (args) => {
+        const day = args.today || today();
+        const created = [];
+        const skipped = [];
+        for (const r of state.recurring.filter((item) => item.active && item.next_run_date <= day)) {
+          const [y, m] = r.next_run_date.split("-").map(Number);
+          const key = r.frequency === "yearly" ? String(y) : r.frequency === "quarterly" ? `${y}-T${Math.ceil(m / 3)}` : `${y}-${String(m).padStart(2, "0")}`;
+          if (r.last_period_key === key) {
+            skipped.push(key);
+            continue;
+          }
+          const lines = withBase(r.template.lines);
+          const t = totals(lines);
+          const draft = { id: id("draft"), company_id: r.company_id, customer_id: r.customer_id, fiscal_year: y, series: r.series_code, number: null, kind: "Complete", status: "Draft", territory_flags: ["CommonTerritory", "VeriFactu"], lines, totals: t, total_cents: t.total_cents, fiscal_hash: null, notes: r.template.notes ?? "", recurring_label: r.label, recurring_period_key: key, created_at: now(), issued_at: null };
+          state.invoices = [draft, ...state.invoices];
+          r.last_period_key = key;
+          const step = { monthly: 1, quarterly: 3, yearly: 12 }[r.frequency];
+          const month = m - 1 + step;
+          r.next_run_date = `${y + Math.floor(month / 12)}-${String((month % 12) + 1).padStart(2, "0")}-${String(r.day_of_period).padStart(2, "0")}`;
+          created.push(draft.id);
+        }
+        return { created, skipped };
+      },
     };
 
     async function invoke(cmd, args = {}) {

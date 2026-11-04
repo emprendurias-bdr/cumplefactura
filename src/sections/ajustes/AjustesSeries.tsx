@@ -2,8 +2,13 @@
  * Ajustes › Series: series de facturación de la empresa activa (continuar la numeración anterior
  * o crear una nueva) con atajos de ejemplo. `SeriesFields` se reutiliza en FirstRun.
  * El ejercicio se gestiona aquí; la barra superior solo cambia de serie.
+ * Segundo bloque (D7): series de presupuestos, proformas y albaranes (código y cifras, con el
+ * siguiente número de ejemplo); se guardan juntas y no renumeran lo ya enviado.
+ * Estado: las filas editadas de documentos (copia local de `docs.series` hasta guardar).
  */
+import { useEffect, useState } from "react";
 import { t } from "../../i18n/es";
+import type { CommercialSeriesConfig } from "../../types";
 import { Button } from "../../ui/Button";
 import { Card } from "../../ui/Card";
 import { DataTable } from "../../ui/DataTable";
@@ -55,7 +60,7 @@ export function SeriesFields({ m }: { m: Model }) {
   );
 }
 
-export function AjustesSeries({ m }: Ctx) {
+export function AjustesSeries({ m, docs }: Ctx) {
   return (
     <>
       <Card title={t("series.nueva")}>
@@ -83,6 +88,54 @@ export function AjustesSeries({ m }: Ctx) {
           ]}
         />
       ) : null}
+      <DocumentSeries docs={docs} companyId={m.company?.id ?? null} />
     </>
+  );
+}
+
+function DocumentSeries({ docs, companyId }: { docs: Ctx["docs"]; companyId: string | null }) {
+  const [rows, setRows] = useState<CommercialSeriesConfig[]>(docs.series);
+  useEffect(() => {
+    void docs.loadSeries();
+  }, [companyId]);
+  useEffect(() => setRows(docs.series), [docs.series]);
+  const edit = (kind: string, change: Partial<CommercialSeriesConfig>) => setRows((all) => all.map((row) => (row.kind === kind ? { ...row, ...change } : row)));
+  const changed = rows.some((row, i) => row.series_code !== docs.series[i]?.series_code || row.padding !== docs.series[i]?.padding);
+
+  return (
+    <Card title={t("seriesDocs.titulo")} actions={<Button variant="secondary" disabled={!changed} onClick={() => void docs.configureSeries(rows)}>{t("seriesDocs.guardar")}</Button>}>
+      <p className="bdr-small">{t("seriesDocs.ayuda")}</p>
+      <div className="bdr-table-wrap">
+        <table className="bdr-table cf-series-docs" aria-label={t("seriesDocs.titulo")}>
+          <thead>
+            <tr>
+              <th scope="col">{t("seriesDocs.tipo")}</th>
+              <th scope="col">{t("series.codigo")}</th>
+              <th scope="col">{t("series.cifras")}</th>
+              <th scope="col">{t("series.proxima")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const tipo = t(`docs.tipo.${row.kind}`);
+              return (
+                <tr key={row.kind}>
+                  <td>
+                    {tipo} {row.configured ? null : <span className="bdr-small bdr-muted">· {t("seriesDocs.porDefecto")}</span>}
+                  </td>
+                  <td>
+                    <Input mono aria-label={t("seriesDocs.ariaCodigo", { tipo })} maxLength={10} value={row.series_code} onChange={(e) => edit(row.kind, { series_code: e.target.value.toUpperCase() })} />
+                  </td>
+                  <td>
+                    <Input mono type="number" min={1} max={10} aria-label={t("seriesDocs.ariaCifras", { tipo })} value={row.padding} onChange={(e) => edit(row.kind, { padding: Number(e.target.value) })} />
+                  </td>
+                  <td className="m">{row.preview}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }

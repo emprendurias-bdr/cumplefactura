@@ -1,32 +1,40 @@
 /**
  * Editor de factura y confirmación de emisión (UX_UI.md §Pantallas 2–3, maquetas 2 y 3).
- * Pantalla partida 1fr / 420 px: a la izquierda hero, cliente · serie · fecha, «Se numerará A-129
- * al emitir», líneas y totales con su desglose; a la derecha la vista previa (hoja blanca).
+ * Rutas: `#/facturas/nueva` (en blanco) y `#/facturas/:id/editar` (cualquier borrador: de esta
+ * pantalla, de un recurrente o de una conversión; se lee con `invoice_get` y se guarda con
+ * `invoice_draft_update`). Pantalla partida 1fr / 420 px: a la izquierda hero, aviso de líneas sin
+ * precio (D8), cliente · serie · fecha, «Se numerará A-129 al emitir», líneas, «Observaciones» (D2)
+ * y totales; a la derecha la vista previa (hoja blanca, misma maqueta que el PDF).
  * Emitir (botón o Ctrl+Enter) abre ConfirmDialog con «Lo entiendo»; tras emitir se va a la ficha.
- * Lógica de borrador/emisión intacta en useCumpleFactura: emitir exige borrador guardado, y
- * editar una línea invalida el borrador (como antes).
+ * Estado en useCumpleFactura: emitir exige el borrador guardado y sin cambios (`dirty`) y ninguna
+ * línea «pendiente de precio» a 0 €. Al salir de un borrador abierto, el editor queda en blanco.
  */
 import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n/es";
 import { invoiceDate, todayIso } from "../lib/invoiceDate";
 import { formatCents } from "../lib/moneyFormat";
 import { invoiceNumber } from "../lib/numberProposal";
+import { recurringOrigin } from "../lib/periods";
 import { href } from "../lib/routes";
 import { go } from "../shell/useRoute";
 import { Button } from "../ui/Button";
+import { Callout } from "../ui/Callout";
 import { Card } from "../ui/Card";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { DateInput, Field, Select } from "../ui/Field";
-import { DocPreview } from "../ui/DocPreview";
+import { DocPreview, partyOf } from "../ui/DocPreview";
+import { EmptyState } from "../ui/EmptyState";
 import { Accent, Hero } from "../ui/Hero";
+import { Skeleton } from "../ui/Skeleton";
 import { SourceBreakdown } from "../ui/SourceBreakdown";
 import { toast } from "../ui/Toast";
 import type { Ctx } from "./ctx";
 import { LinesEditor, previewOf } from "./LinesEditor";
 
-export function FacturaEditor({ m }: Ctx) {
+export function FacturaEditor({ m, route }: Ctx) {
   const [confirming, setConfirming] = useState(false);
   const issuedBefore = useRef(m.issued?.invoice.id);
+  const editId = route.action === "editar" ? route.id : null;
   const preview = previewOf(m.invoiceLines);
   const number = m.proposedNumber;
   const reason = !m.company
@@ -35,9 +43,30 @@ export function FacturaEditor({ m }: Ctx) {
       ? t("editor.motivoCliente")
       : !m.canDraft
         ? t("editor.motivoLineas")
-        : !m.canIssue
-          ? t("editor.motivoBorrador")
-          : null;
+        : m.pricePending > 0
+          ? t("editor.motivoPrecio")
+          : !m.canIssue
+            ? t("editor.motivoBorrador")
+            : null;
+
+  // Abrir un borrador guardado cuando ya están cargados clientes y series (entrada directa por URL).
+  // Una sola lectura por borrador abierto (tras emitir, el borrador ya no existe).
+  const loadedFor = useRef<string | null>(null);
+  const notDraft = m.detail?.id === editId && m.detail.status !== "Draft";
+  useEffect(() => {
+    if (!editId || m.loading || loadedFor.current === editId || m.draft?.id === editId) return;
+    loadedFor.current = editId;
+    void m.loadDraft(editId);
+  }, [editId, m.loading]);
+  // Al salir de un borrador abierto, editor en blanco para la siguiente «Nueva factura».
+  useEffect(
+    () => () => {
+      if (!editId) return;
+      loadedFor.current = null;
+      m.newInvoice();
+    },
+    [editId],
+  );
 
   useEffect(() => {
     const open = () => m.canIssue && setConfirming(true);
@@ -55,19 +84,29 @@ export function FacturaEditor({ m }: Ctx) {
     go(target);
   }, [m.issued]);
 
+  if (editId && m.draft?.id !== editId) {
+    if (notDraft)
+      return <EmptyState text={t("editor.soloBorradores")} action={<a className="bdr-btn bdr-btn--secondary" href={href({ section: "facturas", id: editId })}>{t("editor.verFactura")}</a>} />;
+    return m.loading || m.detailLoading || m.detail?.id === editId ? <Skeleton /> : <EmptyState text={t("ficha.noEncontrada")} />;
+  }
+
+  const origin = editId && m.detail?.id === editId ? recurringOrigin(m.detail.recurring_label, m.detail.recurring_period_key) : null;
+  const pendingTitle = m.pricePending === 1 ? t("editor.pendiente1") : t("editor.pendientes", { n: m.pricePending });
+
   return (
     <div className="cf-split">
       <div className="cf-stack">
         <Hero
-          label={`${t("editor.nueva")} · ${t("facturas.serie")} ${m.activeSeries}`}
+          label={`${editId ? t("editor.borrador") : t("editor.nueva")} · ${t("facturas.serie")} ${m.activeSeries}`}
           title={
             <>
               {t("editor.facturaPara")} <Accent>{m.customer?.display_name ?? t("editor.sinCliente")}</Accent>
             </>
           }
+          support={origin ?? undefined}
           secondary={
-            <Button onClick={() => void m.createDraft()} disabled={!m.canDraft}>
-              {m.draft ? t("editor.borradorGuardado") : t("editor.guardarBorrador")}
+            <Button onClick={() => void m.saveDraft()} disabled={!m.canDraft}>
+              {m.draft && !m.dirty ? t("editor.borradorGuardado") : t("editor.guardarBorrador")}
             </Button>
           }
           primary={
@@ -76,6 +115,7 @@ export function FacturaEditor({ m }: Ctx) {
             </Button>
           }
         />
+        {m.pricePending > 0 ? <Callout tone="warn" title={pendingTitle}>{t("editor.pendientesAyuda")}</Callout> : null}
         <div className="cf-form-grid">
           <Field label={t("facturas.cliente")} help={<a href="#/clientes/nuevo">{t("acciones.nuevoCliente")}</a>}>
             <Select value={m.customer?.id ?? ""} onChange={(e) => m.selectCustomer(e.target.value)} disabled={m.customers.length === 0}>
@@ -111,6 +151,9 @@ export function FacturaEditor({ m }: Ctx) {
           )}
         </p>
         <LinesEditor lines={m.invoiceLines} products={m.products} onChange={m.updateInvoiceLine} onAdd={m.addInvoiceLine} onRemove={m.removeInvoiceLine} />
+        <Field label={t("editor.observaciones")} help={t("editor.observacionesAyuda")}>
+          <textarea className="bdr-input cf-textarea" value={m.notes} onChange={(e) => m.setNotes(e.target.value)} />
+        </Field>
         <Card>
           <SourceBreakdown rows={preview.rows} total={{ label: t("totales.total"), cents: preview.totals.total_cents }} />
         </Card>
@@ -120,13 +163,15 @@ export function FacturaEditor({ m }: Ctx) {
         title={t("preview.factura")}
         number={null}
         date={invoiceDate(new Date().toISOString())}
-        issuer={m.company ? { name: m.company.legal_name, tax_id: m.company.tax_id } : null}
-        customer={m.customer ? { name: m.customer.display_name, tax_id: m.customer.tax_id } : null}
+        issuer={partyOf(m.company)}
+        customer={partyOf(m.customer)}
+        logo={m.company?.logo_path}
         lines={preview.lines}
         totals={preview.rows}
         total={preview.totals.total_cents}
+        notes={m.notes}
         qr="pending"
-        note={m.draft ? t("preview.borradorGuardado") : t("preview.provisional")}
+        note={m.draft && !m.dirty ? t("preview.borradorGuardado") : t("preview.provisional")}
       />
       <ConfirmDialog
         open={confirming}

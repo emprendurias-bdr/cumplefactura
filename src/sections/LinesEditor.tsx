@@ -2,19 +2,21 @@
  * Tabla de líneas editable, la misma en facturas, documentos y plantillas recurrentes:
  * Descripción · Cant. · Precio (MoneyInput) · Dto · IVA · IRPF · Importe · quitar.
  * Un importe mal escrito se marca en la fila con «Importe no válido. Usa coma decimal: 1.234,56».
+ * Una línea «pendiente de precio» (D8, albarán sin precios) lleva barra warn y «Pendiente de precio»
+ * bajo el precio mientras siga a 0 €.
  * `useLines` guarda las líneas en estado local para documentos y recurrentes (las de la factura
  * viven en useCumpleFactura). Al final, «Añadir línea» y añadir desde el catálogo de productos.
  */
 import { useState } from "react";
 import { Icon } from "../components/Icon";
 import { t } from "../i18n/es";
-import { decimal, editorTotals, invoiceToLines, isInvoiceLineReady, newInvoiceLine, productToInvoiceLine } from "../lib/format";
+import { decimal, editorTotals, eurosToCents, invoiceToLines, isInvoiceLineReady, lineToInput, newInvoiceLine, productToInvoiceLine } from "../lib/format";
 import { formatCents } from "../lib/moneyFormat";
 import type { InvoiceLineForm, InvoiceLineInput, Product } from "../types";
 import { Button } from "../ui/Button";
 import { MoneyInput } from "../ui/Field";
 
-type Field = Exclude<keyof InvoiceLineForm, "id">;
+type Field = Exclude<keyof InvoiceLineForm, "id" | "price_pending">;
 const PERCENT: { key: Field; label: "lineas.dto" | "lineas.iva" | "lineas.irpf" }[] = [
   { key: "discount_rate_percent", label: "lineas.dto" },
   { key: "tax_rate_percent", label: "lineas.iva" },
@@ -50,8 +52,9 @@ export function LinesEditor({ lines, products, onChange, onAdd, onRemove, readOn
           {lines.map((line, index) => {
             const n = index + 1;
             const badPrice = line.unit_price_euros.trim() !== "" && !Number.isFinite(decimal(line.unit_price_euros));
+            const pending = Boolean(line.price_pending) && !(eurosToCents(line.unit_price_euros) > 0);
             return (
-              <tr key={line.id} className={isInvoiceLineReady(line) ? undefined : "cf-line--incomplete"}>
+              <tr key={line.id} className={pending ? "cf-line--pending" : isInvoiceLineReady(line) ? undefined : "cf-line--incomplete"}>
                 <td>
                   <input className="bdr-input cf-cell" aria-label={t("lineas.ariaDescripcion", { n })} value={line.description} readOnly={readOnly} onChange={(e) => onChange(line.id, "description", e.target.value)} />
                 </td>
@@ -61,6 +64,7 @@ export function LinesEditor({ lines, products, onChange, onAdd, onRemove, readOn
                 <td className="num">
                   <MoneyInput aria-label={t("lineas.ariaPrecio", { n })} value={line.unit_price_euros} invalid={badPrice} readOnly={readOnly} onChange={(e) => onChange(line.id, "unit_price_euros", e.target.value)} />
                   {badPrice ? <span className="bdr-help bdr-help--err cf-cell-err">✕ {t("lineas.importeNoValido")}</span> : null}
+                  {pending ? <span className="cf-pending-help">! {t("lineas.pendientePrecio")}</span> : null}
                 </td>
                 {PERCENT.map((p) => (
                   <td key={p.key} className="num">
@@ -115,8 +119,7 @@ export function previewOf(lines: InvoiceLineForm[]) {
   return {
     totals,
     lines: lines.filter(isInvoiceLineReady).map((line) => ({
-      description: line.description,
-      quantity: Number(line.quantity),
+      ...lineToInput(line),
       amount_cents: editorTotals([line]).taxable_base_cents,
     })),
     rows: [

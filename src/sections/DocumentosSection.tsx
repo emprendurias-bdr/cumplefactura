@@ -93,7 +93,7 @@ function DocumentList({ c, tab }: { c: Ctx; tab: DocTab }) {
                   selected,
                   onChange: setSelected,
                   actions: (
-                    <Button variant="primary" size="sm" disabled={reason !== null} reason={reason ? t(`docs.motivo.${reason}`) : null} onClick={async () => { if (await docs.toInvoiceDraft(selected)) go("#/facturas/nueva"); }}>
+                    <Button variant="primary" size="sm" disabled={reason !== null} reason={reason ? t(`docs.motivo.${reason}`) : null} onClick={() => void docs.toInvoiceDraft(selected)}>
                       {t("docs.facturarJuntos")}
                     </Button>
                   ),

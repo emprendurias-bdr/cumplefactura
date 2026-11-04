@@ -4,6 +4,9 @@
  * sin valor fiscal», sin QR ni huella. Editable solo en borrador; después, las acciones que permite
  * su estado (`lib/documents.ts`): enviar/entregar, aceptar, rechazar, pagar, crear proforma o
  * albarán, convertir en factura (abre el borrador en el editor de facturas) y anular con motivo.
+ * Proforma (D6): tarjeta «Cobros» (el anticipo); «Marcar como pagada» pide al menos un cobro y,
+ * al convertir, los cobros pasan a la factura. La serie de un documento nuevo es la configurada en
+ * Ajustes › Series (D7): no se manda `series_code` y Rust la pone.
  */
 import { useEffect, useState } from "react";
 import { t } from "../i18n/es";
@@ -18,12 +21,14 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Checkbox, DateInput, Field, Select } from "../ui/Field";
-import { DocPreview } from "../ui/DocPreview";
+import { DocPreview, partyOf } from "../ui/DocPreview";
 import { EmptyState } from "../ui/EmptyState";
 import { Accent, Hero } from "../ui/Hero";
 import { documentStatus } from "../ui/status";
 import { StatusChip } from "../ui/StatusChip";
 import { SourceBreakdown } from "../ui/SourceBreakdown";
+import { usePayments } from "../usePayments";
+import { CobrosCard } from "./CobrosCard";
 import type { Ctx } from "./ctx";
 import { LinesEditor, previewOf, useLines } from "./LinesEditor";
 
@@ -42,9 +47,12 @@ export function DocumentoEditor({ c, tab }: { c: Ctx; tab: DocTab }) {
   const [notes, setNotes] = useState("");
   const [dialog, setDialog] = useState<Dialog>(null);
   const lines = useLines();
+  const proformaId = !creating && kind === "proforma" ? route.id : null;
+  const pay = usePayments(proformaId ? { commercialDocumentId: proformaId } : null, () => (proformaId ? docs.open(proformaId) : undefined));
 
   useEffect(() => {
     if (!creating && route.id) void docs.open(route.id);
+    if (docs.series.length === 0) void docs.loadSeries();
   }, [route.id]);
 
   useEffect(() => {
@@ -67,6 +75,7 @@ export function DocumentoEditor({ c, tab }: { c: Ctx; tab: DocTab }) {
   const preview = previewOf(lines.lines);
   const customer = m.customers.find((item) => item.id === customerId);
   const title = t(`docs.tipo.${kind}`);
+  const seriesCode = doc?.series_code ?? docs.series.find((row) => row.kind === kind)?.series_code ?? DEFAULT_SERIES[kind];
 
   async function save() {
     if (!m.company) return;
@@ -75,7 +84,7 @@ export function DocumentoEditor({ c, tab }: { c: Ctx; tab: DocTab }) {
       company_id: m.company.id,
       customer_id: customerId,
       kind,
-      series_code: doc?.series_code ?? DEFAULT_SERIES[kind],
+      series_code: doc?.series_code,
       issue_date: issueDate,
       valid_until: kind === "delivery_note" ? null : validUntil || null,
       delivery_date: kind === "delivery_note" ? deliveryDate || null : null,
@@ -87,7 +96,7 @@ export function DocumentoEditor({ c, tab }: { c: Ctx; tab: DocTab }) {
   }
 
   const toInvoice = async () => {
-    if (doc && (await docs.toInvoiceDraft([doc.id]))) go("#/facturas/nueva");
+    if (doc) await docs.toInvoiceDraft([doc.id]);
   };
   const derive = (target: CommercialKind) => doc && void docs.derive(doc.id, target);
   const primary = !doc ? null : actions.includes("send") || actions.includes("deliver") ? "send" : actions.includes("accept") ? "accept" : actions.includes("convert") ? "convert" : null;
@@ -96,7 +105,7 @@ export function DocumentoEditor({ c, tab }: { c: Ctx; tab: DocTab }) {
     <div className="cf-split">
       <div className="cf-stack">
         <Hero
-          label={`${doc?.display_number ?? t("docs.nuevoEtiqueta", { tipo: title })} · ${t("facturas.serie")} ${doc?.series_code ?? DEFAULT_SERIES[kind]} · ${t("docs.sinValorFiscal")}`}
+          label={`${doc?.display_number ?? t("docs.nuevoEtiqueta", { tipo: title })} · ${t("facturas.serie")} ${seriesCode} · ${t("docs.sinValorFiscal")}`}
           title={<>{title} {t("docs.para")} <Accent>{customer?.display_name ?? t("editor.sinCliente")}</Accent></>}
           chip={<StatusChip status={documentStatus(status)} />}
           secondary={
@@ -125,7 +134,11 @@ export function DocumentoEditor({ c, tab }: { c: Ctx; tab: DocTab }) {
         {doc && actions.some((a) => ["reject", "pay", "derive", "void", "delete"].includes(a)) ? (
           <div className="cf-row">
             {actions.includes("reject") ? <Button size="sm" onClick={() => void docs.setStatus(doc.id, "rejected", null)}>{t("docs.rechazar")}</Button> : null}
-            {actions.includes("pay") ? <Button size="sm" onClick={() => void docs.setStatus(doc.id, "paid", null)}>{t("docs.pagada")}</Button> : null}
+            {actions.includes("pay") ? (
+              <Button size="sm" disabled={pay.payments.length === 0} reason={pay.payments.length === 0 ? t("docs.motivoCobro") : null} onClick={() => void docs.setStatus(doc.id, "paid", null)}>
+                {t("docs.pagada")}
+              </Button>
+            ) : null}
             {actions.includes("derive") && kind === "quote" ? <Button size="sm" onClick={() => derive("proforma")}>{t("docs.crearProforma")}</Button> : null}
             {actions.includes("derive") ? <Button size="sm" onClick={() => derive("delivery_note")}>{t("docs.crearAlbaran")}</Button> : null}
             {actions.includes("delete") ? <Button size="sm" variant="danger" onClick={() => setDialog("delete")}>{t("docs.borrar")}</Button> : null}
@@ -160,6 +173,16 @@ export function DocumentoEditor({ c, tab }: { c: Ctx; tab: DocTab }) {
         <Card>
           <SourceBreakdown rows={preview.rows} total={{ label: t("totales.total"), cents: preview.totals.total_cents }} />
         </Card>
+        {doc && proformaId ? (
+          <CobrosCard
+            pay={pay}
+            target={{ commercialDocumentId: doc.id }}
+            totalCents={doc.total_cents}
+            status={null}
+            blocked={["sent", "paid"].includes(status) ? null : t("cobros.motivoEnviar")}
+            note={t("cobros.proformaPasa")}
+          />
+        ) : null}
         {doc ? (
           <Card title={t("ficha.actividad")}>
             <ActivityLog
@@ -178,14 +201,16 @@ export function DocumentoEditor({ c, tab }: { c: Ctx; tab: DocTab }) {
         title={title}
         number={doc?.display_number ?? null}
         date={isoDate(issueDate)}
-        issuer={m.company ? { name: m.company.legal_name, tax_id: m.company.tax_id } : null}
-        customer={customer ? { name: customer.display_name, tax_id: customer.tax_id } : null}
-        lines={preview.lines.map((line) => (showPrices ? line : { ...line, amount_cents: null }))}
-        totals={showPrices ? preview.rows : []}
-        total={showPrices ? preview.totals.total_cents : null}
+        issuer={partyOf(m.company)}
+        customer={partyOf(customer)}
+        logo={m.company?.logo_path}
+        lines={preview.lines}
+        prices={showPrices}
+        totals={preview.rows}
+        total={preview.totals.total_cents}
         legend={<strong>{kind === "proforma" ? t("docs.leyendaProforma") : t("docs.leyenda")}</strong>}
         qr="none"
-        note={notes || undefined}
+        notes={notes}
       />
       <ConfirmDialog
         open={dialog !== null}

@@ -2,7 +2,8 @@
  * Facturas · lista (UX_UI.md §Pantallas 1, maqueta 1). Hero sencillo con «Nueva factura» (N).
  * Filtros en una fila: búsqueda al escribir (300 ms, atajo /), serie, estado y envío AEAT; el resto
  * en «Más filtros». Tabla: Número · Fecha · Cliente · Estado · Verifactu (5 puntos + texto) ·
- * Total; clic → ficha; menú ⋯ con PDF, JSON, Rectificar, Enviar y Anular (confirmación).
+ * Cobro (chip + cobrado/total en mono, D6) · Total; bajo el número, «Recurrente · plantilla · periodo»
+ * (D3). Clic → ficha, o editor si es borrador; menú ⋯ con PDF, JSON, Rectificar, Enviar y Anular.
  * El filtro «Envío AEAT» se aplica sobre la página cargada (lo dice el chip de resultado).
  */
 import { useEffect, useState } from "react";
@@ -10,6 +11,7 @@ import { t } from "../i18n/es";
 import { invoiceDate } from "../lib/invoiceDate";
 import { formatCents } from "../lib/moneyFormat";
 import { invoiceNumber } from "../lib/numberProposal";
+import { recurringOrigin } from "../lib/periods";
 import { href } from "../lib/routes";
 import { go } from "../shell/useRoute";
 import { SEARCH_ID } from "../shell/Shell";
@@ -20,7 +22,7 @@ import { DataTable, type Column } from "../ui/DataTable";
 import { EmptyState } from "../ui/EmptyState";
 import { Accent, Hero } from "../ui/Hero";
 import { Skeleton, useDelayedLoading } from "../ui/Skeleton";
-import { invoiceKind, invoiceStatus } from "../ui/status";
+import { invoiceKind, invoiceStatus, paymentStatus } from "../ui/status";
 import { StatusChip } from "../ui/StatusChip";
 import { Stepper } from "../ui/Stepper";
 import { AnularDialog } from "./AnularDialog";
@@ -62,8 +64,22 @@ export function FacturasSection(c: Ctx) {
   const pageTotal = rows.reduce((sum, row) => sum + row.invoice.total_cents, 0);
   type Row = (typeof rows)[number];
 
+  const open = (invoice: InvoiceSummary) =>
+    go(href({ section: "facturas", id: invoice.id, action: invoice.status === "Draft" ? "editar" : null }));
   const columns: Column<Row>[] = [
-    { key: "numero", header: t("facturas.numero"), cell: ({ invoice }) => <span className="m">{invoiceNumber(invoice) ?? t("estado.borrador")}</span> },
+    {
+      key: "numero",
+      header: t("facturas.numero"),
+      cell: ({ invoice }) => {
+        const origin = recurringOrigin(invoice.recurring_label, invoice.recurring_period_key);
+        return (
+          <span className="cf-progress-cell">
+            <span className="m">{invoiceNumber(invoice) ?? t("estado.borrador")}</span>
+            {origin ? <span className="cf-origin">{origin}</span> : null}
+          </span>
+        );
+      },
+    },
     { key: "fecha", header: t("facturas.fecha"), cell: ({ invoice }) => <span className="m">{invoiceDate(invoice.issued_at)}</span> },
     { key: "cliente", header: t("facturas.cliente"), cell: ({ invoice }) => customerName(m, invoice.customer_id) },
     {
@@ -88,6 +104,21 @@ export function FacturasSection(c: Ctx) {
           <span className="bdr-small bdr-muted">{t(`progreso.${progress.summary}`)}</span>
         </span>
       ),
+    },
+    {
+      key: "cobro",
+      header: t("facturas.cobro"),
+      cell: ({ invoice }) => {
+        const status = paymentStatus(invoice);
+        return status ? (
+          <span className="cf-progress-cell">
+            <StatusChip status={status} />
+            <span className="m bdr-small bdr-muted cf-nowrap">{formatCents(invoice.paid_cents ?? 0)} / {formatCents(invoice.total_cents)}</span>
+          </span>
+        ) : (
+          <span className="bdr-muted">—</span>
+        );
+      },
     },
     { key: "total", header: t("facturas.total"), num: true, cell: ({ invoice }) => formatCents(invoice.total_cents) },
   ];
@@ -162,11 +193,12 @@ export function FacturasSection(c: Ctx) {
           rows={rows}
           columns={columns}
           rowKey={(row) => row.invoice.id}
-          onOpen={(row) => go(href({ section: "facturas", id: row.invoice.id }))}
+          onOpen={(row) => open(row.invoice)}
           rowActions={({ invoice }) => {
             const issued = invoice.status === "Issued";
             return [
               { label: t("facturas.ver"), onSelect: () => go(href({ section: "facturas", id: invoice.id })) },
+              ...(invoice.status === "Draft" ? [{ label: t("ficha.editar"), onSelect: () => open(invoice) }] : []),
               { label: t("facturas.pdf"), onSelect: () => void m.exportPdf(invoice.id) },
               { label: t("facturas.json"), onSelect: () => void m.exportJson(invoice.id) },
               { label: t("facturas.enviar"), disabled: !issued, onSelect: () => { c.vf.selectInvoice(invoice.id); go("#/verifactu"); } },

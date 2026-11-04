@@ -1,19 +1,24 @@
 /**
  * Documentos comerciales (F4, ESPEC §4): presupuestos, proformas y albaranes. Ninguno es fiscal:
  * no tocan series de factura, registros ni la cadena. Convertir crea un BORRADOR de factura que
- * se emite con la confirmación de siempre.
+ * se emite con la confirmación de siempre (se abre en `#/facturas/:id/editar`).
+ * Series (R2, D7): `series` son las de presupuesto, proforma y albarán (P/PF/AL por defecto); un
+ * documento nuevo no manda `series_code` y Rust usa la configurada.
  * Estado: lista y total de la pestaña activa, y `available`: si Rust aún no tiene los comandos,
  * la pantalla enseña el EmptyState explicativo en vez de botones que no funcionan.
  */
 import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
 import { t } from "./i18n/es";
+import { href } from "./lib/routes";
 import { isMissingCommand } from "./lib/tauri";
+import { go } from "./shell/useRoute";
 import type {
   CommercialDocument,
   CommercialDocumentInput,
   CommercialDocumentSummary,
   CommercialKind,
+  CommercialSeriesConfig,
   CommercialStatus,
   Invoice,
 } from "./types";
@@ -25,6 +30,25 @@ export function useDocuments(m: Model) {
   const [loading, setLoading] = useState(false);
   const [available, setAvailable] = useState<boolean | null>(null);
   const [current, setCurrent] = useState<CommercialDocument | null>(null);
+  const [series, setSeries] = useState<CommercialSeriesConfig[]>([]);
+
+  async function loadSeries() {
+    if (!m.company) return;
+    try {
+      setSeries(await invoke<CommercialSeriesConfig[]>("commercial_series_list", { companyId: m.company.id }));
+    } catch {
+      setSeries([]);
+    }
+  }
+  const configureSeries = action(
+    t("ok.seriesDocs"),
+    async (rows: Pick<CommercialSeriesConfig, "kind" | "series_code" | "padding">[]) => {
+      const owner = need(m.company, t("error.sinEmpresa"));
+      for (const row of rows)
+        await invoke<CommercialSeriesConfig>("commercial_series_configure", { input: { company_id: owner.id, kind: row.kind, series_code: row.series_code, padding: row.padding } });
+    },
+    loadSeries,
+  );
 
   async function load(kind: CommercialKind, status = "") {
     if (!m.company) return;
@@ -95,12 +119,12 @@ export function useDocuments(m: Model) {
     t("ok.convertido"),
     (ids: string[]) => invoke<Invoice>("commercial_document_to_invoice_draft", { ids: need(ids.length ? ids : null, t("error.sinSeleccion")) }),
     async (invoice) => {
-      m.openDraft(invoice);
       await m.refreshData();
+      go(href({ section: "facturas", id: invoice.id, action: "editar" }));
     },
   );
 
-  return { items, total, loading, available, current, load, open, saveDraft, send, setStatus, derive, removeDraft, savePdf, toInvoiceDraft };
+  return { items, total, loading, available, current, series, loadSeries, configureSeries, load, open, saveDraft, send, setStatus, derive, removeDraft, savePdf, toInvoiceDraft };
 }
 
 export type Documents = ReturnType<typeof useDocuments>;

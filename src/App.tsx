@@ -32,7 +32,7 @@ import { useRecurring } from "./useRecurring";
 import { useVerifactu } from "./useVerifactu";
 
 function facturas(c: Ctx) {
-  if (c.route.id === "nueva") return <FacturaEditor {...c} />;
+  if (c.route.id === "nueva" || (c.route.id && c.route.action === "editar")) return <FacturaEditor {...c} />;
   if (c.route.id && c.route.action === "rectificar") return <RectificativaWizard {...c} />;
   if (c.route.id) return <FacturaDetalle {...c} />;
   return <FacturasSection {...c} />;

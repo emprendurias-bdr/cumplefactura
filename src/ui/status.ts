@@ -65,6 +65,20 @@ export const activeStatus = (active: boolean, feminine = false) =>
     ? s("ok", feminine ? "estado.activa" : "estado.activo")
     : s("neu", feminine ? "estado.inactiva" : "estado.inactivo");
 export const recurringStatus = (active: boolean) => (active ? s("ok", "estado.activa") : s("neu", "estado.pausada"));
+const PAYMENT: Record<string, Status> = {
+  unpaid: s("neu", "estado.pendiente"),
+  partial: s("info", "estado.parcial"),
+  paid: s("ok", "estado.cobrada"),
+  overdue: s("err", "estado.vencida"),
+};
+/**
+ * D6: cobro de una factura. Solo las emitidas (o rectificadas) se cobran; una rectificativa en
+ * negativo no se «cobra» (Rust la daría por pagada): null = la pantalla enseña «—».
+ */
+export const paymentStatus = (invoice: { status: string; total_cents: number; payment_status?: string | null }) =>
+  !["Issued", "Rectified"].includes(invoice.status) || invoice.total_cents < 0 || !invoice.payment_status
+    ? null
+    : (PAYMENT[invoice.payment_status] ?? UNKNOWN);
 /** Caducidad del certificado leída en la comprobación previa (F3). */
 export const expiryStatus = (days: number | null | undefined) =>
   days == null ? s("neu", "estado.sinComprobar") : days < 0 ? s("err", "estado.caducado") : days <= 30 ? s("warn", "estado.porCaducar") : s("ok", "estado.vigente");

@@ -1,7 +1,8 @@
 // Browser smoke: Playwright against mocked Tauri invoke (local MVP flows) on the BDR UI (design.md).
 // Recorrido: primer arranque → cliente → producto → editor → emitir con confirmación → filtros →
 // XML → contraseña en memoria → comprobación previa → envío (CSV ficticio) → copias → presupuesto
-// → recurrente → modo oscuro. Mantiene el formato de evidencia (latest-browser-smoke.json/png).
+// → recurrente → borrador recurrente emitido desde la lista → cobro («Cobrada») → albaranes sin
+// precio que bloquean la emisión hasta poner precio → modo oscuro. Las observaciones salen en la ficha. Mantiene el formato de evidencia (latest-browser-smoke.json/png).
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -137,6 +138,7 @@ const result = await withViteServer({ root, port, logPath: serverLogPath }, asyn
     await expect(page.getByLabel("Descuento línea 1")).toHaveValue("10");
     await expect(page.getByLabel("IRPF línea 1")).toHaveValue("15");
     await page.getByLabel("Descripción línea 1").fill("Servicio editable con descuento");
+    await page.getByLabel("Observaciones").fill("Pago por transferencia a 30 días.");
     await expectTextVisible(page, "238,50");
     await expect(page.getByRole("button", { name: "Emitir factura", exact: true })).toBeDisabled();
     await clickByRole(page, "Guardar borrador");
@@ -151,6 +153,7 @@ const result = await withViteServer({ root, port, logPath: serverLogPath }, asyn
     await expectTextVisible(page, "Factura A-1 emitida.");
     await expect(page.getByRole("heading", { level: 1 })).toContainText("A-1");
     await expectTextVisible(page, "Registro de alta guardado · XML sin exportar");
+    await expect(page.getByRole("region", { name: "Observaciones" }).getByText("Pago por transferencia a 30 días.")).toBeVisible();
 
     // Lista con búsqueda al escribir y filtro de estado.
     await goToSection(page, "Facturas");
@@ -210,6 +213,56 @@ const result = await withViteServer({ root, port, logPath: serverLogPath }, asyn
     await clickByRole(page, "Guardar plantilla");
     await expect(page.getByRole("table", { name: "Recurrentes" }).getByText("Cuota mantenimiento web")).toBeVisible();
 
+    // Borrador recurrente: se prepara, se abre desde la lista (invoice_get) y se emite.
+    await clickByRole(page, "Generar ahora");
+    await expectTextVisible(page, "Hemos preparado 1 borradores");
+    await goToSection(page, "Facturas");
+    await clickByRole(page, "Limpiar"); // los filtros de antes solo enseñaban emitidas
+    await page.getByRole("table", { name: "Facturas" }).getByText(/^Recurrente · Cuota mantenimiento web · /).click();
+    await expectTextVisible(page, "Borrador guardado");
+    await expect(page.getByRole("button", { name: "Emitir factura", exact: true })).toBeEnabled();
+    await clickByRole(page, "Emitir factura");
+    const recurringConfirm = page.getByRole("dialog", { name: /¿Emitir la factura/ });
+    await recurringConfirm.getByLabel("Lo entiendo").check();
+    await recurringConfirm.getByRole("button", { name: "Emitir", exact: true }).click();
+    await expectTextVisible(page, "Factura A-2 emitida.");
+    await expectTextVisible(page, "Recurrente · Cuota mantenimiento web · ");
+
+    // Cobro: registrar el total y ver «Cobrada».
+    const payments = page.getByRole("region", { name: "Cobros" });
+    await payments.getByLabel("Importe").fill("121");
+    await clickByRole(page, "Registrar cobro");
+    await expectTextVisible(page, "Cobro registrado.");
+    await expect(payments.locator(".bdr-chip").getByText("Cobrada")).toBeVisible();
+    await expect(payments.getByText("Cobrado 121,00 € de 121,00 €")).toBeVisible();
+
+    // Albaranes sin precios facturados juntos: las líneas pendientes bloquean la emisión hasta tener precio.
+    for (let n = 0; n < 2; n += 1) {
+      await goToSection(page, "Documentos");
+      await clickByRole(page, "Albaranes", "link");
+      await clickByRole(page, "Nuevo albarán", "link");
+      await page.getByLabel("Cliente", { exact: true }).selectOption({ label: "Cliente Demo" });
+      await page.getByLabel("Albarán valorado (con precios)").uncheck();
+      await clickByRole(page, "Guardar borrador");
+      await expectTextVisible(page, "Borrador guardado.");
+      await clickByRole(page, "Marcar como entregado");
+      await expectTextVisible(page, "Documento numerado.");
+    }
+    await goToSection(page, "Documentos");
+    await clickByRole(page, "Albaranes", "link");
+    const boxes = page.getByRole("checkbox", { name: "Seleccionar fila" });
+    await boxes.nth(0).check();
+    await boxes.nth(1).check();
+    await clickByRole(page, "Facturar juntos");
+    await expectTextVisible(page, "2 líneas del albarán no tienen precio.");
+    await expect(page.getByRole("button", { name: "Emitir factura", exact: true })).toBeDisabled();
+    await expectTextVisible(page, "Pon precio a las líneas del albarán");
+    await page.getByLabel("Precio línea 2").fill("50");
+    await page.getByLabel("Precio línea 4").fill("50");
+    await clickByRole(page, "Guardar borrador");
+    await expect(page.getByText("líneas del albarán no tienen precio.")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Emitir factura", exact: true })).toBeEnabled();
+
     // Apariencia: el panel ⚙ cambia el modo al momento.
     await clickByRole(page, "Apariencia y color");
     await page.locator("#cf-appearance").getByRole("button", { name: "Oscuro", exact: true }).click();
@@ -248,7 +301,7 @@ const result = await withViteServer({ root, port, logPath: serverLogPath }, asyn
     browser: "Playwright Chromium headless",
     browser_plugin_note: "Repeatable npm gate uses Playwright because MCP Browser cannot be invoked from npm scripts.",
     flow:
-      "first run (company/series/folder) -> customer -> product to line with discount/IRPF -> draft -> confirm issue -> filters -> export VERI*FACTU XML -> session password -> sidecar preflight -> submit (mocked AEAT CSV) -> backup validate/restore -> quote to invoice draft -> recurring template -> dark mode",
+      "first run (company/series/folder) -> customer -> product to line with discount/IRPF and notes -> draft -> confirm issue -> notes in detail -> filters -> export VERI*FACTU XML -> session password -> sidecar preflight -> submit (mocked AEAT CSV) -> backup validate/restore -> quote to invoice draft -> recurring template -> recurring draft opened from list and issued -> payment (Cobrada) -> delivery notes without prices block issue until priced -> dark mode",
     checks: {
       page_identity: true,
       not_blank: true,

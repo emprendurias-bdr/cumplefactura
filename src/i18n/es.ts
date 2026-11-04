@@ -6,6 +6,7 @@
  * docs/CONTRATOS_NUEVOS_2026-11-03.md) y nunca deja un código técnico solo.
  */
 // Con extensión .ts para que los tests de node (tests/ui) puedan importar este módulo puro.
+import { formatCents } from "../lib/moneyFormat.ts";
 import { rawError, splitCode } from "../lib/tauri.ts";
 
 export const es = {
@@ -113,6 +114,10 @@ export const es = {
   "estado.vigente": "Vigente",
   "estado.cargado": "Cargado",
   "estado.noCargado": "No cargado",
+  "estado.pendiente": "Pendiente",
+  "estado.parcial": "Parcial",
+  "estado.cobrada": "Cobrada",
+  "estado.vencida": "Vencida",
 
   "paso.emitida": "Emitida",
   "paso.registro": "Registro",
@@ -140,6 +145,7 @@ export const es = {
   "origen.calculada": "Calculada",
   "origen.manual": "Manual",
   "origen.contabilidad": "Contabilidad",
+  "origen.recurrente": "Recurrente",
   "totales.base": "Base imponible",
   "totales.iva": "IVA",
   "totales.irpf": "Retención IRPF",
@@ -173,6 +179,7 @@ export const es = {
   "facturas.cliente": "Cliente",
   "facturas.verifactu": "Verifactu",
   "facturas.total": "Total",
+  "facturas.cobro": "Cobro",
   "facturas.vacio": "Aún no hay facturas. Crea la primera.",
   "facturas.vacioFiltros": "Ninguna factura cumple estos filtros. Prueba a quitar alguno.",
   "facturas.ver": "Ver factura",
@@ -201,6 +208,15 @@ export const es = {
   "editor.motivoLineas": "Completa las líneas",
   "editor.motivoBorrador": "Guarda el borrador antes",
   "editor.emitida": "Factura {n} emitida.",
+  "editor.borrador": "Borrador",
+  "editor.observaciones": "Observaciones",
+  "editor.observacionesAyuda": "Salen en el PDF; no forman parte del registro fiscal.",
+  "editor.pendientes": "{n} líneas del albarán no tienen precio.",
+  "editor.pendiente1": "1 línea del albarán no tiene precio.",
+  "editor.pendientesAyuda": "Pon el precio antes de emitir.",
+  "editor.motivoPrecio": "Pon precio a las líneas del albarán",
+  "editor.soloBorradores": "Solo se editan borradores. Abre la factura para verla.",
+  "editor.verFactura": "Ver factura",
 
   "lineas.titulo": "Líneas de la factura",
   "lineas.descripcion": "Descripción",
@@ -221,17 +237,27 @@ export const es = {
   "lineas.dtoAria": "Descuento línea {n}",
   "lineas.ivaAria": "IVA línea {n}",
   "lineas.irpfAria": "IRPF línea {n}",
+  "lineas.pendientePrecio": "Pendiente de precio",
 
   "preview.caption": "Vista previa · PDF",
   "preview.factura": "Factura",
   "preview.rectificativa": "Factura rectificativa",
   "preview.sinEmisor": "Tu empresa",
   "preview.sinCliente": "Cliente sin elegir",
-  "preview.sinNumero": "nº por asignar",
+  "preview.sinNumero": "por asignar",
   "preview.qrAlEmitir": "El QR se genera al emitir.",
   "preview.qrEnPdf": "Factura verificable en la sede electrónica de la AEAT.",
   "preview.provisional": "Vista provisional: se actualiza al escribir.",
   "preview.borradorGuardado": "Borrador guardado. Si cambias una línea, guárdalo de nuevo.",
+  "preview.emisor": "Emisor",
+  "preview.cliente": "Cliente",
+  "preview.fecha": "Fecha {fecha}",
+  "preview.numero": "Nº {n}",
+  "preview.vencimiento": "Vencimiento: {fecha}",
+  "preview.observaciones": "Observaciones",
+  "preview.logo": "Logo",
+  "preview.dto": "Dto.",
+  "preview.irpf": "IRPF",
 
   "emitir.titulo": "¿Emitir la factura {n}?",
   "emitir.c1": "Se emite por {total} a {cliente}.",
@@ -251,14 +277,13 @@ export const es = {
   "anular.cargando": "Anulando…",
 
   "ficha.etiqueta": "Factura",
-  "ficha.noEncontrada": "No encontramos esta factura en la lista cargada. Vuelve a la lista y búscala.",
+  "ficha.noEncontrada": "No encontramos esta factura. Vuelve a la lista y búscala.",
   "ficha.volver": "Volver a facturas",
   "ficha.estadoFiscal": "Estado VERI*FACTU",
   "ficha.csv": "CSV",
   "ficha.importe": "Importe",
-  "ficha.sinDesgloseTitulo": "El desglose está en el PDF.",
-  "ficha.sinDesglose": "Esta factura no se emitió en esta sesión y la app aún no puede leer sus líneas. Descarga el PDF para verlas.",
-  "ficha.lineasEnPdf": "Las líneas de esta factura están en su PDF.",
+  "ficha.editar": "Editar borrador",
+  "ficha.observaciones": "Observaciones",
   "ficha.actividad": "Registro de actividad",
   "ficha.creada": "Creada",
   "ficha.emitidaEvento": "Emitida como {n}",
@@ -267,6 +292,38 @@ export const es = {
   "ficha.tipoFactura": "Factura",
   "ficha.tipoRegistro": "Registro",
   "ficha.tipoEnvio": "Envío",
+
+  "cobros.titulo": "Cobros",
+  "cobros.cobrado": "Cobrado {pagado} de {total}",
+  "cobros.registrar": "Registrar cobro",
+  "cobros.importe": "Importe",
+  "cobros.pendiente": "Queda {importe} por cobrar.",
+  "cobros.fecha": "Fecha del cobro",
+  "cobros.metodo": "Forma de pago",
+  "cobros.referencia": "Referencia",
+  "cobros.referenciaAyuda": "Opcional: nº de transferencia, recibo…",
+  "cobros.vacio": "Todavía no hay cobros.",
+  "cobros.lista": "Cobros registrados",
+  "cobros.borrar": "Borrar cobro",
+  "cobros.borrarTitulo": "¿Borrar el cobro de {importe}?",
+  "cobros.borrarC1": "Se quita de la lista y lo pendiente vuelve a subir.",
+  "cobros.borrarC2": "La factura no cambia: los cobros no forman parte del registro fiscal.",
+  "cobros.borrarIrreversible": "Si te equivocas, tendrás que registrarlo de nuevo.",
+  "cobros.vencimiento": "Vencimiento",
+  "cobros.vencimientoAyuda": "Pasada esta fecha sin cobrarla entera, sale como Vencida.",
+  "cobros.guardarVencimiento": "Guardar vencimiento",
+  "cobros.motivoEmitir": "Emite la factura antes",
+  "cobros.motivoEnviar": "Envía la proforma antes",
+  "cobros.motivoImporte": "Escribe un importe mayor que 0",
+  "cobros.motivoCobrada": "Ya está cobrada entera",
+  "cobros.proformaPasa": "Al convertir la proforma en factura, sus cobros pasan a la factura.",
+  "cobros.negativa": "Es una rectificativa en negativo: no se cobra.",
+  "metodo.transferencia": "Transferencia",
+  "metodo.tarjeta": "Tarjeta",
+  "metodo.efectivo": "Efectivo",
+  "metodo.domiciliacion": "Domiciliación",
+  "metodo.bizum": "Bizum",
+  "metodo.otros": "Otros",
 
   "rect.etiqueta": "Rectificativa",
   "rect.titulo": "Rectificar la factura {n}",
@@ -467,6 +524,13 @@ export const es = {
   "empresa.f.province": "Provincia",
   "empresa.f.country_code": "País",
   "empresa.f.default_series": "Serie por defecto",
+  "logo.titulo": "Logo para el PDF",
+  "logo.ayuda": "JPEG o PNG sin transparencia, hasta 1 MB. Sale arriba a la izquierda de facturas y documentos.",
+  "logo.elegir": "Elegir imagen",
+  "logo.quitar": "Quitar",
+  "logo.sinLogo": "Sin logo. El PDF sale solo con el nombre de la empresa.",
+  "logo.actual": "Logo guardado:",
+  "logo.motivoEmpresa": "Guarda la empresa antes",
 
   "series.titulo": "Series",
   "series.nueva": "Serie de facturación",
@@ -483,6 +547,13 @@ export const es = {
   "series.guardar": "Guardar serie",
   "series.proxima": "Próximo número",
   "series.enUso": "en uso",
+  "seriesDocs.titulo": "Presupuestos, proformas y albaranes",
+  "seriesDocs.ayuda": "Cambiarlo no renumera los documentos ya enviados: vale para los siguientes.",
+  "seriesDocs.tipo": "Documento",
+  "seriesDocs.porDefecto": "Por defecto",
+  "seriesDocs.guardar": "Guardar series",
+  "seriesDocs.ariaCodigo": "Código de {tipo}",
+  "seriesDocs.ariaCifras": "Cifras de {tipo}",
 
   "fiscal.territorio": "Territorio y régimen",
   "fiscal.flag.CommonTerritory": "Territorio común",
@@ -609,6 +680,7 @@ export const es = {
   "docs.borrar": "Borrar borrador",
   "docs.anular": "Anular",
   "docs.motivoGuardar": "Guarda el borrador antes",
+  "docs.motivoCobro": "Registra un cobro antes",
   "docs.mostrarPrecios": "Albarán valorado (con precios)",
   "docs.notas": "Notas y condiciones",
   "docs.leyenda": "Documento sin valor fiscal",
@@ -675,6 +747,7 @@ export const es = {
 
   "dialogo.carpeta": "Elegir carpeta de exportación",
   "dialogo.copia": "Elegir copia de seguridad",
+  "dialogo.logo": "Elegir logo",
 
   "ok.cadena": "Integridad comprobada.",
   "ok.serie": "Serie guardada.",
@@ -702,6 +775,12 @@ export const es = {
   "ok.plantillaActiva": "Plantilla reanudada.",
   "ok.plantillaPausada": "Plantilla pausada.",
   "ok.plantillaBorrada": "Plantilla borrada.",
+  "ok.cobro": "Cobro registrado.",
+  "ok.cobroBorrado": "Cobro borrado.",
+  "ok.vencimiento": "Vencimiento guardado.",
+  "ok.seriesDocs": "Series de documentos guardadas.",
+  "ok.logo": "Logo guardado.",
+  "ok.logoQuitado": "Logo quitado.",
 
   "error.arranqueTitulo": "No hemos podido abrir tus datos.",
   "error.cargaTitulo": "No hemos podido cargar la lista.",
@@ -767,6 +846,17 @@ const ERRORS: Record<string, string> = {
   already_invoiced: "Alguno ya está facturado.",
   not_delivered: "Hay albaranes sin entregar.",
   io_error: "No hemos podido guardar el archivo. Revisa la carpeta de exportación.",
+  // R2: borradores, cobros, series de documentos y logo
+  price_pending_lines: "Hay {d} líneas del albarán sin precio. Pon el precio antes de emitir.",
+  payments_exceed_total: "Lo cobrado supera el total de la factura. Revisa las líneas o borra algún cobro.",
+  invoice_not_issued: "Emite la factura antes de registrar cobros.",
+  payment_not_allowed: "Aquí no se pueden registrar cobros: solo en facturas emitidas y en proformas enviadas.",
+  payment_exceeds_total: "El cobro supera lo que queda pendiente ({d}).",
+  payment_required: "Una proforma pagada necesita al menos un cobro. Regístralo antes.",
+  logo_format_not_supported: "La imagen no sirve como logo: {d}.",
+  logo_too_large: "El logo pesa más de 1 MB. Elige una imagen más ligera.",
+  logo_read_error: "No hemos podido leer la imagen. Elige otra.",
+  logo_write_error: "No hemos podido guardar el logo en este equipo.",
 };
 
 const FIELDS: Record<string, string> = {
@@ -788,12 +878,21 @@ const FIELDS: Record<string, string> = {
   issue_date: "la fecha",
   valid_until: "la fecha de validez",
   delivery_date: "la fecha de entrega",
+  target: "a qué factura o proforma va el cobro",
+  amount_cents: "el importe (mayor que 0)",
+  method: "la forma de pago",
+  paid_at: "la fecha del cobro",
+  due_date: "la fecha de vencimiento",
+  padding: "las cifras del número (1 a 10)",
 };
 
 export function errorText(error: unknown): string {
   const raw = rawError(error);
   const { code, detail } = splitCode(raw);
   if (code === "validation_error") return `Revisa ${FIELDS[detail] ?? detail}.`;
+  // El detalle son céntimos: se enseña como importe.
+  if (code === "payment_exceeds_total" && /^-?\d+$/.test(detail)) return ERRORS[code].replace("{d}", formatCents(Number(detail)));
+  if (/^company not found/.test(raw)) return "No encontramos la empresa. Elígela o créala en Ajustes.";
   if (ERRORS[code]) return ERRORS[code].replace("{d}", detail);
   if (!code && raw.length < 140 && !/[a-z]_[a-z]/.test(raw)) return raw;
   return `${t("error.generico")} ${t("error.detalle", { d: raw })}`;

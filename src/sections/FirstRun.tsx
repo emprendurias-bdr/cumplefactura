@@ -47,7 +47,7 @@ export function FirstRun({ m }: { m: Model }) {
         <Stepper steps={steps} label={t("inicio.pasos")} />
 
         {step === 0 ? (
-          <Card title={t("inicio.paso.empresa")} actions={<Button variant="ghost" size="sm" onClick={m.fillDemoData}>{m.demoSeedEnabled ? t("inicio.demoCargada") : t("inicio.demo")}</Button>}>
+          <Card title={t("inicio.paso.empresa")} actions={import.meta.env.DEV ? <Button variant="ghost" size="sm" onClick={m.fillDemoData}>{m.demoSeedEnabled ? t("inicio.demoCargada") : t("inicio.demo")}</Button> : null}>
             <form className="cf-form-grid" onSubmit={async (e) => { if (await m.saveCompany(e)) setStep(1); }}>
               <CompanyFields m={m} />
               <div className="cf-row cf-end cf-wide">

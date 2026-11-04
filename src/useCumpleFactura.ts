@@ -6,6 +6,11 @@
  * Patrón: `action(mensajeOk, llamada, alTerminar)` devuelve un manejador que llama a Rust, avisa
  * con un toast (ok con `mensajeOk`, error traducido por `errorText`) y ejecuta `alTerminar`.
  * Así no se repite try/catch en cada botón. Nada se guarda en localStorage salvo apariencia.
+ *
+ * Editor (R2): un borrador se abre con `invoice_get` (también los de recurrentes y conversiones) y
+ * se guarda con `invoice_draft_update`. Editar marca `dirty`: emitir exige el borrador guardado sin
+ * cambios pendientes y sin líneas «pendiente de precio» a 0 € (D8). `detail` es la última ficha
+ * leída con `invoice_get` (líneas, desglose, observaciones, cobros, origen recurrente).
  */
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
@@ -27,6 +32,7 @@ import {
   lineToInput,
   listPagination,
   newInvoiceLine,
+  pendingPriceLines,
   percentToBasisPoints,
   productToForm,
   productToInvoiceLine,
@@ -48,6 +54,7 @@ import type {
   FiscalChainVerification,
   FiscalRecordSummary,
   Invoice,
+  InvoiceDetail,
   InvoiceFilterForm,
   InvoiceLineForm,
   InvoiceSeriesConfig,
@@ -149,9 +156,12 @@ export function useCumpleFactura() {
   });
   const [invoiceLines, setInvoiceLines] = useState<InvoiceLineForm[]>([newInvoiceLine()]);
   const [draft, setDraft] = useState<Invoice | null>(null);
+  /** Hay cambios en el editor que aún no están en el borrador guardado. */
+  const [dirty, setDirty] = useState(false);
+  const [notes, setNotesState] = useState("");
   const [issued, setIssued] = useState<IssuedInvoice | null>(null);
-  /** Facturas completas vistas en esta sesión (borrador o emisión): permiten el desglose en la ficha. */
-  const [invoiceDetails, setInvoiceDetails] = useState<Record<string, Invoice>>({});
+  const [detail, setDetail] = useState<InvoiceDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [nextNumber, setNextNumber] = useState(1);
   const [numberPreview, setNumberPreview] = useState<NextNumberPreview | null>(null);
   const [rectificationScenario, setRectificationScenario] = useState("Other");
@@ -181,8 +191,9 @@ export function useCumpleFactura() {
   // Derivados
   const invoiceLinesReady = invoiceLines.length > 0 && invoiceLines.every(isInvoiceLineReady);
   const invoiceTotals = useMemo(() => editorTotals(invoiceLines), [invoiceLines]);
+  const pricePending = pendingPriceLines(invoiceLines);
   const canDraft = Boolean(company && customer && invoiceLinesReady);
-  const canIssue = Boolean(draft && invoiceLinesReady);
+  const canIssue = Boolean(draft && !dirty && invoiceLinesReady && pricePending === 0);
   const fiscalYear = seriesForm.fiscal_year || new Date().getFullYear();
   const activeSeries = selectedSeries?.resolved_series ?? company?.default_series ?? "A";
   const proposedNumber = numberProposal(numberPreview, { companyId: company?.id, series: activeSeries, fiscalYear });
@@ -263,10 +274,31 @@ export function useCumpleFactura() {
     });
   }
 
+  /** Otra empresa: el borrador del editor deja de valer. */
   function resetInvoiceFlow() {
     setDraft(null);
     setIssued(null);
+    setDirty(false);
   }
+
+  /** Un cambio en el editor: hay que guardar el borrador otra vez antes de emitir. */
+  function touch() {
+    setIssued(null);
+    setDirty(true);
+  }
+
+  /** Editor en blanco (al salir de un borrador abierto con «Editar»). */
+  function newInvoice() {
+    setDraft(null);
+    setDirty(false);
+    setNotesState("");
+    setInvoiceLines([newInvoiceLine()]);
+  }
+
+  const setNotes = (value: string) => {
+    touch();
+    setNotesState(value);
+  };
 
   function newCompanyForm() {
     setCompany(null);
@@ -284,7 +316,7 @@ export function useCumpleFactura() {
     setProductForm(emptyProductForm());
   }
 
-  /** Rellena los formularios con datos de ejemplo (no guarda nada hasta que pulses Guardar). */
+  /** Rellena los formularios con datos de ejemplo (no guarda nada hasta que pulses Guardar). Solo en desarrollo (D4). */
   function fillDemoData() {
     const stamp = String(Date.now() % 100_000_000).padStart(8, "0");
     setDemoSeedEnabled(true);
@@ -334,7 +366,7 @@ export function useCumpleFactura() {
     if (!selected) return;
     setCustomer(selected);
     setCustomerForm(customerToForm(selected));
-    resetInvoiceFlow();
+    touch();
   }
 
   function selectProduct(productId: string) {
@@ -347,7 +379,7 @@ export function useCumpleFactura() {
   /* --- Editor de factura --- */
 
   function editLines(change: (current: InvoiceLineForm[]) => InvoiceLineForm[]) {
-    resetInvoiceFlow();
+    touch();
     setInvoiceLines(change);
   }
 
@@ -358,27 +390,48 @@ export function useCumpleFactura() {
   const addInvoiceLine = (line?: InvoiceLineForm) => editLines((current) => [...current, line ?? newInvoiceLine()]);
   const removeInvoiceLine = (id: string) => editLines((current) => (current.length === 1 ? current : current.filter((line) => line.id !== id)));
 
-  /** Abre en el editor un borrador que viene de otro módulo (documento convertido, recurrente). */
-  function openDraft(invoice: Invoice) {
+  /** Pone en el editor un borrador guardado (de esta pantalla, de un recurrente o de una conversión). */
+  function openDraft(invoice: InvoiceDetail) {
     const client = customers.find((item) => item.id === invoice.customer_id);
     if (client) {
       setCustomer(client);
       setCustomerForm(customerToForm(client));
     }
+    const series = seriesConfigs.find((item) => item.resolved_series === invoice.series);
+    if (series) setSelectedSeries(series);
     setInvoiceLines(invoiceToLines(invoice));
+    setNotesState(invoice.notes);
     setIssued(null);
     setDraft(invoice);
-    remember(invoice);
+    setDirty(false);
   }
 
-  function remember(invoice: Invoice) {
-    setInvoiceDetails((current) => ({ ...current, [invoice.id]: invoice }));
+  /** Ficha completa de cualquier factura (`invoice_get`); `null` si no existe. */
+  async function loadDetail(invoiceId: string) {
+    setDetailLoading(true);
+    try {
+      const found = await invoke<InvoiceDetail>("invoice_get", { invoiceId });
+      setDetail(found);
+      return found;
+    } catch (error) {
+      setDetail(null);
+      toast(errorText(error), "err");
+      return null;
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  /** «Editar borrador»: lee el borrador de Rust y lo abre en el editor (si sigue siendo borrador). */
+  async function loadDraft(invoiceId: string) {
+    const found = await loadDetail(invoiceId);
+    if (found?.status === "Draft") openDraft(found);
   }
 
   async function selectInvoiceSeries(seriesId: string) {
     const series = seriesConfigs.find((item) => item.id === seriesId);
     if (!series || !company) return;
-    resetInvoiceFlow();
+    touch();
     setSelectedSeries(series);
     updateSeriesForm("fiscal_year", series.fiscal_year);
     await previewNextNumber(company, series.resolved_series, series.fiscal_year);
@@ -401,6 +454,7 @@ export function useCumpleFactura() {
       rectification_reason_code: null,
       rectification_method: null,
       lines: invoiceLines.map(lineToInput),
+      notes,
     };
   }
 
@@ -422,8 +476,9 @@ export function useCumpleFactura() {
   async function afterIssue(result: IssuedInvoice) {
     setIssued(result);
     setDraft(null);
+    setDirty(false);
+    setNotesState("");
     setInvoiceLines([newInvoiceLine()]);
-    remember(result.invoice);
     setNextNumber((result.invoice.number ?? nextNumber) + 1);
     await refreshData();
   }
@@ -618,15 +673,30 @@ export function useCumpleFactura() {
     },
   );
 
-  const createDraft = action(
+  /** Primer guardado crea el borrador; los siguientes lo reescriben (mismo id, cobros y vínculos). */
+  const saveDraft = action(
     t("ok.borrador"),
-    () => invoke<Invoice>("invoice_draft_create", { input: draftInput() }),
-    async (created) => {
-      setDraft(created);
-      remember(created);
+    () =>
+      draft
+        ? invoke<Invoice>("invoice_draft_update", { id: draft.id, input: draftInput() })
+        : invoke<Invoice>("invoice_draft_create", { input: draftInput() }),
+    async (saved) => {
+      setDraft(saved);
+      setDirty(false);
       await refreshData();
     },
   );
+
+  /** D1: logo del PDF. Rust copia la imagen (JPEG o PNG sin transparencia, ≤ 1 MB) y guarda la ruta. */
+  async function pickLogo() {
+    const owner = company;
+    if (!owner) return;
+    const selected = await openDialog({ title: t("dialogo.logo"), multiple: false, directory: false, filters: [{ name: "Imagen", extensions: ["jpg", "jpeg", "png"] }] });
+    if (typeof selected !== "string") return;
+    await setLogo(owner.id, selected);
+  }
+  const setLogo = action(t("ok.logo"), (companyId: string, sourcePath: string) => invoke<string>("company_logo_set", { companyId, sourcePath }), () => refreshData());
+  const clearLogo = action(t("ok.logoQuitado"), (companyId: string) => invoke<null>("company_logo_clear", { companyId }), () => refreshData());
 
   const issueInvoice = action(null, () => issueWith(draftInput(), draft?.id ?? null), afterIssue);
 
@@ -747,7 +817,12 @@ export function useCumpleFactura() {
     seriesForm,
     invoiceLines,
     invoiceTotals,
-    invoiceDetails,
+    pricePending,
+    notes,
+    setNotes,
+    dirty,
+    detail,
+    detailLoading,
     draft,
     issued,
     numberPreview,
@@ -809,8 +884,12 @@ export function useCumpleFactura() {
     updateInvoiceLine,
     removeInvoiceLine,
     addInvoiceLine,
-    openDraft,
-    createDraft,
+    newInvoice,
+    loadDraft,
+    loadDetail,
+    saveDraft,
+    pickLogo,
+    clearLogo,
     issueInvoice,
     issueRectifyingInvoice,
     adviseRectification,

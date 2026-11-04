@@ -139,7 +139,8 @@ a.bdr-btn--secondary { color: var(--fg); }
 .bdr-table tfoot td { background: var(--surface-2); font-weight: 600; }
 .bdr-table tbody tr:hover td { cursor: default; }
 .bdr-table tbody tr[tabindex]:hover td { cursor: pointer; }
-.cf-progress-cell { display: flex; flex-direction: column; gap: 2px; }
+.cf-progress-cell { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+.cf-nowrap { white-space: nowrap; }
 .cf-dots { display: inline-flex; gap: 4px; }
 .cf-dot { width: 10px; height: 10px; border-radius: var(--r-pill); background: var(--neu-bg); box-shadow: inset 0 0 0 1.5px var(--line-strong); }
 .cf-dot--done { background: var(--ok-text); box-shadow: none; }
@@ -177,18 +178,40 @@ a.bdr-btn--secondary { color: var(--fg); }
 
 /* --- Vista previa: la hoja lleva los tokens de claro (data-apariencia en la hoja) --- */
 .cf-preview { position: sticky; top: 72px; }
-.cf-sheet { font-size: 12px; min-height: 420px; background: var(--surface); color: var(--fg); }
+.cf-sheet { font-size: 11px; min-height: 480px; background: var(--surface); color: var(--fg); }
 .cf-sheet__head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
-.cf-sheet__issuer { font-size: 15px; }
-.cf-sheet__title { color: var(--fg); }
+.cf-sheet__brand { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.cf-sheet__logo { width: 44px; height: 44px; flex: none; border: 1.5px solid var(--line-strong); border-radius: 6px; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; color: var(--muted); font-size: 7px; line-height: 1.2; text-align: center; word-break: break-all; padding: 2px; }
+.cf-sheet__issuer { font-size: 14px; }
+.cf-sheet__title { font-size: 20px; font-weight: 700; line-height: 1.1; }
 .cf-sheet__muted { color: var(--muted); }
-.cf-sheet__legend { border: 1.5px solid var(--fg); border-radius: 6px; padding: 6px 8px; text-align: center; text-transform: uppercase; letter-spacing: .06em; font-family: var(--fuente-mono); }
+.cf-sheet__tiny { font-size: 9px; max-width: 110px; }
+.cf-sheet__label { font-size: 9px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.cf-sheet__parties { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cf-sheet__legend { margin-top: 6px; display: inline-block; border: 1.5px solid var(--fg); border-radius: 6px; padding: 4px 8px; text-transform: uppercase; letter-spacing: .06em; font-family: var(--fuente-mono); font-size: 10px; }
 .cf-sheet__lines { width: 100%; border-collapse: collapse; }
-.cf-sheet__lines td { padding: 8px 4px; border-top: 1px solid var(--line); }
-.cf-sheet__sub td { color: var(--muted); }
-.cf-sheet__total td { font-weight: 700; font-size: 13px; border-top: 1.5px solid var(--fg); }
-.cf-sheet__qr { display: flex; gap: 10px; align-items: center; margin-top: auto; }
+.cf-sheet__lines th { background: var(--surface-2); font-size: 9px; font-weight: 700; padding: 5px 3px; text-align: left; }
+.cf-sheet__lines th.cf-num { text-align: right; }
+.cf-sheet__lines td { padding: 6px 3px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.cf-sheet__lines td.m { font-size: 10px; white-space: nowrap; }
+.cf-sheet__totals { margin-left: auto; min-width: 60%; border-collapse: collapse; }
+.cf-sheet__totals td { padding: 3px 3px; }
+.cf-sheet__total td { font-weight: 700; font-size: 13px; border-top: 1.5px solid var(--fg); padding-top: 6px; }
+.cf-sheet__notes { display: flex; flex-direction: column; gap: 2px; white-space: pre-line; }
+.cf-sheet__foot { margin-top: auto; border-top: 1px solid var(--line); padding-top: 6px; }
+.cf-sheet__qr { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; text-align: right; }
 .cf-sheet__qrbox { width: 56px; height: 56px; border: 1.5px dashed var(--line-strong); border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); font-size: 10px; flex: none; }
+
+/* --- R2: cobros, líneas pendientes de precio, origen recurrente, logo --- */
+.cf-payments td { height: 40px; }
+.cf-due { align-items: flex-end; }
+.cf-line--pending td:first-child { box-shadow: inset 4px 0 0 var(--warn-text); }
+.cf-line--pending .cf-money .bdr-input { border-color: var(--warn-text); border-width: 2px; }
+.cf-pending-help { display: block; text-align: left; color: var(--warn-text); font-size: 12px; margin-top: 2px; white-space: nowrap; }
+.cf-origin { font-size: 12px; color: var(--muted); }
+.cf-prewrap { white-space: pre-line; margin: 0; }
+.cf-logo { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.cf-series-docs td .bdr-input { height: 36px; }
 
 /* --- Paleta de comandos (sin animación: --mov-instant) --- */
 dialog.bdr-dialog.cf-palette { width: min(620px, calc(100vw - 32px)); transition: none; margin-top: 12vh; }

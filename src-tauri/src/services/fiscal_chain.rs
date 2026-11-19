@@ -125,13 +125,16 @@ fn validate_record_shape(record: &FiscalRecordVerificationRow, issues: &mut Vec<
             );
         }
     } else if record.record_type == "Anulacion" {
-        if record.invoice_status != "Void" {
+        // Una anulación rechazada por la AEAT sigue en la cadena, pero la factura no está anulada.
+        if record.record_status != "rejected"
+            && !matches!(record.invoice_status.as_str(), "Void" | "VoidPending")
+        {
             push_issue(
                 issues,
                 record,
                 "error",
                 "ANULACION_STATUS_MISMATCH",
-                "Anulacion record requires invoice status Void",
+                "Anulacion record requires invoice status Void or VoidPending",
             );
         }
         match record.xml_path.as_deref() {

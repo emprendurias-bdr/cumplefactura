@@ -18,9 +18,17 @@ import { Accent, Hero } from "../ui/Hero";
 import { chainStatus, expiryStatus, preflightStatus, recordType, submissionStatus } from "../ui/status";
 import { StatusChip } from "../ui/StatusChip";
 import { Stepper } from "../ui/Stepper";
+import type { VerifactuSubmissionSummary } from "../types";
 import { customerName, invoiceProgress, type Ctx } from "./ctx";
 import { VerifactuEnvio } from "./VerifactuEnvio";
 import { VerifactuTecnico } from "./VerifactuTecnico";
+
+/** S1: SOAP Fault y todos los códigos de error de un envío, en una línea. */
+function submissionErrors(row: VerifactuSubmissionSummary): string {
+  const codes = (row.errores ?? []).map((e) => [e.codigo, e.descripcion].filter(Boolean).join(" "));
+  if (codes.length === 0 && row.codigo_error) codes.push([row.codigo_error, row.descripcion_error].filter(Boolean).join(" "));
+  return [row.soap_fault, ...codes].filter(Boolean).join(" · ") || "—";
+}
 
 export function VerifactuSection(c: Ctx) {
   const { m, vf } = c;
@@ -88,6 +96,7 @@ export function VerifactuSection(c: Ctx) {
               { key: "entorno", header: t("vf.entorno"), cell: (row) => envLabel(row.endpoint_name) },
               { key: "estado", header: t("facturas.estado"), cell: (row) => <StatusChip status={submissionStatus(row.status)} /> },
               { key: "csv", header: t("vf.csv"), cell: (row) => <span className="m">{row.csv ?? "—"}</span> },
+              { key: "errores", header: t("vf.errores"), cell: (row) => <span className="m">{submissionErrors(row)}</span> },
               {
                 key: "accion",
                 header: "",

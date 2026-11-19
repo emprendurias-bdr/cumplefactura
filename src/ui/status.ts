@@ -17,6 +17,8 @@ const INVOICE: Record<string, Status> = {
   Draft: s("warn", "estado.borrador"),
   Issued: s("ok", "estado.emitida"),
   Rectified: s("info", "estado.rectificada"),
+  // S1: la anulación está registrada, pero la AEAT aún no la ha aceptado.
+  VoidPending: s("warn", "estado.anulacionPendiente"),
   Void: s("neu", "estado.anulada"),
 };
 

@@ -89,6 +89,7 @@ const checks = [
     "verifactu_submit_preflight",
     "verifactu_submit",
     "verifactu_submission_list",
+    "verifactu_pending_anulacion",
     "rectification_advice",
     "commercial_document_list",
     "commercial_document_get",

@@ -28,7 +28,7 @@ import { Stepper } from "../ui/Stepper";
 import { AnularDialog } from "./AnularDialog";
 import { customerName, invoiceProgress, type Ctx } from "./ctx";
 
-const STATUSES = ["Draft", "Issued", "Rectified", "Void"] as const;
+const STATUSES = ["Draft", "Issued", "Rectified", "VoidPending", "Void"] as const;
 const KINDS = ["Complete", "Simplified", "Rectifying"] as const;
 const SENDING = ["sinEnviar", "sinConfirmar", "aceptada", "conErrores", "rechazada"] as const;
 

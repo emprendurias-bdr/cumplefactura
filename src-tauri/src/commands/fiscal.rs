@@ -6,8 +6,8 @@
 //! `backup_restore` solo valida salvo con `confirm = true` (ver `db::backup`).
 
 use crate::db::{
-    self, AppState, AuditSummary, FiscalRecordSummary, ListPagination, PreviousInvoiceLink,
-    VerifactuSubmissionSummary,
+    self, AppState, AuditSummary, FiscalRecordSummary, InvoiceListFilters, ListPagination,
+    PreviousInvoiceLink, VerifactuSubmissionSummary,
 };
 use crate::domain::require;
 use crate::services::audit::AuditEvent;
@@ -151,43 +151,48 @@ pub fn invoice_export_json(
     })
 }
 
+/// CSV de facturas con los mismos filtros que el listado (`InvoiceListFilters`).
 #[tauri::command]
 pub fn invoice_export_csv(
     state: State<'_, AppState>,
-    filters: Option<serde_json::Value>,
+    filters: Option<InvoiceListFilters>,
     target_path: String,
 ) -> Result<ExportResult, String> {
     require("target_path", &target_path)?;
     let conn = state.lock()?;
-    let invoices = db::list_invoices(&conn)?;
+    let filtered = filters.is_some();
+    let invoices = db::list_invoices_filtered(&conn, filters.unwrap_or_default())?;
     export::write_invoice_csv(&target_path, &invoices)?;
     Ok(ExportResult {
         target_path,
         status: "created".to_string(),
         notes: vec![
             "Invoice CSV export created locally.".to_string(),
-            if filters.is_some() {
-                "Filters accepted for contract compatibility; MVP export still includes all invoices.".to_string()
-            } else {
-                "No filters supplied; all invoices exported.".to_string()
-            },
+            filters_note(filtered, invoices.len()),
         ],
     })
 }
 
+/// Auditoría fiscal. Con filtros: facturas filtradas y solo los registros fiscales y
+/// eventos de auditoría de esas facturas. La verificación de la cadena es siempre
+/// completa: una cadena no se puede comprobar a trozos.
 #[tauri::command]
 pub fn fiscal_audit_export(
     state: State<'_, AppState>,
-    filters: Option<serde_json::Value>,
+    filters: Option<InvoiceListFilters>,
     target_path: String,
 ) -> Result<ExportResult, String> {
     require("target_path", &target_path)?;
     let conn = state.lock()?;
+    let filtered = filters.is_some();
+    let invoices = db::list_invoices_filtered(&conn, filters.unwrap_or_default())?;
+    let (audit_events, fiscal_records) = audit_rows_for(&conn, &invoices, filtered)?;
+    let note = filters_note(filtered, invoices.len());
     export::write_fiscal_audit_json(
         &target_path,
-        db::list_invoices(&conn)?,
-        db::list_audit_events(&conn)?,
-        db::list_fiscal_records(&conn)?,
+        invoices,
+        audit_events,
+        fiscal_records,
         fiscal_chain::verify(&conn)?,
     )?;
     Ok(ExportResult {
@@ -195,14 +200,35 @@ pub fn fiscal_audit_export(
         status: "created".to_string(),
         notes: vec![
             "Fiscal audit export created locally.".to_string(),
-            if filters.is_some() {
-                "Filters accepted for contract compatibility; MVP audit export still includes all records.".to_string()
-            } else {
-                "No filters supplied; all audit records exported.".to_string()
-            },
+            note,
             "This is traceability evidence, not certification.".to_string(),
         ],
     })
+}
+
+/// Eventos de auditoría y registros fiscales completos; con filtros, solo los de `invoices`.
+fn audit_rows_for(
+    conn: &rusqlite::Connection,
+    invoices: &[db::InvoiceSummary],
+    filtered: bool,
+) -> Result<(Vec<AuditSummary>, Vec<FiscalRecordSummary>), String> {
+    let mut events = db::list_audit_events(conn)?;
+    let mut records = db::list_fiscal_records(conn)?;
+    if filtered {
+        let ids: std::collections::HashSet<&str> =
+            invoices.iter().map(|invoice| invoice.id.as_str()).collect();
+        events.retain(|event| ids.contains(event.entity_id.as_str()));
+        records.retain(|record| ids.contains(record.invoice_id.as_str()));
+    }
+    Ok((events, records))
+}
+
+fn filters_note(filtered: bool, invoices: usize) -> String {
+    if filtered {
+        format!("Filters applied; {invoices} invoices exported.")
+    } else {
+        format!("No filters supplied; all {invoices} invoices exported.")
+    }
 }
 
 #[tauri::command]
@@ -229,7 +255,12 @@ pub fn verifactu_xml_draft_export(
         previous.as_ref(),
         &assets,
     )?;
-    let export = verifactu_submit::record_xml_export(&conn, &invoice_id, &target_path)?;
+    let export = verifactu_submit::record_xml_export(
+        &conn,
+        &invoice_id,
+        &target_path,
+        verifactu_submit::PAYLOAD_VERSION,
+    )?;
 
     Ok(VerifactuXmlResult {
         target_path,
@@ -274,6 +305,7 @@ pub fn verifactu_xml_anulacion_draft_export(
         return Err("anulacion requires an issued invoice fiscal_hash".to_string());
     }
     let generated_at = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+    let rechazo_previo = db::latest_anulacion_rejected(&conn, &invoice_id)?;
     let previous = match db::latest_fiscal_record_link_for_company(&conn, &invoice.company_id)? {
         Some(link) => link,
         None => invoice_self_link(&invoice)?,
@@ -289,6 +321,7 @@ pub fn verifactu_xml_anulacion_draft_export(
         &invoice,
         &previous,
         &generated_at,
+        rechazo_previo,
         &assets,
     )?;
     let previous_audit_hash = db::latest_audit_hash(&conn)?;
@@ -311,19 +344,28 @@ pub fn verifactu_xml_anulacion_draft_export(
         let _ = fs::remove_file(&target_path);
         return Err(err);
     }
-    let export = verifactu_submit::record_xml_export(&conn, &invoice_id, &target_path)?;
+    let export = verifactu_submit::record_xml_export(
+        &conn,
+        &invoice_id,
+        &target_path,
+        db::ANULACION_PAYLOAD_VERSION,
+    )?;
 
+    let mut notes = vec![
+        "XML anulacion generated, XSD-validated and recorded in fiscal chain; invoice is VoidPending until the AEAT accepts it."
+            .to_string(),
+        "Not submitted to AEAT yet.".to_string(),
+        "XSD validation is structural, not full fiscal/legal compliance.".to_string(),
+    ];
+    if rechazo_previo {
+        notes.push("Previous anulacion was rejected by the AEAT: RechazoPrevio=S.".to_string());
+    }
     Ok(VerifactuXmlResult {
         target_path,
         status: "anulacion-created-xsd-valid-recorded".to_string(),
         xsd_validated: true,
         export,
-        notes: vec![
-            "XML anulacion generated, XSD-validated, recorded in fiscal chain, invoice marked Void."
-                .to_string(),
-            "Not submitted to AEAT yet.".to_string(),
-            "XSD validation is structural, not full fiscal/legal compliance.".to_string(),
-        ],
+        notes,
     })
 }
 
@@ -366,8 +408,12 @@ pub fn verifactu_submit_preflight(
     verifactu_submit::preflight(&client, &input, &endpoint_name)
 }
 
-/// Envía el XML exportado a la AEAT a través del sidecar y guarda la respuesta.
-/// Un `transport_error` previo no bloquea: el usuario puede reintentar a mano.
+/// Envía el XML exportado a la AEAT a través del sidecar y guarda cada intento.
+/// Si falla después de poder llegar a la AEAT (sin respuesta, respuesta ilegible o
+/// incoherente), se guarda como `transport_error` («sin confirmar»), nunca como
+/// aceptado ni rechazado. Un `transport_error` previo no bloquea: se reintenta a mano.
+/// Si el XML era una anulación, la respuesta decide el estado de la factura
+/// (`db::record_verifactu_submission`).
 #[tauri::command]
 pub fn verifactu_submit(
     app: AppHandle,
@@ -382,10 +428,14 @@ pub fn verifactu_submit(
     }
     let client = sidecar.client(|| LaunchConfig::resolve(&app))?;
     // Sin bloqueo de base de datos durante la llamada a la AEAT (hasta 30 s).
-    let aeat = verifactu_submit::submit(&client, &input, xml, &endpoint_name)?;
-    let conn = state.lock()?;
-    let submission_id = db::insert_verifactu_submission(
-        &conn,
+    let aeat = match verifactu_submit::submit(&client, &input, xml, &endpoint_name) {
+        Ok(aeat) => aeat,
+        Err(err) if verifactu_submit::failed_before_aeat(&err) => return Err(err),
+        Err(err) => verifactu_submit::unconfirmed_response(&input, &endpoint_name, &err),
+    };
+    let mut conn = state.lock()?;
+    let submission_id = db::record_verifactu_submission(
+        &mut conn,
         db::VerifactuSubmissionRecord {
             invoice_id: &input.invoice_id,
             fiscal_export_id: &input.export_id,
@@ -398,6 +448,34 @@ pub fn verifactu_submit(
         submission_id,
         aeat,
     })
+}
+
+/// Paquete de envío de una anulación pendiente (mismos campos que el de la interfaz).
+#[derive(Debug, Clone, Serialize)]
+pub struct PendingAnulacion {
+    pub invoice_id: String,
+    pub export_id: String,
+    pub xml_path: String,
+    pub xml_sha256: String,
+}
+
+/// XML de la anulación pendiente de una factura, listo para enviar o reintentar
+/// (también tras reiniciar la app). `None` si la factura no tiene anulación pendiente.
+#[tauri::command]
+pub fn verifactu_pending_anulacion(
+    state: State<'_, AppState>,
+    invoice_id: String,
+) -> Result<Option<PendingAnulacion>, String> {
+    require("invoice_id", &invoice_id)?;
+    let conn = state.lock()?;
+    Ok(db::pending_anulacion_export(&conn, &invoice_id)?.map(
+        |(export_id, xml_path, xml_sha256)| PendingAnulacion {
+            invoice_id,
+            export_id,
+            xml_path,
+            xml_sha256,
+        },
+    ))
 }
 
 /// Respuestas de la AEAT guardadas, de la más reciente a la más antigua.
@@ -429,6 +507,7 @@ fn checked_submission(
     if db::verifactu_xml_already_accepted(&conn, &input.xml_sha256)? {
         return Err("xml_already_accepted_by_aeat".to_string());
     }
+    db::check_anulacion_export_is_current(&conn, &input.export_id, &input.invoice_id)?;
     let settings = db::get_app_settings(&conn)?;
     if !settings.sends_certificate_password() {
         input.certificate_password = None;

@@ -369,7 +369,10 @@ impl InvoiceListFilters {
     fn normalized(self) -> Result<Self, String> {
         let status = clean_optional(self.status);
         if let Some(value) = &status {
-            if !matches!(value.as_str(), "Draft" | "Issued" | "Void" | "Rectified") {
+            if !matches!(
+                value.as_str(),
+                "Draft" | "Issued" | "VoidPending" | "Void" | "Rectified"
+            ) {
                 return Err(format!("unsupported invoice status: {value}"));
             }
         }
@@ -391,15 +394,17 @@ impl InvoiceListFilters {
     }
 }
 
+#[cfg(test)]
 pub fn list_invoices(conn: &Connection) -> Result<Vec<InvoiceSummary>, String> {
     list_invoices_filtered(conn, InvoiceListFilters::default())
 }
 
+/// Todas las facturas que cumplen los filtros (todas las páginas).
 pub fn list_invoices_filtered(
     conn: &Connection,
     filters: InvoiceListFilters,
 ) -> Result<Vec<InvoiceSummary>, String> {
-    list_invoices_filtered_paginated(conn, filters, ListPagination::default())
+    collect_all_pages(|page| list_invoices_filtered_paginated(conn, filters.clone(), page))
 }
 
 pub fn list_invoices_filtered_paginated(

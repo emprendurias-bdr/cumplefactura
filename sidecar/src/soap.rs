@@ -6,8 +6,9 @@
 //!   declara estilo `document`, `soapAction=""` y ese elemento como cuerpo, así que
 //!   no hay que transformar nada: solo quitar la declaración XML y envolver.
 //! - `parse_response` extrae de `RespuestaRegFactuSistemaFacturacion` (esquema
-//!   `RespuestaSuministro.xsd`) el CSV, los estados y el primer error, o el
-//!   `soapenv:Fault` si la AEAT rechazó el mensaje entero.
+//!   `RespuestaSuministro.xsd`) el CSV, los estados y todos los errores (de
+//!   `RespuestaLinea` y de `RegistroDuplicado`), o el `soapenv:Fault` si la AEAT
+//!   rechazó el mensaje entero.
 //!
 //! Qué no hace nunca: entrada/salida, firmas ni cambios en el registro. El XML viaja
 //! tal cual lo validó la app contra el XSD, para que su huella siga siendo válida.
@@ -16,6 +17,8 @@
 //! Por qué sin firma: RD 1007/2023, art. 16.3. Los sistemas VERI*FACTU no tienen
 //! obligación de firmar los registros; basta con la huella. La autenticación la da
 //! el certificado de cliente en la conexión TLS (Orden HAC/1177/2024, arts. 4 y 5).
+
+use fiscal_contract::messages::ErrorRegistro;
 
 const NS_SUMINISTRO_LR: &str = "https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroLR.xsd";
 const ROOT_ELEMENT: &str = "RegFactuSistemaFacturacion";
@@ -32,6 +35,7 @@ pub struct AeatOutcome {
     pub descripcion_error: Option<String>,
     pub tiempo_espera_envio_seconds: Option<u64>,
     pub soap_fault: Option<String>,
+    pub errores: Vec<ErrorRegistro>,
 }
 
 /// Envuelve el registro en un sobre SOAP 1.1.
@@ -87,22 +91,53 @@ pub fn parse_response(body: &[u8]) -> AeatOutcome {
         return transport_error("aeat_response_unrecognized");
     };
     let estado_registro = text("EstadoRegistro");
+    // Una línea por envío: si la línea es `Incorrecto`, el registro no quedó aceptado.
     let status = match (estado_envio.as_str(), estado_registro.as_deref()) {
+        (_, Some("Incorrecto")) => "rejected",
         ("Correcto", Some("AceptadoConErrores")) => "accepted_with_errors",
         ("Correcto", _) => "accepted",
         ("ParcialmenteCorrecto", _) => "accepted_with_errors",
         _ => "rejected",
     };
+    let errores = registro_errors(&document);
+    let first = errores.first().cloned().unwrap_or_default();
     AeatOutcome {
         status: status.to_string(),
         csv: text("CSV"),
         estado_envio: Some(estado_envio),
         estado_registro,
-        codigo_error: text("CodigoErrorRegistro"),
-        descripcion_error: text("DescripcionErrorRegistro"),
+        codigo_error: first.codigo,
+        descripcion_error: first.descripcion,
         tiempo_espera_envio_seconds: text("TiempoEsperaEnvio").and_then(|t| t.parse().ok()),
         soap_fault: None,
+        errores,
     }
+}
+
+/// Cada código/descripción de error, emparejados por su elemento padre
+/// (`RespuestaLinea` o `RegistroDuplicado`), en orden de aparición.
+fn registro_errors(document: &roxmltree::Document) -> Vec<ErrorRegistro> {
+    let child_text = |parent: roxmltree::Node, name: &str| {
+        parent
+            .children()
+            .find(|node| node.is_element() && node.tag_name().name() == name)
+            .and_then(|node| node.text())
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string)
+    };
+    document
+        .descendants()
+        .filter(|node| node.is_element())
+        .filter_map(|parent| {
+            let codigo = child_text(parent, "CodigoErrorRegistro");
+            let descripcion = child_text(parent, "DescripcionErrorRegistro");
+            (codigo.is_some() || descripcion.is_some()).then_some(ErrorRegistro {
+                codigo,
+                descripcion,
+            })
+        })
+        .collect()
 }
 
 /// Resultado para fallos en los que no hubo respuesta AEAT interpretable.
@@ -217,6 +252,27 @@ mod tests {
         );
         assert_eq!(rejected.status, "rejected");
         assert_eq!(rejected.codigo_error.as_deref(), Some("1100"));
+    }
+
+    #[test]
+    fn keeps_every_error_and_rejects_incorrect_line() {
+        let linea = "<tikR:RespuestaLinea><tikR:EstadoRegistro>Incorrecto</tikR:EstadoRegistro><tikR:CodigoErrorRegistro>1100</tikR:CodigoErrorRegistro><tikR:DescripcionErrorRegistro>Valor no permitido</tikR:DescripcionErrorRegistro><tikR:RegistroDuplicado><tik:IdPeticionRegistroDuplicado>1</tik:IdPeticionRegistroDuplicado><tik:EstadoRegistroDuplicado>Correcta</tik:EstadoRegistroDuplicado><tik:CodigoErrorRegistro>3000</tik:CodigoErrorRegistro><tik:DescripcionErrorRegistro>Registro duplicado</tik:DescripcionErrorRegistro></tikR:RegistroDuplicado></tikR:RespuestaLinea>";
+        let outcome = parse_response(respuesta("ParcialmenteCorrecto", linea).as_bytes());
+        assert_eq!(outcome.status, "rejected");
+        assert_eq!(outcome.codigo_error.as_deref(), Some("1100"));
+        assert_eq!(
+            outcome.errores,
+            vec![
+                ErrorRegistro {
+                    codigo: Some("1100".to_string()),
+                    descripcion: Some("Valor no permitido".to_string()),
+                },
+                ErrorRegistro {
+                    codigo: Some("3000".to_string()),
+                    descripcion: Some("Registro duplicado".to_string()),
+                },
+            ]
+        );
     }
 
     #[test]

@@ -138,6 +138,11 @@ pub fn migrations() -> Vec<Migration> {
             name: "r2_documentos_cobros_logo",
             sql: include_str!("migrations/012_r2_documentos_cobros_logo.sql"),
         },
+        Migration {
+            version: 14,
+            name: "estado_envio",
+            sql: include_str!("migrations/014_estado_envio.sql"),
+        },
     ]
 }
 
@@ -186,6 +191,28 @@ impl ListPagination {
 
     fn offset(&self) -> i64 {
         self.offset.unwrap_or(0)
+    }
+}
+
+/// Página máxima de los listados.
+const MAX_PAGE: i64 = 500;
+
+/// Recorre todas las páginas de un listado. Las exportaciones lo usan para no
+/// quedarse en las 50 filas de la página por defecto.
+pub fn collect_all_pages<T>(
+    mut page: impl FnMut(ListPagination) -> Result<Vec<T>, String>,
+) -> Result<Vec<T>, String> {
+    let mut all = Vec::new();
+    loop {
+        let rows = page(ListPagination {
+            limit: Some(MAX_PAGE),
+            offset: Some(all.len() as i64),
+        })?;
+        let last = (rows.len() as i64) < MAX_PAGE;
+        all.extend(rows);
+        if last {
+            return Ok(all);
+        }
     }
 }
 

@@ -2,6 +2,14 @@
 
 use super::*;
 
+/// Estado de la factura mientras la AEAT no confirma su anulación.
+pub const VOID_PENDING: &str = "VoidPending";
+/// `payload_version` de las exportaciones XML de anulación: así se sabe, al guardar
+/// la respuesta de la AEAT, que el envío era una anulación.
+pub const ANULACION_PAYLOAD_VERSION: &str = "verifactu-anulacion-xml-v1";
+
+/// Registra la anulación en la cadena y deja la factura en `VoidPending`.
+/// Solo pasa a `Void` cuando la AEAT acepta el envío (`record_verifactu_submission`).
 // Un argumento por dato del registro de anulación; agruparlos solo movería el problema.
 #[allow(clippy::too_many_arguments)]
 pub fn insert_anulacion_record(
@@ -31,8 +39,8 @@ pub fn insert_anulacion_record(
         .ok_or_else(|| format!("invoice not found: {invoice_id}"))?;
 
     tx.execute(
-        "UPDATE invoices SET status = 'Void', void_reason = ?2 WHERE id = ?1 AND status = 'Issued'",
-        params![invoice_id, reason],
+        "UPDATE invoices SET status = ?3, void_reason = ?2 WHERE id = ?1 AND status = 'Issued'",
+        params![invoice_id, reason, VOID_PENDING],
     )
     .map_err(db_error)
     .and_then(|updated| {
@@ -150,10 +158,13 @@ pub struct FiscalRecordVerificationRow {
     pub fiscal_hash: String,
     pub previous_fiscal_hash: Option<String>,
     pub xml_path: Option<String>,
+    /// `created` · `accepted` · `rejected` (anulaciones, según la respuesta AEAT).
+    pub record_status: String,
 }
 
+/// Todos los eventos (todas las páginas).
 pub fn list_audit_events(conn: &Connection) -> Result<Vec<AuditSummary>, String> {
-    list_audit_events_paginated(conn, ListPagination::default())
+    collect_all_pages(|page| list_audit_events_paginated(conn, page))
 }
 
 pub fn list_audit_events_paginated(
@@ -185,8 +196,9 @@ pub fn list_audit_events_paginated(
     rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
 }
 
+/// Todos los registros fiscales (todas las páginas).
 pub fn list_fiscal_records(conn: &Connection) -> Result<Vec<FiscalRecordSummary>, String> {
-    list_fiscal_records_paginated(conn, ListPagination::default())
+    collect_all_pages(|page| list_fiscal_records_paginated(conn, page))
 }
 
 pub fn list_fiscal_records_paginated(
@@ -196,8 +208,11 @@ pub fn list_fiscal_records_paginated(
     let pagination = pagination.normalized()?;
     let mut stmt = conn
         .prepare(
-            "SELECT id, company_id, invoice_id, record_type, generated_at, fiscal_hash, previous_fiscal_hash, xml_path, status
-             FROM fiscal_records ORDER BY generated_at DESC, rowid DESC
+            "SELECT fr.id, fr.company_id, fr.invoice_id, fr.record_type, fr.generated_at, fr.fiscal_hash,
+                    fr.previous_fiscal_hash, fr.xml_path, COALESCE(ao.status, fr.status)
+             FROM fiscal_records fr
+             LEFT JOIN anulacion_outcomes ao ON ao.fiscal_record_id = fr.id
+             ORDER BY fr.generated_at DESC, fr.rowid DESC
              LIMIT ?1 OFFSET ?2",
         )
         .map_err(db_error)?;
@@ -226,8 +241,10 @@ pub fn list_fiscal_records_for_verification(
         .prepare(
             "SELECT fr.id, fr.company_id, c.tax_id, fr.invoice_id, i.kind, i.rectification_reason_code, i.series, i.number, i.status,
                     i.tax_cents, i.total_cents, i.fiscal_hash, i.issued_at, fr.record_type,
-                    fr.generated_at, fr.fiscal_hash, fr.previous_fiscal_hash, fr.xml_path
+                    fr.generated_at, fr.fiscal_hash, fr.previous_fiscal_hash, fr.xml_path,
+                    COALESCE(ao.status, fr.status)
              FROM fiscal_records fr
+             LEFT JOIN anulacion_outcomes ao ON ao.fiscal_record_id = fr.id
              JOIN companies c ON c.id = fr.company_id
              JOIN invoices i ON i.id = fr.invoice_id
              ORDER BY fr.company_id ASC, fr.generated_at ASC, fr.rowid ASC",
@@ -254,6 +271,7 @@ pub fn list_fiscal_records_for_verification(
                 fiscal_hash: row.get(15)?,
                 previous_fiscal_hash: row.get(16)?,
                 xml_path: row.get(17)?,
+                record_status: row.get(18)?,
             })
         })
         .map_err(db_error)?;
@@ -318,6 +336,7 @@ pub fn verifactu_xml_already_accepted(conn: &Connection, xml_sha256: &str) -> Re
 }
 
 /// Respuesta AEAT a guardar como evidencia del envío.
+#[derive(Clone, Copy)]
 pub struct VerifactuSubmissionRecord<'a> {
     pub invoice_id: &'a str,
     pub fiscal_export_id: &'a str,
@@ -331,8 +350,8 @@ pub fn insert_verifactu_submission(
     let id = uuid::Uuid::new_v4().to_string();
     let response = record.response;
     conn.execute(
-        "INSERT INTO verifactu_submissions (id, invoice_id, fiscal_export_id, endpoint_name, xml_sha256, status, csv, estado_envio, estado_registro, codigo_error, descripcion_error, tiempo_espera_envio_seconds, submitted_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+        "INSERT INTO verifactu_submissions (id, invoice_id, fiscal_export_id, endpoint_name, xml_sha256, status, csv, estado_envio, estado_registro, codigo_error, descripcion_error, tiempo_espera_envio_seconds, submitted_at, http_status, soap_fault, errores_json)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         params![
             id,
             record.invoice_id,
@@ -347,10 +366,140 @@ pub fn insert_verifactu_submission(
             response.descripcion_error,
             response.tiempo_espera_envio_seconds.map(|value| value as i64),
             chrono::Utc::now().to_rfc3339(),
+            response.http_status,
+            response.soap_fault,
+            serde_json::to_string(&response.errores).map_err(|err| err.to_string())?,
         ],
     )
     .map_err(db_error)?;
     Ok(id)
+}
+
+/// Guarda el intento de envío y, si era una anulación, aplica la respuesta en la
+/// misma transacción:
+/// - aceptada (con o sin errores): factura `Void`, resultado `accepted`;
+/// - rechazada: factura vuelve a `Issued`, resultado `rejected`. El registro sigue en
+///   la cadena (es el «registro anterior generado en este sistema informático», Diseño
+///   de registro VERI*FACTU, hojas 2 y 3, `RegistroAnterior`) y la siguiente anulación
+///   sale con `RechazoPrevio=S` (hoja 3 y cuadro B «Anulación por rechazo»);
+/// - sin confirmar (`transport_error`): nada cambia, sigue «anulación pendiente».
+pub fn record_verifactu_submission(
+    conn: &mut Connection,
+    record: VerifactuSubmissionRecord,
+) -> Result<String, String> {
+    let tx = conn.transaction().map_err(db_error)?;
+    let id = insert_verifactu_submission(&tx, record)?;
+    let is_anulacion = tx
+        .query_row(
+            "SELECT payload_version = ?2 FROM fiscal_exports WHERE id = ?1",
+            params![record.fiscal_export_id, ANULACION_PAYLOAD_VERSION],
+            |row| row.get::<_, bool>(0),
+        )
+        .optional()
+        .map_err(db_error)?
+        .unwrap_or(false);
+    let outcome = match record.response.status.as_str() {
+        "accepted" | "accepted_with_errors" => Some(("Void", "accepted", "invoice_void_accepted")),
+        "rejected" => Some(("Issued", "rejected", "invoice_void_rejected")),
+        _ => None,
+    };
+    if let (true, Some((invoice_status, record_status, action))) = (is_anulacion, outcome) {
+        let updated = tx
+            .execute(
+                "UPDATE invoices SET status = ?2,
+                        void_reason = CASE WHEN ?2 = 'Issued' THEN NULL ELSE void_reason END
+                 WHERE id = ?1 AND status = ?3",
+                params![record.invoice_id, invoice_status, VOID_PENDING],
+            )
+            .map_err(db_error)?;
+        // Sin anulación pendiente (p. ej. reenvío ya resuelto): solo queda el intento guardado.
+        if updated == 1 {
+            // `fiscal_records` es inalterable: el resultado va a `anulacion_outcomes`.
+            tx.execute(
+                "INSERT INTO anulacion_outcomes (fiscal_record_id, invoice_id, status, submission_id, decided_at)
+                 SELECT fr.id, fr.invoice_id, ?2, ?3, ?4
+                 FROM fiscal_records fr
+                 LEFT JOIN anulacion_outcomes ao ON ao.fiscal_record_id = fr.id
+                 WHERE fr.invoice_id = ?1 AND fr.record_type = 'Anulacion' AND ao.fiscal_record_id IS NULL
+                 ORDER BY fr.generated_at DESC, fr.rowid DESC LIMIT 1",
+                params![
+                    record.invoice_id,
+                    record_status,
+                    id,
+                    chrono::Utc::now().to_rfc3339()
+                ],
+            )
+            .map_err(db_error)?;
+            let payload = serde_json::json!({ "submission_id": id }).to_string();
+            operational_audit(&tx, "invoice", record.invoice_id, action, &payload)?;
+        }
+    }
+    tx.commit().map_err(db_error)?;
+    Ok(id)
+}
+
+/// Exportación XML de la anulación pendiente de la factura (la última exportada), con
+/// la ruta de su XML. `None` si la factura no está en `VoidPending`. Permite reenviar
+/// tras reiniciar la app: la anulación no se puede volver a exportar mientras está pendiente.
+pub fn pending_anulacion_export(
+    conn: &Connection,
+    invoice_id: &str,
+) -> Result<Option<(String, String, String)>, String> {
+    conn.query_row(
+        "SELECT fe.id, fr.xml_path, fe.payload_hash
+         FROM invoices i
+         JOIN fiscal_exports fe ON fe.invoice_id = i.id AND fe.payload_version = ?2
+         JOIN fiscal_records fr ON fr.invoice_id = i.id AND fr.record_type = 'Anulacion'
+         WHERE i.id = ?1 AND i.status = ?3 AND fr.xml_path IS NOT NULL
+         ORDER BY fe.created_at DESC, fe.rowid DESC, fr.generated_at DESC, fr.rowid DESC
+         LIMIT 1",
+        params![invoice_id, ANULACION_PAYLOAD_VERSION, VOID_PENDING],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )
+    .optional()
+    .map_err(db_error)
+}
+
+/// Comprueba que una exportación de anulación es la de la anulación pendiente: un XML
+/// de anulación antiguo (ya rechazado o resuelto) no se puede reenviar, porque su
+/// respuesta se aplicaría a otra anulación. Las exportaciones de alta pasan sin más.
+pub fn check_anulacion_export_is_current(
+    conn: &Connection,
+    export_id: &str,
+    invoice_id: &str,
+) -> Result<(), String> {
+    let is_anulacion: bool = conn
+        .query_row(
+            "SELECT payload_version = ?2 FROM fiscal_exports WHERE id = ?1",
+            params![export_id, ANULACION_PAYLOAD_VERSION],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(db_error)?
+        .unwrap_or(false);
+    if !is_anulacion {
+        return Ok(());
+    }
+    match pending_anulacion_export(conn, invoice_id)? {
+        Some((current, _, _)) if current == export_id => Ok(()),
+        _ => Err("anulacion_not_pending".to_string()),
+    }
+}
+
+/// `true` si la última anulación de la factura fue rechazada por la AEAT: la nueva
+/// debe llevar `RechazoPrevio=S`.
+pub fn latest_anulacion_rejected(conn: &Connection, invoice_id: &str) -> Result<bool, String> {
+    conn.query_row(
+        "SELECT COALESCE(ao.status, fr.status) FROM fiscal_records fr
+         LEFT JOIN anulacion_outcomes ao ON ao.fiscal_record_id = fr.id
+         WHERE fr.invoice_id = ?1 AND fr.record_type = 'Anulacion'
+         ORDER BY fr.generated_at DESC, fr.rowid DESC LIMIT 1",
+        params![invoice_id],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map(|status| status.as_deref() == Some("rejected"))
+    .map_err(db_error)
 }
 
 /// Fila de `verifactu_submissions` para la interfaz (`verifactu_submission_list`).
@@ -369,6 +518,9 @@ pub struct VerifactuSubmissionSummary {
     pub descripcion_error: Option<String>,
     pub tiempo_espera_envio_seconds: Option<i64>,
     pub submitted_at: String,
+    pub http_status: Option<i64>,
+    pub soap_fault: Option<String>,
+    pub errores: Vec<fiscal_contract::messages::ErrorRegistro>,
 }
 
 /// Respuestas guardadas, de la más reciente a la más antigua; opcionalmente de una factura.
@@ -378,7 +530,7 @@ pub fn list_verifactu_submissions(
 ) -> Result<Vec<VerifactuSubmissionSummary>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, invoice_id, fiscal_export_id, endpoint_name, xml_sha256, status, csv, estado_envio, estado_registro, codigo_error, descripcion_error, tiempo_espera_envio_seconds, submitted_at
+            "SELECT id, invoice_id, fiscal_export_id, endpoint_name, xml_sha256, status, csv, estado_envio, estado_registro, codigo_error, descripcion_error, tiempo_espera_envio_seconds, submitted_at, http_status, soap_fault, errores_json
              FROM verifactu_submissions
              WHERE ?1 IS NULL OR invoice_id = ?1
              ORDER BY submitted_at DESC, rowid DESC",
@@ -400,6 +552,10 @@ pub fn list_verifactu_submissions(
                 descripcion_error: row.get(10)?,
                 tiempo_espera_envio_seconds: row.get(11)?,
                 submitted_at: row.get(12)?,
+                http_status: row.get(13)?,
+                soap_fault: row.get(14)?,
+                // Un JSON ilegible no debe ocultar el envío: se lista sin errores detallados.
+                errores: serde_json::from_str(&row.get::<_, String>(15)?).unwrap_or_default(),
             })
         })
         .map_err(db_error)?;

@@ -79,6 +79,7 @@ pub fn run() {
             commands::recurring::recurring_generate_due,
             commands::recurring::recurring_preview,
             commands::fiscal::verifactu_submission_list,
+            commands::fiscal::verifactu_pending_anulacion,
         ])
         .build(tauri::generate_context!())
         .expect("error while building CumpleFactura")

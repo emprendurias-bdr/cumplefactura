@@ -100,9 +100,10 @@ pub fn write_verifactu_anulacion_xml_draft_validated(
     invoice: &InvoicePdfData,
     previous: &PreviousInvoiceLink,
     generated_at: &str,
+    rechazo_previo: bool,
     assets: &VerifactuXsdAssets,
 ) -> Result<(), String> {
-    let xml = build_verifactu_anulacion_xml_draft(invoice, previous, generated_at)?;
+    let xml = build_verifactu_anulacion_xml_draft(invoice, previous, generated_at, rechazo_previo)?;
     write_xml(target_path, xml)?;
     let path = PathBuf::from(target_path);
     if let Err(err) = validate_verifactu_xml_file(&path, assets) {
@@ -255,10 +256,14 @@ pub fn build_verifactu_xml_draft(
 }
 
 /// Serializa un `RegistroAnulacion` enlazado a la cadena previa.
+/// `rechazo_previo`: la anulación anterior de esta factura fue rechazada por la AEAT;
+/// se informa `RechazoPrevio=S` (Diseño de registro VERI*FACTU, hoja 3 y cuadro B
+/// «Anulación por rechazo»). No es campo de la huella de anulación.
 pub fn build_verifactu_anulacion_xml_draft(
     invoice: &InvoicePdfData,
     previous: &PreviousInvoiceLink,
     generated_at: &str,
+    rechazo_previo: bool,
 ) -> Result<String, String> {
     let number = invoice
         .number
@@ -304,6 +309,9 @@ pub fn build_verifactu_anulacion_xml_draft(
         &expedition_date,
     );
     xml.push_str("      </sf:IDFactura>\n");
+    if rechazo_previo {
+        push_text(&mut xml, 6, "sf:RechazoPrevio", "S");
+    }
     xml.push_str("      <sf:Encadenamiento>\n");
     xml.push_str("        <sf:RegistroAnterior>\n");
     push_text(&mut xml, 10, "sf:IDEmisorFactura", &previous.company_tax_id);
@@ -887,8 +895,21 @@ mod tests {
             &invoice(),
             &previous_link(),
             "2026-05-28T12:05:00Z",
+            false,
         )
         .expect("xml");
+        assert!(!xml.contains("RechazoPrevio"));
+        let retry = build_verifactu_anulacion_xml_draft(
+            &invoice(),
+            &previous_link(),
+            "2026-05-28T12:05:00Z",
+            true,
+        )
+        .expect("xml");
+        // Va tras IDFactura y antes de Encadenamiento, como pide el XSD.
+        assert!(retry.contains(
+            "</sf:IDFactura>\n      <sf:RechazoPrevio>S</sf:RechazoPrevio>\n      <sf:Encadenamiento>"
+        ));
 
         assert!(xml.contains("<sf:RegistroAnulacion>"));
         assert!(xml.contains("<sf:IDEmisorFacturaAnulada>B00000000</sf:IDEmisorFacturaAnulada>"));
@@ -1007,6 +1028,7 @@ mod tests {
             &invoice(),
             &previous_link(),
             "2026-05-28T12:05:00Z",
+            true,
             &assets,
         )
         .expect("validated anulacion export");

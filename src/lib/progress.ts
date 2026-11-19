@@ -34,7 +34,7 @@ export function fiscalProgress(
   exports: ExportLike[] = [],
   submissions: SubmissionLike[] = [],
 ): FiscalProgress {
-  const issued = ["Issued", "Void", "Rectified"].includes(invoice.status) && (invoice.number ?? 0) > 0;
+  const issued = ["Issued", "VoidPending", "Void", "Rectified"].includes(invoice.status) && (invoice.number ?? 0) > 0;
   const recorded =
     issued &&
     records.some(

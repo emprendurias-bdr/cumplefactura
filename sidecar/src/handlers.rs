@@ -195,6 +195,7 @@ pub fn invoke_submit<B: Backend>(
         descripcion_error: outcome.descripcion_error,
         tiempo_espera_envio_seconds: outcome.tiempo_espera_envio_seconds,
         soap_fault: outcome.soap_fault,
+        errores: outcome.errores,
         // Se intentó la conexión: puede que la AEAT recibiera el registro aunque la
         // respuesta no llegara. La app lo trata como "no confirmado".
         external_call_performed: true,
@@ -431,6 +432,56 @@ pub(crate) mod tests {
             Some("connect_error: refused")
         );
         assert_eq!(result.http_status, None);
+    }
+
+    /// Un caso por estado posible de la respuesta, con la AEAT falsa local.
+    #[test]
+    fn submit_maps_every_response_state() {
+        let linea = |envio: &str, registro: &str, codigo: &str| {
+            format!("<RespuestaRegFactuSistemaFacturacion><CSV>CSV1</CSV><TiempoEsperaEnvio>60</TiempoEsperaEnvio><EstadoEnvio>{envio}</EstadoEnvio><RespuestaLinea><EstadoRegistro>{registro}</EstadoRegistro><CodigoErrorRegistro>{codigo}</CodigoErrorRegistro><DescripcionErrorRegistro>Detalle {codigo}</DescripcionErrorRegistro></RespuestaLinea></RespuestaRegFactuSistemaFacturacion>")
+        };
+        let request = submit("SistemaVerifactuPruebas", "vault://certs/ok");
+        let run =
+            |backend: FakeBackend| invoke_submit(&config(true, false), &backend, &request).unwrap();
+
+        let accepted = run(FakeBackend::answering(200, ACCEPTED));
+        assert_eq!(accepted.status, "accepted");
+        assert!(accepted.errores.is_empty());
+
+        let with_errors = run(FakeBackend::answering(
+            200,
+            &linea("Correcto", "AceptadoConErrores", "2004"),
+        ));
+        assert_eq!(with_errors.status, "accepted_with_errors");
+        assert_eq!(with_errors.tiempo_espera_envio_seconds, Some(60));
+        assert_eq!(with_errors.errores[0].codigo.as_deref(), Some("2004"));
+
+        let rejected = run(FakeBackend::answering(
+            200,
+            &linea("Incorrecto", "Incorrecto", "1100"),
+        ));
+        assert_eq!(rejected.status, "rejected");
+        assert_eq!(rejected.codigo_error.as_deref(), Some("1100"));
+        assert_eq!(rejected.descripcion_error.as_deref(), Some("Detalle 1100"));
+
+        let fault = run(FakeBackend::answering(
+            500,
+            "<Envelope><Body><Fault><faultcode>Client</faultcode><faultstring>Codigo[4102]</faultstring></Fault></Body></Envelope>",
+        ));
+        assert_eq!(fault.status, "rejected");
+        assert_eq!(fault.http_status, Some(500));
+        assert_eq!(fault.soap_fault.as_deref(), Some("Client: Codigo[4102]"));
+
+        for network in ["connect_error: refused", "read_error: timed out"] {
+            let unconfirmed = run(FakeBackend {
+                response: Err(network.to_string()),
+                calls: RefCell::new(Vec::new()),
+                not_after: None,
+            });
+            assert_eq!(unconfirmed.status, "transport_error");
+            assert_eq!(unconfirmed.descripcion_error.as_deref(), Some(network));
+            assert!(unconfirmed.csv.is_none() && unconfirmed.external_call_performed);
+        }
     }
 
     fn preflight_with(

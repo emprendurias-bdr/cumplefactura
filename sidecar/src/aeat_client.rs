@@ -134,7 +134,8 @@ mod tests {
         let key_pem = generated.signing_key.serialize_pem();
         let identity = Identity::from_pkcs8(cert_pem.as_bytes(), key_pem.as_bytes()).unwrap();
         let acceptor = TlsAcceptor::new(identity).unwrap();
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        // Misma resolución que el cliente: en Linux "localhost" puede ser ::1 primero.
+        let listener = TcpListener::bind("localhost:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let handle = std::thread::spawn(move || {
             let (tcp, _) = listener.accept().unwrap();
@@ -174,6 +175,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "schannel: Identity::from_pkcs8 solo importa RSA y rcgen genera ECDSA; corre en CI Linux"
+    )]
     fn sends_soap_over_tls_and_reads_chunked_response() {
         let (target, certificate, server) = tls_server(
             b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n<ok/>\r\n0\r\n\r\n",
@@ -194,6 +199,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "schannel: Identity::from_pkcs8 solo importa RSA y rcgen genera ECDSA; corre en CI Linux"
+    )]
     fn keeps_body_of_http_500_faults() {
         let (target, certificate, server) =
             tls_server(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 8\r\n\r\n<Fault/>");
@@ -212,6 +221,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "schannel: Identity::from_pkcs8 solo importa RSA y rcgen genera ECDSA; corre en CI Linux"
+    )]
     fn rejects_untrusted_server_certificate() {
         let (target, _certificate, _server) = tls_server(b"HTTP/1.1 200 OK\r\n\r\n");
         let connector = TlsConnector::new().unwrap();

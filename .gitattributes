@@ -1,0 +1,2 @@
+# Fixtures comparados byte a byte en tests (include_str!): LF en todas las plataformas.
+src-tauri/src/services/testdata/*.xml text eol=lf

@@ -7,6 +7,7 @@
     "dev": "vite --host 127.0.0.1 --port 1420",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 1420",
+    "test": "node --test \"tests/ui/*.test.mjs\"",
     "tauri": "tauri",
     "tauri:dev": "cargo build -p cumplefactura-sidecar && tauri dev",
     "tauri:build": "cargo build -p cumplefactura-sidecar --release && tauri build",

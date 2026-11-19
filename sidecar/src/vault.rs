@@ -402,6 +402,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "schannel: Identity::from_pkcs8 solo importa RSA y rcgen genera ECDSA; corre en CI Linux"
+    )]
     fn reads_not_after_from_certificate_der_and_identity() {
         let key = rcgen::KeyPair::generate().unwrap();
         let mut params = rcgen::CertificateParams::new(vec!["prueba".to_string()]).unwrap();

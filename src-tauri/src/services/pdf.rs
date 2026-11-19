@@ -574,7 +574,7 @@ fn render(sheet: &Sheet) -> Vec<u8> {
 
     // Pie de cada página.
     let count = pages.pages.len();
-    for index in 0..count {
+    for (index, page) in pages.pages.iter_mut().enumerate() {
         let mut footer = Pages {
             pages: vec![String::new()],
             y: 0.0,
@@ -595,7 +595,7 @@ fn render(sheet: &Sheet) -> Vec<u8> {
         );
         footer.gray(0.0);
         let text = footer.pages.remove(0);
-        pages.pages[index].push_str(&text);
+        page.push_str(&text);
     }
     build_pdf(&pages.pages, sheet.logo.as_ref())
 }

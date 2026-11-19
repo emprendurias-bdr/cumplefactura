@@ -172,6 +172,8 @@ mod tests {
         drop(live);
         let reopened = open_database(&dir.join("live.sqlite3")).unwrap();
         assert_eq!(company_count(&reopened), 2);
+        // Windows no borra ficheros con conexiones abiertas.
+        drop((safety, reopened));
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -196,6 +198,7 @@ mod tests {
             .query_row("SELECT legal_name FROM companies", [], |row| row.get(0))
             .unwrap();
         assert_eq!(name, "Actual SL");
+        drop(live);
         fs::remove_dir_all(dir).unwrap();
     }
 
@@ -240,6 +243,7 @@ mod tests {
             restore_database(&mut memory, &newer).unwrap_err(),
             "restore_requires_file_database"
         );
+        drop(live);
         fs::remove_dir_all(dir).unwrap();
     }
 }

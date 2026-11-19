@@ -1,0 +1,67 @@
+# CI de CumpleFactura. Sin secretos: nada de certificados, AEAT, Edge driver
+# ni instalador; eso queda en el gate local (`npm run validate:regulatory`).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # En main no se cancela: cada commit fusionado conserva su resultado.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  frontend:
+    name: Frontend (build, contratos, tests UI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Node 24 ejecuta los imports .ts de tests/ui sin flags.
+          node-version: 24
+          cache: npm
+      # --ignore-scripts: evita descargar edgedriver, que solo usan los E2E locales.
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: npm run validate:ui-contract
+      - run: npm run validate:secret-scan
+      - run: npm test
+
+  sidecar-linux:
+    name: Sidecar (tests TLS; Linux)
+    # Los tests TLS del sidecar usan claves ECDSA de rcgen, que schannel no
+    # importa con Identity::from_pkcs8: en Windows se ignoran y corren aqui (OpenSSL).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p cumplefactura-sidecar -p fiscal-contract
+
+  rust:
+    name: Rust (fmt, clippy, tests; Windows)
+    # La validacion XSD VERI*FACTU de los tests invoca PowerShell.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      # tauri::generate_context! embebe ../dist al compilar.
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace

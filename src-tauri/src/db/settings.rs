@@ -34,6 +34,8 @@ pub fn update_app_settings(
         default_territory_flags: input.default_territory_flags,
         onboarding_completed: input.onboarding_completed,
         verifactu_endpoint_name: input.verifactu_endpoint_name,
+        certificate_password_mode: input.certificate_password_mode,
+        qr_environment: input.qr_environment,
         updated_at: chrono::Utc::now().to_rfc3339(),
     };
     let value =

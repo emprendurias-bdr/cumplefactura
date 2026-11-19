@@ -39,8 +39,13 @@ impl handlers::Backend for AeatBackend {
         &self,
         vault_dir: Option<&Path>,
         certificate_ref: &str,
+        password: Option<&str>,
     ) -> Result<Self::Certificate, &'static str> {
-        vault::load(vault_dir, certificate_ref)
+        vault::load(vault_dir, certificate_ref, password)
+    }
+
+    fn certificate_not_after(&self, certificate: &Self::Certificate) -> Option<i64> {
+        vault::certificate_not_after(certificate)
     }
 
     fn post_soap(

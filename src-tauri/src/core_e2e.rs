@@ -70,6 +70,7 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
         rectifies_invoice_id: None,
         rectification_reason_code: None,
         rectification_method: None,
+        notes: String::new(),
         lines: vec![InvoiceLineInput {
             description: "Servicio profesional".to_string(),
             quantity: 1,
@@ -77,6 +78,7 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
             discount_rate_basis_points: None,
             tax_rate_basis_points: 2_100,
             withholding_rate_basis_points: None,
+            price_pending: None,
         }],
     };
     let draft = Invoice::draft(draft_input.clone()).expect("draft invoice");
@@ -154,8 +156,12 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
         ))
     };
     remove_if_exists(&pdf_path);
-    pdf::write_invoice_pdf(pdf_path.to_str().expect("pdf utf8"), &invoice_data)
-        .expect("PDF export");
+    pdf::write_invoice_pdf(
+        pdf_path.to_str().expect("pdf utf8"),
+        &invoice_data,
+        crate::services::qr::QrEnvironment::Test,
+    )
+    .expect("PDF export");
 
     let json_path = if write_evidence {
         evidence_dir.join("latest-core-e2e-invoice.json")

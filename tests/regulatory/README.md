@@ -20,6 +20,6 @@ Specs de aceptación + fixtures + evidencia generada por `tools/`.
 ## Subcarpetas
 
 - `fixtures/` — entradas versionadas
-- `evidence/` — **generado** por el gate (no editar)
+- `evidence/` — **generado** por el gate (no editar). Solo guarda los resúmenes `latest-*` y los registros de la última ejecución: el gate borra los anteriores al terminar.
 
 Ejecutar: `npm run validate:regulatory` (u scripts individuales en `package.json`).

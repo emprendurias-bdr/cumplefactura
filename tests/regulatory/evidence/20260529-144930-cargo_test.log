@@ -1,7 +1,0 @@
-﻿cargo.exe :     Finished `test` profile [unoptimized + debuginfo] target(s) in 3.57s
-En C:\07 DESARROLLO\apps\CumpleFactura\tools\run-regulatory-gate.ps1: 40 Carácter: 9
-+         & $Command @Arguments 2>&1 | Tee-Object -FilePath $logPath
-+         ~~~~~~~~~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: (    Finished `t...get(s) in 3.57s:String) [], RemoteException
-    + FullyQualifiedErrorId : NativeCommandError
- 

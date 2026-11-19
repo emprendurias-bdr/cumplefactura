@@ -1,12 +1,15 @@
 /**
- * Bootstrap React de CumpleFactura (Vite + Tauri webview).
- * Monta <App /> en #root con StrictMode; estilos globales en styles.css.
- * No hay router: App.tsx gestiona estado y navegación; cada pantalla vive en sections/.
+ * Arranque React de CumpleFactura (Vite + webview Tauri). Estilos en orden de design.md:
+ * tokens.css → bdr.css → motion.css (copiados tal cual de bdr-ui) → fuentes → app.css (solo var(--…)).
  */
 import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
-import "./styles.css";
+import "./styles/bdr/tokens.css";
+import "./styles/bdr/bdr.css";
+import "./styles/bdr/motion.css";
+import "./styles/fonts.css";
+import "./styles/app.css";
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

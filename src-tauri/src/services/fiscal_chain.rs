@@ -364,10 +364,12 @@ mod tests {
                     discount_rate_basis_points: None,
                     tax_rate_basis_points: 2_100,
                     withholding_rate_basis_points: None,
+                    price_pending: None,
                 }],
                 rectifies_invoice_id: None,
                 rectification_reason_code: None,
                 rectification_method: None,
+                notes: String::new(),
             },
             number,
             issued_at: issued_at.to_string(),
@@ -451,6 +453,7 @@ mod tests {
             generated_at,
             target.to_str().expect("utf8"),
             &event,
+            "Factura duplicada",
         )
         .expect("insert anulacion");
 

@@ -1,11 +1,11 @@
-//! IPC empresa emisora y configuración de series de numeración.
+//! IPC empresa emisora, configuración de series de numeración y logo del PDF.
 
 use crate::db::{self, AppState, CompanySummary};
 use crate::domain::company::{
     Company, CompanyInput, CompanyUpdateInput, InvoiceSeriesConfig, InvoiceSeriesConfigInput,
 };
 use crate::domain::require;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 /// Alta de empresa (valida dominio → insert SQLite).
 #[tauri::command]
@@ -54,4 +54,35 @@ pub fn company_series_list(
     require("company_id", &company_id)?;
     let conn = state.lock()?;
     db::list_invoice_series_configs(&conn, &company_id, fiscal_year)
+}
+
+/// Copia el logo (JPEG o PNG sin transparencia, ≤ 1 MB) a `<app data>/logos/` y devuelve la ruta.
+#[tauri::command]
+pub fn company_logo_set(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    company_id: String,
+    source_path: String,
+) -> Result<String, String> {
+    require("company_id", &company_id)?;
+    require("source_path", &source_path)?;
+    let logos_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|err| format!("app data dir error: {err}"))?
+        .join("logos");
+    let mut conn = state.lock()?;
+    db::set_company_logo(
+        &mut conn,
+        &company_id,
+        std::path::Path::new(&source_path),
+        &logos_dir,
+    )
+}
+
+#[tauri::command]
+pub fn company_logo_clear(state: State<'_, AppState>, company_id: String) -> Result<(), String> {
+    require("company_id", &company_id)?;
+    let mut conn = state.lock()?;
+    db::clear_company_logo(&mut conn, &company_id)
 }

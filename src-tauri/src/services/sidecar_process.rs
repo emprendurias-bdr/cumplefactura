@@ -269,6 +269,7 @@ mod tests {
         let body = serde_json::to_vec(&SubmitPreflightRequest {
             endpoint_name: "SistemaVerifactuPruebas".to_string(),
             certificate_ref: "vault://certs/no-existe".to_string(),
+            certificate_password: None,
         })
         .unwrap();
         let preflight: SubmitPreflightResponse = fiscal_contract::http::post_json_loopback(

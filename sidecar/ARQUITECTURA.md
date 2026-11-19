@@ -84,8 +84,11 @@ Sin autenticación. Respuesta 200:
 Comprueba si se podría enviar ahora. Nunca sale a internet.
 
 ```json
-{"endpoint_name":"SistemaVerifactuPruebas","certificate_ref":"vault://certs/mi-empresa"}
+{"endpoint_name":"SistemaVerifactuPruebas","certificate_ref":"vault://certs/mi-empresa",
+ "certificate_password":"…"}
 ```
+
+`certificate_password` es opcional (`null` o ausente): si no llega, el sidecar usa `CUMPLEFACTURA_CERT_PASSWORD_<ID>` o `CUMPLEFACTURA_CERT_PASSWORD`. Ver «Contraseña del certificado» más abajo.
 
 Respuesta 200:
 
@@ -93,8 +96,11 @@ Respuesta 200:
 {"status":"blocked","blockers":["certificate_password_required","aeat_calls_disabled"],
  "warnings":[],"endpoint_name":"SistemaVerifactuPruebas","endpoint_allowed":true,
  "certificate_loaded":false,"certificate_source":null,
+ "certificate_expires_at":null,"certificate_expires_in_days":null,
  "aeat_calls_enabled":false,"production_enabled":false,"external_call_performed":false}
 ```
+
+Con el certificado abierto, `certificate_expires_at` es su `notAfter` (`AAAA-MM-DDThh:mm:ssZ`) y `certificate_expires_in_days` los días completos que quedan (negativo si ya caducó); `null` si no se pudieron leer. Avisos: `certificate_expires_soon` (≤ 30 días) y `certificate_expired` (también en `blockers`).
 
 Códigos de bloqueo posibles:
 
@@ -105,9 +111,26 @@ Códigos de bloqueo posibles:
 | `certificate_ref_invalid` | La referencia no es `vault://certs/<id>` con `[A-Za-z0-9_-]`, o apunta fuera del vault. |
 | `certificate_vault_dir_missing` | No hay carpeta de vault o no existe. |
 | `certificate_not_found` | No hay `<id>.p12` ni `<id>.pfx`. |
-| `certificate_password_required` | Falta `CUMPLEFACTURA_CERT_PASSWORD_<ID>` y `CUMPLEFACTURA_CERT_PASSWORD`. |
+| `certificate_password_required` | No llegó `certificate_password` y faltan `CUMPLEFACTURA_CERT_PASSWORD_<ID>` y `CUMPLEFACTURA_CERT_PASSWORD`. La interfaz pide la contraseña. |
 | `certificate_pkcs12_invalid` | El fichero no abre con esa contraseña. |
+| `certificate_expired` | El `notAfter` del certificado ya pasó. |
 | `aeat_calls_disabled` | Arrancado sin `--allow-aeat`. |
+
+### Contraseña del certificado
+
+Tres modos, elegidos en los ajustes de la app (`certificate_password_mode`, ADR-002):
+
+| Modo | Qué manda la app | Dónde vive la contraseña |
+|---|---|---|
+| `session` (por defecto) | `certificate_password` en cada preflight/envío | En la memoria de la interfaz mientras la app está abierta. |
+| `keychain` | Igual que `session` mientras no se apruebe la librería del llavero | — |
+| `env` | `null` | Variable de entorno del sidecar (homologación y pruebas). |
+
+Regla: la contraseña **nunca** se registra (los logs no llevan cuerpos), **nunca** aparece en una respuesta (los errores del vault son códigos fijos sin detalle), **nunca** se guarda en disco ni en SQLite, y el sidecar la suelta en cuanto abre el PKCS#12. Solo viaja por loopback, dentro del cuerpo firmado con HMAC. La app, además, rechaza cualquier respuesta del sidecar que la contenga (contraseñas de 8 caracteres o más, para no confundirla con un código de la AEAT).
+
+### Caducidad sin librerías
+
+`native-tls` no expone el certificado de una `Identity` y el PKCS#12 va cifrado. `vault::certificate_not_after` hace un apretón de manos TLS del sidecar consigo mismo por una tubería en memoria (sin red ni sockets; 5 s como máximo): el lado servidor usa la identidad y el lado cliente lee el certificado del par en DER (`peer_certificate`, disponible en SChannel, Secure Transport y OpenSSL). Del DER solo se lee `tbsCertificate.validity.notAfter`. Si algo falla, los campos van a `null` y no hay aviso: la caducidad nunca impide un envío salvo que ya haya pasado.
 
 ### `POST /verifactu/invoke-submit`
 
@@ -116,7 +139,7 @@ Envía a la AEAT el documento `sfLR:RegFactuSistemaFacturacion` completo que gen
 ```json
 {"xml":"<sfLR:RegFactuSistemaFacturacion …>…</sfLR:RegFactuSistemaFacturacion>",
  "xml_sha256":"<sha256 en hexadecimal>","endpoint_name":"SistemaVerifactuPruebas",
- "certificate_ref":"vault://certs/mi-empresa","timeout_seconds":30}
+ "certificate_ref":"vault://certs/mi-empresa","timeout_seconds":30,"certificate_password":null}
 ```
 
 Comprobaciones, en este orden. La primera que falla devuelve 409 sin haber abierto ninguna conexión:
@@ -148,7 +171,9 @@ Si todas pasan, se envía y la respuesta es 200 aunque la AEAT rechace el regist
 | `rejected` | `EstadoEnvio=Incorrecto` o la AEAT devolvió un `SOAP Fault`, que va en `soap_fault`. |
 | `transport_error` | No hubo respuesta AEAT interpretable: DNS, TLS, red o respuesta ilegible. El detalle va en `descripcion_error`. |
 
-`external_call_performed: true` significa que se intentó la conexión. Con `transport_error` la AEAT pudo recibir el registro sin que llegara la respuesta. La app lo trata como «no confirmado» y no lo da por enviado.
+`external_call_performed: true` significa que se intentó la conexión. Con `transport_error` la AEAT pudo recibir el registro sin que llegara la respuesta. La app lo guarda igualmente en `verifactu_submissions`, lo muestra como «sin confirmar» y deja reintentar **solo a petición del usuario**.
+
+Antes de llamar al sidecar, la app rechaza `xml_already_accepted_by_aeat` (ese XML ya tiene una respuesta `accepted` o `accepted_with_errors`) y `aeat_wait_time_pending:<segundos>` (la última respuesta de la AEAT para esa empresa y ese endpoint pidió esperar y aún no ha pasado el tiempo).
 
 Otros errores del canal: 400 `bad_request` (JSON ilegible), 401 `hmac_invalid`, 404 `not_found`, 405 `method_not_allowed`, 413 `body_too_large`.
 
@@ -163,18 +188,18 @@ Otros errores del canal: 400 `bad_request` (JSON ilegible), 401 `hmac_invalid`, 
 | XML manipulado entre la app y la AEAT | La app envía el SHA-256 y el sidecar lo recalcula. La app comprueba el hash devuelto. |
 | XXE o DTD en el XML | `roxmltree` rechaza DTD. |
 | Enviar a producción por error | Hace falta `--allow-production`, que v1 nunca pasa. |
-| Doble registro por reintento automático | No hay reintentos automáticos. La app impide reenviar un XML ya aceptado. |
+| Doble registro por reintento automático | No hay reintentos automáticos. La app impide reenviar un XML ya aceptado e impone `TiempoEsperaEnvio`. |
 | Servidor AEAT suplantado | Validación TLS estándar del sistema, sin excepciones. |
-| Filtración por logs o respuestas | Los logs solo llevan método, ruta, estado y traza. Las respuestas no contienen referencias, rutas, contraseñas ni el XML de la AEAT. |
+| Filtración por logs o respuestas | Los logs solo llevan método, ruta, estado y traza. Las respuestas no contienen referencias, rutas, contraseñas ni el XML de la AEAT. La app rechaza respuestas que contengan la referencia, el secreto o la contraseña. |
+| Contraseña robada de la app o del disco | En modo `session` solo vive en memoria y viaja por loopback firmada; nunca se escribe en SQLite, logs ni ficheros. |
 | Sidecar huérfano con el certificado abierto | Vigilante de stdin y cierre explícito al salir la app. |
 
 ## Límites conocidos de v1
 
-- **Contraseña por variable de entorno.** `CUMPLEFACTURA_CERT_PASSWORD_<ID>` o `CUMPLEFACTURA_CERT_PASSWORD`. Es incómodo para un usuario final y está pendiente de rediseño.
-- **Sin caducidad del certificado en el preflight.** `native-tls` no expone la fecha y leerla exigiría otra librería.
+- **Sin llavero del sistema.** El modo `keychain` se acepta pero funciona como `session` hasta que se apruebe la librería (`keyring`).
+- **Caducidad por apretón de manos en memoria.** Probada en Linux (OpenSSL); en Windows y macOS usa la misma API de `native-tls` pero no se ha probado con un certificado FNMT real. Si falla, `null`.
 - **PKCS#12 antiguos en Linux.** OpenSSL 3 no abre ficheros cifrados con RC2 o 3DES sin el proveedor «legacy». En Windows y macOS no hay problema.
 - **El TLS mutuo solo se prueba contra la AEAT real.** Los tests automáticos prueban TLS con un servidor local, pero `native-tls` no puede exigir certificado de cliente como servidor. El envío real se comprueba con `node tools/homolog-verifactu.mjs` contra el entorno de pruebas.
-- **`TiempoEsperaEnvio` se guarda pero no se impone.** La AEAT pide esperar entre envíos y la app solo lo muestra.
 - **Un envío cada vez.** El servidor atiende las peticiones en serie, a propósito.
 
 ## Dependencias
@@ -230,8 +255,9 @@ post_json_loopback (firma HMAC) ─▶ par loopback?
                                                         producción sin flag?
                                                         Backend::load_certificate ─▶ certificate_id
                                                                                      <vault>/<id>.p12|.pfx
-                                                                                     contraseña (env)
+                                                                                     contraseña (cuerpo o env)
                                                                                      Identity::from_pkcs12
+                                                        certificate_not_after ─▶ TLS en memoria → notAfter
                                                         --allow-aeat?
                                    ◀── 200 {status: ready|blocked, blockers[], …,
                                             external_call_performed: false}
@@ -244,6 +270,8 @@ rechaza si external_call_performed == true
 verifactu_submit::submit   server.rs      handlers::invoke_submit   soap.rs            aeat_client.rs          AEAT
 ──────────────────────     ─────────      ───────────────────────   ────────────       ─────────────────       ────
 read_checked_xml
+¿XML ya aceptado?
+check_wait_time
 post_json_loopback ──────▶ HMAC ok ─────▶ 1 endpoint en lista
                                           2 producción solo con flag
                                           3 sha256(xml) == xml_sha256
@@ -256,8 +284,8 @@ post_json_loopback ──────▶ HMAC ok ─────▶ 1 endpoint e
                                           parse_response ◀────────── AeatOutcome
                            ◀── 200 {status, csv, estado_*, …, external_call_performed: true}
 sha256 devuelto == enviado?
-¿filtra cert ref o secreto?
-aeat_answered → insert verifactu_submissions
+¿filtra cert ref, secreto o contraseña?
+insert verifactu_submissions (siempre, también transport_error)
 ```
 
-Cualquier fallo en 1–6 devuelve `409 {error, external_call_performed:false}` **antes** del paso 7. Un fallo en 7 devuelve 200 con `status: transport_error` y `external_call_performed: true`: la AEAT pudo recibir el registro, así que la app lo muestra como «sin confirmar» y no lo reintenta sola.
+Cualquier fallo en 1–6 devuelve `409 {error, external_call_performed:false}` **antes** del paso 7. Un fallo en 7 devuelve 200 con `status: transport_error` y `external_call_performed: true`: la AEAT pudo recibir el registro, así que la app lo guarda, lo muestra como «sin confirmar» y no lo reintenta sola.

@@ -243,6 +243,11 @@ foreach ($limit in $summary.live_limits) {
 }
 [System.IO.File]::WriteAllText($mdPath, ($md -join [Environment]::NewLine), $utf8NoBom)
 
+# Solo se versiona la última ejecución: el gate y el ledger no leen registros de ejecuciones anteriores.
+Get-ChildItem -Path $EvidenceDir -File |
+    Where-Object { $_.Name -match '^\d{8}-\d{6}-' -and -not $_.Name.StartsWith("$Timestamp-") } |
+    Remove-Item -Force
+
 Write-Host "Regulatory gate evidence:"
 Write-Host $jsonPath
 Write-Host $mdPath

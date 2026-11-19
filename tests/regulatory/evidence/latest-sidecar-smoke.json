@@ -1,0 +1,13 @@
+{
+  "app": "CumpleFactura",
+  "generated_at": "2026-11-19T23:31:59.735Z",
+  "status": "failed",
+  "binary": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\.worktrees\\g1\\target\\release\\cumplefactura-sidecar.exe",
+  "external_call_performed": false,
+  "checks": {},
+  "error": "sidecar binary not found: C:\\07 DESARROLLO\\apps\\CumpleFactura\\.worktrees\\g1\\target\\release\\cumplefactura-sidecar.exe",
+  "limits": [
+    "The sidecar runs without --allow-aeat, so it cannot reach AEAT.",
+    "It proves process lifecycle, HMAC boundary and fail-closed policy; real mTLS submission is verified manually with tools/homolog-verifactu.mjs."
+  ]
+}

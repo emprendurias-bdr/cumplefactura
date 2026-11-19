@@ -1,20 +1,20 @@
 {
   "app": "CumpleFactura",
-  "generated_at": "2026-06-28T19:23:23.321Z",
+  "generated_at": "2026-11-19T23:35:37.291Z",
   "status": "blocked",
-  "gate_run_id": "20260628-212017",
+  "gate_run_id": "20261120-013112",
   "sections": [
     {
       "id": "tauri_desktop_e2e",
       "title": "Tauri desktop E2E",
-      "status": "ready",
+      "status": "blocked",
       "checks": [
         {
           "id": "tauri_release_exe_exists",
-          "ok": true,
+          "ok": false,
           "required": true,
           "detail": "Release executable must exist before desktop E2E can run.",
-          "evidence": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\src-tauri\\target\\release\\cumplefactura.exe"
+          "evidence": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\.worktrees\\g1\\target\\release\\cumplefactura.exe"
         },
         {
           "id": "tauri_driver_available",
@@ -30,83 +30,79 @@
           "ok": true,
           "required": true,
           "detail": "Microsoft Edge WebDriver is required for Windows Tauri/WebView2 desktop automation.",
-          "evidence": {
-            "msedgedriver": [
-              "C:\\Users\\Usuario\\AppData\\Local\\Temp\\msedgedriver.exe"
-            ],
-            "chromedriver": [
-              "C:\\07 DESARROLLO\\apps\\CumpleFactura\\node_modules\\.bin\\chromedriver.cmd",
-              "C:\\07 DESARROLLO\\apps\\CumpleFactura\\node_modules\\chromedriver\\lib\\chromedriver\\chromedriver.exe"
-            ]
-          }
+          "evidence": [
+            "C:\\Users\\Usuario\\AppData\\Local\\Temp\\msedgedriver.exe"
+          ]
         },
         {
           "id": "tauri_desktop_e2e_evidence_passed",
-          "ok": true,
+          "ok": false,
           "required": true,
           "detail": "Latest Tauri desktop E2E verifier evidence must be present and passed.",
-          "evidence": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-tauri-desktop-e2e.json"
+          "evidence": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\.worktrees\\g1\\tests\\regulatory\\evidence\\latest-tauri-desktop-e2e.json"
         }
       ],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "tauri_release_exe_exists",
+          "detail": "Release executable must exist before desktop E2E can run."
+        },
+        {
+          "id": "tauri_desktop_e2e_evidence_passed",
+          "detail": "Latest Tauri desktop E2E verifier evidence must be present and passed."
+        }
+      ],
       "warnings": []
     },
     {
-      "id": "real_xades",
-      "title": "Certificate-backed XAdES",
+      "id": "sidecar",
+      "title": "VERI*FACTU sidecar",
       "status": "blocked",
       "checks": [
         {
-          "id": "sidecar_workspace_exists",
-          "ok": true,
-          "required": true,
-          "detail": "ContaPro sidecar workspace must exist.",
-          "evidence": "C:\\07 DESARROLLO\\apps\\contapro\\services\\sidecar"
-        },
-        {
-          "id": "sidecar_gate_passed",
-          "ok": true,
-          "required": true,
-          "detail": "Sidecar regulatory gate must be green before using it for real signing.",
-          "evidence": "C:\\07 DESARROLLO\\apps\\contapro\\services\\sidecar\\tests\\regulatory\\evidence\\latest-regulatory-gate.json"
-        },
-        {
-          "id": "sidecar_ledger_passed",
-          "ok": true,
-          "required": true,
-          "detail": "Sidecar evidence ledger must be green before using it for real signing.",
-          "evidence": "C:\\07 DESARROLLO\\apps\\contapro\\services\\sidecar\\tests\\regulatory\\evidence\\latest-evidence-ledger.json"
-        },
-        {
-          "id": "cumplefactura_real_xades_flag",
+          "id": "sidecar_release_binary_exists",
           "ok": false,
           "required": true,
-          "detail": "CUMPLEFACTURA_ENABLE_REAL_XADES_SIDECAR must be enabled explicitly."
+          "detail": "cumplefactura-sidecar must be built next to the release executable (cargo build --workspace --release).",
+          "evidence": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\.worktrees\\g1\\target\\release\\cumplefactura-sidecar.exe"
         },
         {
-          "id": "sidecar_real_xades_flag",
+          "id": "sidecar_smoke_passed",
           "ok": false,
           "required": true,
-          "detail": "SIDECAR_ENABLE_REAL_XADES_ENDPOINTS must be enabled explicitly."
+          "detail": "Latest sidecar smoke (handshake, HMAC, fail-closed, exit on stdin close) must have passed.",
+          "evidence": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\.worktrees\\g1\\tests\\regulatory\\evidence\\latest-sidecar-smoke.json"
+        }
+      ],
+      "blockers": [
+        {
+          "id": "sidecar_release_binary_exists",
+          "detail": "cumplefactura-sidecar must be built next to the release executable (cargo build --workspace --release)."
         },
         {
-          "id": "shared_secret_present",
-          "ok": false,
-          "required": true,
-          "detail": "Shared HMAC secret must be provided by environment, never by prompt or file."
-        },
+          "id": "sidecar_smoke_passed",
+          "detail": "Latest sidecar smoke (handshake, HMAC, fail-closed, exit on stdin close) must have passed."
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "id": "certificate",
+      "title": "Certificate in local vault",
+      "status": "blocked",
+      "checks": [
         {
           "id": "certificate_ref_valid",
           "ok": false,
           "required": true,
-          "detail": "CUMPLEFACTURA_EXTERNAL_CERT_REF must use vault://certs/<id>.",
+          "detail": "CUMPLEFACTURA_EXTERNAL_CERT_REF must use vault://certs/<id> with [A-Za-z0-9_-].",
           "evidence": "missing_or_invalid"
         },
         {
           "id": "vault_dir_exists",
           "ok": false,
           "required": true,
-          "detail": "SIDECAR_CERT_VAULT_DIR must point to a mounted local vault directory.",
+          "detail": "CUMPLEFACTURA_CERT_VAULT_DIR must point to the local vault directory (the app defaults to <app data>/certs).",
           "evidence": "missing"
         },
         {
@@ -120,30 +116,18 @@
           "id": "certificate_password_env_present",
           "ok": false,
           "required": true,
-          "detail": "Certificate password must be supplied by SIDECAR_CERT_PASSWORD_<ID> or SIDECAR_CERT_PASSWORD.",
-          "evidence": "SIDECAR_CERT_PASSWORD"
+          "detail": "Certificate password must be supplied by CUMPLEFACTURA_CERT_PASSWORD_<ID> or CUMPLEFACTURA_CERT_PASSWORD.",
+          "evidence": "CUMPLEFACTURA_CERT_PASSWORD"
         }
       ],
       "blockers": [
         {
-          "id": "cumplefactura_real_xades_flag",
-          "detail": "CUMPLEFACTURA_ENABLE_REAL_XADES_SIDECAR must be enabled explicitly."
-        },
-        {
-          "id": "sidecar_real_xades_flag",
-          "detail": "SIDECAR_ENABLE_REAL_XADES_ENDPOINTS must be enabled explicitly."
-        },
-        {
-          "id": "shared_secret_present",
-          "detail": "Shared HMAC secret must be provided by environment, never by prompt or file."
-        },
-        {
           "id": "certificate_ref_valid",
-          "detail": "CUMPLEFACTURA_EXTERNAL_CERT_REF must use vault://certs/<id>."
+          "detail": "CUMPLEFACTURA_EXTERNAL_CERT_REF must use vault://certs/<id> with [A-Za-z0-9_-]."
         },
         {
           "id": "vault_dir_exists",
-          "detail": "SIDECAR_CERT_VAULT_DIR must point to a mounted local vault directory."
+          "detail": "CUMPLEFACTURA_CERT_VAULT_DIR must point to the local vault directory (the app defaults to <app data>/certs)."
         },
         {
           "id": "vault_certificate_file_exists",
@@ -151,7 +135,7 @@
         },
         {
           "id": "certificate_password_env_present",
-          "detail": "Certificate password must be supplied by SIDECAR_CERT_PASSWORD_<ID> or SIDECAR_CERT_PASSWORD."
+          "detail": "Certificate password must be supplied by CUMPLEFACTURA_CERT_PASSWORD_<ID> or CUMPLEFACTURA_CERT_PASSWORD."
         }
       ],
       "warnings": []
@@ -162,151 +146,85 @@
       "status": "blocked",
       "checks": [
         {
-          "id": "cumplefactura_invoke_flag",
+          "id": "sidecar_allow_aeat_flag",
           "ok": false,
           "required": true,
-          "detail": "CUMPLEFACTURA_ENABLE_VERIFACTU_SUBMIT_SIDECAR_INVOKE must be enabled explicitly."
-        },
-        {
-          "id": "sidecar_transport_flag",
-          "ok": false,
-          "required": true,
-          "detail": "SIDECAR_ENABLE_REAL_VERIFACTU_TRANSPORT must be enabled explicitly."
-        },
-        {
-          "id": "sidecar_soap_flag",
-          "ok": false,
-          "required": true,
-          "detail": "SIDECAR_ENABLE_REAL_VERIFACTU_SOAP_CALLS must be enabled explicitly."
+          "detail": "CUMPLEFACTURA_SIDECAR_ALLOW_AEAT=1 makes the app start the sidecar with --allow-aeat."
         },
         {
           "id": "aeat_acceptance_evidence_validated",
           "ok": false,
           "required": true,
-          "detail": "External AEAT VERI*FACTU acceptance/homologation must be recorded through the validated redacted manifest intake.",
+          "detail": "External AEAT VERI*FACTU acceptance must be recorded through the validated redacted manifest intake.",
           "evidence": {
-            "latest_external_acceptance": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-external-acceptance-evidence.json",
-            "latest_status": "not_provided",
-            "legacy_path_present": false
+            "latest_external_acceptance": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\.worktrees\\g1\\tests\\regulatory\\evidence\\latest-external-acceptance-evidence.json",
+            "latest_status": "not_provided"
           }
         }
       ],
       "blockers": [
         {
-          "id": "cumplefactura_invoke_flag",
-          "detail": "CUMPLEFACTURA_ENABLE_VERIFACTU_SUBMIT_SIDECAR_INVOKE must be enabled explicitly."
-        },
-        {
-          "id": "sidecar_transport_flag",
-          "detail": "SIDECAR_ENABLE_REAL_VERIFACTU_TRANSPORT must be enabled explicitly."
-        },
-        {
-          "id": "sidecar_soap_flag",
-          "detail": "SIDECAR_ENABLE_REAL_VERIFACTU_SOAP_CALLS must be enabled explicitly."
+          "id": "sidecar_allow_aeat_flag",
+          "detail": "CUMPLEFACTURA_SIDECAR_ALLOW_AEAT=1 makes the app start the sidecar with --allow-aeat."
         },
         {
           "id": "aeat_acceptance_evidence_validated",
-          "detail": "External AEAT VERI*FACTU acceptance/homologation must be recorded through the validated redacted manifest intake."
+          "detail": "External AEAT VERI*FACTU acceptance must be recorded through the validated redacted manifest intake."
         }
       ],
-      "warnings": []
-    },
-    {
-      "id": "imported_sidecar_channels",
-      "title": "Imported ContaPro sidecar channels",
-      "status": "ready",
-      "checks": [
-        {
-          "id": "contapro_import_passed",
-          "ok": true,
-          "required": true,
-          "detail": "ContaPro sidecar readiness evidence must be imported locally.",
-          "evidence": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-contapro-sidecar-import.json"
-        },
-        {
-          "id": "contapro_import_no_external_call",
-          "ok": true,
-          "required": true,
-          "detail": "Import must not perform AEAT/SII/FACe/foral network calls."
-        },
-        {
-          "id": "contapro_verifactu_imported",
-          "ok": true,
-          "required": true,
-          "detail": "VERI*FACTU sidecar channel status must be present."
-        },
-        {
-          "id": "contapro_sii_imported",
-          "ok": true,
-          "required": true,
-          "detail": "SII sidecar channel status must be present."
-        },
-        {
-          "id": "contapro_ticketbai_imported",
-          "ok": true,
-          "required": true,
-          "detail": "TicketBAI sidecar channel status must be present, even if blocked."
-        }
-      ],
-      "blockers": [],
       "warnings": []
     }
   ],
   "blockers": [
     {
-      "section": "real_xades",
-      "id": "cumplefactura_real_xades_flag",
-      "detail": "CUMPLEFACTURA_ENABLE_REAL_XADES_SIDECAR must be enabled explicitly."
+      "section": "tauri_desktop_e2e",
+      "id": "tauri_release_exe_exists",
+      "detail": "Release executable must exist before desktop E2E can run."
     },
     {
-      "section": "real_xades",
-      "id": "sidecar_real_xades_flag",
-      "detail": "SIDECAR_ENABLE_REAL_XADES_ENDPOINTS must be enabled explicitly."
+      "section": "tauri_desktop_e2e",
+      "id": "tauri_desktop_e2e_evidence_passed",
+      "detail": "Latest Tauri desktop E2E verifier evidence must be present and passed."
     },
     {
-      "section": "real_xades",
-      "id": "shared_secret_present",
-      "detail": "Shared HMAC secret must be provided by environment, never by prompt or file."
+      "section": "sidecar",
+      "id": "sidecar_release_binary_exists",
+      "detail": "cumplefactura-sidecar must be built next to the release executable (cargo build --workspace --release)."
     },
     {
-      "section": "real_xades",
+      "section": "sidecar",
+      "id": "sidecar_smoke_passed",
+      "detail": "Latest sidecar smoke (handshake, HMAC, fail-closed, exit on stdin close) must have passed."
+    },
+    {
+      "section": "certificate",
       "id": "certificate_ref_valid",
-      "detail": "CUMPLEFACTURA_EXTERNAL_CERT_REF must use vault://certs/<id>."
+      "detail": "CUMPLEFACTURA_EXTERNAL_CERT_REF must use vault://certs/<id> with [A-Za-z0-9_-]."
     },
     {
-      "section": "real_xades",
+      "section": "certificate",
       "id": "vault_dir_exists",
-      "detail": "SIDECAR_CERT_VAULT_DIR must point to a mounted local vault directory."
+      "detail": "CUMPLEFACTURA_CERT_VAULT_DIR must point to the local vault directory (the app defaults to <app data>/certs)."
     },
     {
-      "section": "real_xades",
+      "section": "certificate",
       "id": "vault_certificate_file_exists",
       "detail": "Vault must contain <id>.p12 or <id>.pfx for the certificate ref."
     },
     {
-      "section": "real_xades",
+      "section": "certificate",
       "id": "certificate_password_env_present",
-      "detail": "Certificate password must be supplied by SIDECAR_CERT_PASSWORD_<ID> or SIDECAR_CERT_PASSWORD."
+      "detail": "Certificate password must be supplied by CUMPLEFACTURA_CERT_PASSWORD_<ID> or CUMPLEFACTURA_CERT_PASSWORD."
     },
     {
       "section": "real_verifactu_submission",
-      "id": "cumplefactura_invoke_flag",
-      "detail": "CUMPLEFACTURA_ENABLE_VERIFACTU_SUBMIT_SIDECAR_INVOKE must be enabled explicitly."
-    },
-    {
-      "section": "real_verifactu_submission",
-      "id": "sidecar_transport_flag",
-      "detail": "SIDECAR_ENABLE_REAL_VERIFACTU_TRANSPORT must be enabled explicitly."
-    },
-    {
-      "section": "real_verifactu_submission",
-      "id": "sidecar_soap_flag",
-      "detail": "SIDECAR_ENABLE_REAL_VERIFACTU_SOAP_CALLS must be enabled explicitly."
+      "id": "sidecar_allow_aeat_flag",
+      "detail": "CUMPLEFACTURA_SIDECAR_ALLOW_AEAT=1 makes the app start the sidecar with --allow-aeat."
     },
     {
       "section": "real_verifactu_submission",
       "id": "aeat_acceptance_evidence_validated",
-      "detail": "External AEAT VERI*FACTU acceptance/homologation must be recorded through the validated redacted manifest intake."
+      "detail": "External AEAT VERI*FACTU acceptance must be recorded through the validated redacted manifest intake."
     }
   ],
   "warnings": [],
@@ -314,12 +232,12 @@
     "No secret values are emitted.",
     "Vault paths and certificate refs are redacted in evidence.",
     "This audit performs no network call and no certificate parsing.",
-    "ContaPro sidecar import reads redacted local evidence only."
+    "The sidecar HMAC secret is generated per session by the app and never stored, so it is not checked here."
   ],
   "limits": [
-    "Blocked is an expected safe status until real cert/vault/flags/evidence exist.",
-    "This audit proves readiness state only; it is not XAdES signing, AEAT transmission, CSV retrieval or homologation.",
-    "External acceptance is considered ready only when the manifest verifier records accepted AEAT_VERIFACTU evidence.",
-    "Imported SII/TicketBAI/FACe status is evidence visibility only; CumpleFactura still requires explicit flags/HMAC/vault before sidecar calls."
+    "Blocked is an expected safe status until a real certificate, vault, flag and acceptance evidence exist.",
+    "This audit proves readiness state only; it is not AEAT transmission, CSV retrieval or homologation.",
+    "VERI*FACTU records are sent unsigned by design (RD 1007/2023 art. 16.3); AEAT authenticates the TLS client certificate.",
+    "Production endpoints stay blocked: the app never starts the sidecar with --allow-production in v1."
   ]
 }

@@ -1,11 +1,11 @@
 {
   "app": "CumpleFactura",
   "artifacts": {
-    "audit": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-core-e2e-audit.json",
-    "csv": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-core-e2e-invoices.csv",
-    "json": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-core-e2e-invoice.json",
-    "pdf": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-core-e2e-invoice.pdf",
-    "xml": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-core-e2e-verifactu.xml"
+    "audit": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\.worktrees\\g1\\tests\\regulatory\\evidence\\latest-core-e2e-audit.json",
+    "csv": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\.worktrees\\g1\\tests\\regulatory\\evidence\\latest-core-e2e-invoices.csv",
+    "json": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\.worktrees\\g1\\tests\\regulatory\\evidence\\latest-core-e2e-invoice.json",
+    "pdf": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\.worktrees\\g1\\tests\\regulatory\\evidence\\latest-core-e2e-invoice.pdf",
+    "xml": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\.worktrees\\g1\\tests\\regulatory\\evidence\\latest-core-e2e-verifactu.xml"
   },
   "checks": {
     "aeat_hash_len": 64,
@@ -14,24 +14,26 @@
     "csv_export_created": true,
     "draft_persisted": true,
     "fiscal_chain_valid": true,
-    "fiscal_export_id": "1c713e46-0169-4dc5-83c2-9c52b276aff5",
+    "fiscal_export_id": "1f280eab-ee12-4ec3-8199-b524102b9f03",
     "fiscal_records": 1,
     "invoice_series_preview": "VENDI202607",
     "issued_invoice_persisted": true,
     "json_export_created": true,
     "next_number_preview": 8,
     "pdf_created": true,
-    "signature_status": "pending_xades",
     "sqlite_real": true,
+    "submission_mode": "verifactu_unsigned_mtls",
     "transmission_status": "not_submitted",
+    "xml_sha256": "BE1AD8413AA57A958D29736A05FE4BC2D99278C276803A74249FB4AB34BDD672",
     "xml_xsd_validated": true
   },
-  "flow": "SQLite real -> company/customer -> draft -> reserved sequence -> issued invoice -> AEAT hash -> audit/fiscal chain -> VERI*FACTU XML XSD -> PDF/JSON/CSV/audit export -> prepared_for_signature export",
-  "generated_at": "2026-06-28T19:20:59.362245100+00:00",
+  "flow": "SQLite real -> company/customer -> draft -> reserved sequence -> issued invoice -> AEAT hash -> audit/fiscal chain -> VERI*FACTU XML XSD -> PDF/JSON/CSV/audit export -> xml_exported (unsigned VERI*FACTU, ready for sidecar)",
+  "generated_at": "2026-11-19T23:32:32.512880700+00:00",
   "limits": [
     "Core E2E uses in-memory SQLite and local files.",
     "It exercises Rust domain/db/services, not the Tauri window event loop.",
-    "It does not perform XAdES signing, SOAP AEAT transport, certificate use, AEAT CSV retrieval or external acceptance."
+    "It does not start the sidecar, use a certificate, call AEAT, retrieve a CSV or prove external acceptance.",
+    "VERI*FACTU records are unsigned by design (RD 1007/2023 art. 16.3); AEAT authenticates the TLS client certificate."
   ],
   "source_workspace": "C:\\03 LEGISLACION",
   "status": "passed"

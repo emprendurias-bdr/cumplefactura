@@ -1,14 +1,14 @@
 # CumpleFactura evidence ledger
 
-- Generated: 2026-06-28T19:23:26.504Z
-- Status: passed
-- Matrix rows: 40
-- Gate run id: 20260628-212017
+- Generated: 2026-11-19T23:35:38.342Z
+- Status: failed
+- Matrix rows: 36
+- Gate run id: 20261120-013112
 
 ## Artifact Counts
 
 - Normative sources: 6
-- Repo artifacts: 18
+- Repo artifacts: 22
 - Evidence artifacts: 18
 - Gate logs: 14
 
@@ -17,66 +17,70 @@
 - No artifact hash is a legal certification.
 - No AEAT network transmission, CSV retrieval or external acceptance is performed by this ledger.
 - External acceptance intake stores and hashes a redacted manifest only; without a supplied manifest it records not_provided.
-- Certificate-backed XAdES remains pending unless sidecar runs with a real authorized certificate.
+- VERI*FACTU records are unsigned by design (RD 1007/2023 art. 16.3); real mTLS submission needs a certificate and CUMPLEFACTURA_SIDECAR_ALLOW_AEAT=1.
 - Desktop Tauri standalone default is preflight; regulatory gate enables real WebDriver mode.
 
 ## SHA256
 
 | Role | Id | Bytes | SHA256 |
 |---|---|---:|---|
-| normative source cumplefactura_technical_matrix | `cumplefactura_technical_matrix` | 5081 | `9f2297c110ad4eb8ea1da4c94c202f3febd8fbf917effee3b0a9f9022eca1515` |
-| normative source verifactu_hash_detail_pdf | `verifactu_hash_detail_pdf` | 1174110 | `f4334c254bb875b417247b54315199f89d75a8c4814dfd1e86efec562653d7de` |
-| normative source verifactu_signature_pdf | `verifactu_signature_pdf` | 1497921 | `60953acd5d437a745db9076377739d8ef3f05c31967c1424cd4f6a8ac04af481` |
-| normative source verifactu_wsdl | `verifactu_wsdl` | 8780 | `05919120708ff7650612fa6683c9336eaf919335d9a4db10e86759190af48602` |
-| normative source verifactu_suministro_lr_xsd | `verifactu_suministro_lr_xsd` | 1573 | `cbdac8d427cc5ab5d77ca48974cab0f35d6bb819c4c66db361681e3710aeba36` |
-| normative source verifactu_suministro_informacion_xsd | `verifactu_suministro_informacion_xsd` | 49540 | `ee4c1655175644de44c4c25055ffeb8e5f4bb4bc3834ce8254d4222ef18c8aa1` |
-| repo artifact matrix | `matrix` | 18634 | `7a32d11ca976c025f8ace7c5fefdef940660cb8e796f8c974546dc8aa321e14b` |
-| repo artifact module_contract | `module_contract` | 17718 | `ed6c5598ad2207424ede4626db7b5151ce28777728271a05b7b71e8bfc5d09f9` |
-| repo artifact test_plan | `test_plan` | 7792 | `d067e0bfcaa6f72929572fb4924c15ced468d34b627a64a017e5add611cfbe6a` |
-| repo artifact package_scripts | `package_scripts` | 1962 | `2bb8878b3d39a523a0113cd5e4e51df7c55b02f2b6d21e6c28f6400c50cb804a` |
-| repo artifact regulatory_gate | `regulatory_gate` | 8827 | `17b05e56ef3278ef980158c5c216e7357ebf8ca7f78793b174ed8fe1b603b131` |
-| repo artifact matrix_verifier | `matrix_verifier` | 3597 | `aed3511505caeb9a335b77ec6b771f8c4da1cf9439fccfdad06d61eeada29b35` |
-| repo artifact core_e2e_verifier | `core_e2e_verifier` | 1292 | `d93487e9a091d1341fcfafa036d18ae67059acf3dc263a79d43e6f26a6f76b18` |
-| repo artifact browser_smoke_verifier | `browser_smoke_verifier` | 23650 | `a25d374fe8752863e057e15ba0af75f8b1323ce2194b48ef179f15473e8622ff` |
-| repo artifact secret_scan_verifier | `secret_scan_verifier` | 4167 | `c522d2d729ca4f0c773bde02b8aa4df321ea9cc2390d4cd9ab43b31953475038` |
-| repo artifact tauri_desktop_e2e_verifier | `tauri_desktop_e2e_verifier` | 10232 | `49a4ffbebd27c6aa4fcb0b115fcce19b3b7d4d35d94c5088465cc244e24c86ae` |
-| repo artifact ledger_verifier | `ledger_verifier` | 15392 | `36778b2e10385be1258336598016af7d4cee16cca9aadd9128a37f1b7d26d279` |
-| repo artifact contapro_sidecar_importer | `contapro_sidecar_importer` | 5466 | `643b5c71b42ee1387e1b34ed6e3f8b4529558998e44daa0ca0773cfa8672e8f7` |
-| repo artifact external_acceptance_verifier | `external_acceptance_verifier` | 12542 | `251031f6f36421a297d54e90500a5c2c7b5e0edb9a562d882e86018a1b865e89` |
-| repo artifact external_readiness_verifier | `external_readiness_verifier` | 13359 | `c0a9004645515dfce7e2a905bf9e502fc56913fb0b237fba04e17eb7a016ae60` |
-| repo artifact core_e2e_test | `core_e2e_test` | 12289 | `d2c31ddb2804f4483959f2bf2f6c5dc3bd602fa5aacdaec2e0d193fbef6d2e80` |
-| repo artifact verifactu_fixture | `verifactu_fixture` | 2904 | `3016e9edd918f721343fe37a808000ecf020dc38e377b2a3ef0b61cec7a28de2` |
-| repo artifact external_acceptance_manifest_fixture | `external_acceptance_manifest_fixture` | 1321 | `2595ac4341563701a1c0f6bdc6671b7a8c284f17c3dd412052c820b45eaf76f8` |
-| repo artifact next_mvp_plan | `next_mvp_plan` | 2785 | `2ad45afe62a5f53ee9d33539db61a34ccf5f7a36e360687ed24ecee2c8d55e2e` |
-| evidence artifact latest_core_e2e_json | `latest_core_e2e_json` | 1830 | `203b2f57d4fbbdcef117ef235cadfff0fcd2a4d7cb61e9530778e02de3e1a026` |
+| normative source cumplefactura_technical_matrix | `cumplefactura_technical_matrix` | 0 | `missing` |
+| normative source verifactu_hash_detail_pdf | `verifactu_hash_detail_pdf` | 0 | `missing` |
+| normative source verifactu_signature_pdf | `verifactu_signature_pdf` | 0 | `missing` |
+| normative source verifactu_wsdl | `verifactu_wsdl` | 0 | `missing` |
+| normative source verifactu_suministro_lr_xsd | `verifactu_suministro_lr_xsd` | 0 | `missing` |
+| normative source verifactu_suministro_informacion_xsd | `verifactu_suministro_informacion_xsd` | 0 | `missing` |
+| repo artifact matrix | `matrix` | 17605 | `fe7604912591afbf58008449187ee1cb86a621c24c6c515ab227838af50a4dc7` |
+| repo artifact module_contract | `module_contract` | 24125 | `6d9bd70f4075c11d398162607d336c377fdb0f783835a56e6ff887223036b5cd` |
+| repo artifact test_plan | `test_plan` | 7009 | `91bc50d5b3a6988216312da24532d7db25aba3a65712959cce6b617d072bcc0e` |
+| repo artifact package_scripts | `package_scripts` | 2087 | `93b8e1f5c35cbc072d458283ae537095517332b683aa210bdf0f784eb7dbbbfb` |
+| repo artifact regulatory_gate | `regulatory_gate` | 9204 | `1a7d8cba589099bb895556b44e7efc56a3f54f88444ef506c56de37caa6dc710` |
+| repo artifact matrix_verifier | `matrix_verifier` | 2846 | `75e334f07bd26aaf425bac97414f8eb9cdec491f4592329d374bd9ea80a7e6d0` |
+| repo artifact core_e2e_verifier | `core_e2e_verifier` | 1407 | `e28ef11c2ac06f1a423cb960e34f2ca4a18dd7780f5753fcced2024d4e1cf802` |
+| repo artifact browser_smoke_verifier | `browser_smoke_verifier` | 19227 | `70151f32cf4ced91edd15b61e5f393389f016fdf4cfb49bfb6ad8b95db523eae` |
+| repo artifact secret_scan_verifier | `secret_scan_verifier` | 3819 | `e5a4ebc7ecd40db1e0efe1144653e5d512b3526cb9334eda4393ed78642bb985` |
+| repo artifact tauri_desktop_e2e_verifier | `tauri_desktop_e2e_verifier` | 12398 | `eb39580f9c8732a6a40c763314b545cbf60d8b3743979e88f86cedf41aed065c` |
+| repo artifact ledger_verifier | `ledger_verifier` | 14615 | `9bbecf08b7c321a4d44f005b29a648eed5e492e811afaad0a5f52dbaf42f22e7` |
+| repo artifact sidecar_smoke_verifier | `sidecar_smoke_verifier` | 5836 | `59929d1781b3b6ee34302f9ea30d9b33276855d5aa7e996ef901ccd30df29528` |
+| repo artifact sidecar_bundle_tool | `sidecar_bundle_tool` | 1512 | `4f7e659e7dd1fcbf279b2b050e9ea7f14855cc1890994de9b515856b0d28c0ea` |
+| repo artifact tools_lib | `tools_lib` | 4532 | `0660738bf91c2fc613dd41f65911e6c6b66ee2e96959d2e398a90bb4d9898bb9` |
+| repo artifact fiscal_contract_lib | `fiscal_contract_lib` | 5893 | `d028c746e1b5cdad3894068e38bea21c09e18d6157cbdfcbd87a832e3aeabb6d` |
+| repo artifact sidecar_architecture | `sidecar_architecture` | 20415 | `a154dc454407f7f3fb58747997801ec28007b3afc745bd41b58fc0eb23d967a4` |
+| repo artifact external_acceptance_verifier | `external_acceptance_verifier` | 12335 | `e159fc2d4f2752043454b9cc20a5bb273fcbae15e4ec9c365441e9ae3b27ad48` |
+| repo artifact external_readiness_verifier | `external_readiness_verifier` | 8645 | `b77b5ae476e0380b2b95bda60856d5ff7a8d2e05f743d3783a6b80f71baa6f26` |
+| repo artifact core_e2e_test | `core_e2e_test` | 12459 | `19447478ff711ff779e5076f78eb06fd472f37a1326b855e8dea06944a39b2a5` |
+| repo artifact verifactu_fixture | `verifactu_fixture` | 2961 | `d962e0d09e3833cda035aa0a7029084e0fc42976990dc654cfb080ee5a0f6bd6` |
+| repo artifact external_acceptance_manifest_fixture | `external_acceptance_manifest_fixture` | 1347 | `0140d265b9b2b20ec0874a0c2089aa83b21d32cda97082958c4ca2f2849e80cd` |
+| repo artifact next_mvp_plan | `next_mvp_plan` | 2842 | `efe443f6fa054642b0131826c5fbabe220e3871793183305e370c044c655f835` |
+| evidence artifact latest_core_e2e_json | `latest_core_e2e_json` | 2141 | `2559264727938d7ff1640f43e2f1e49d1b98a0c018a73980fd6761ddd857d249` |
 | evidence artifact latest_core_e2e_xml | `latest_core_e2e_xml` | 2916 | `be1ad8413aa57a958d29736a05fe4bc2d99278c276803a74249fb4ab34bdd672` |
-| evidence artifact latest_core_e2e_pdf | `latest_core_e2e_pdf` | 1120 | `6ce2a66c028d91e80046840f4ee3f713a35e46fbdb1d9426a4dbc98ab4a00aad` |
-| evidence artifact latest_core_e2e_invoice_json | `latest_core_e2e_invoice_json` | 971 | `a9982ef32ec2c0f32acd58251f955fe75e2a67502e6ea25c3d9ecaa5bd543e3a` |
-| evidence artifact latest_core_e2e_invoices_csv | `latest_core_e2e_invoices_csv` | 608 | `0dbbe179da53273c1921c435e18c8b3c1220432d174d8fdc782865eb94418801` |
-| evidence artifact latest_core_e2e_audit_json | `latest_core_e2e_audit_json` | 2678 | `b0c5034acbf59cfab01d38e96ebcfa0383977f53e92f57cefc7dcc6a970ee7b6` |
-| evidence artifact latest_browser_smoke_json | `latest_browser_smoke_json` | 1589 | `9d6ff138e04fa0957babbdccb9a84c70f3cb68af46d2b8138122d43bbaa96a97` |
+| evidence artifact latest_core_e2e_pdf | `latest_core_e2e_pdf` | 34731 | `da1acbc58cc7ad8f750a4ad18a5a284dd513d0dc624a15dc09fdff5f2a3aec02` |
+| evidence artifact latest_core_e2e_invoice_json | `latest_core_e2e_invoice_json` | 1409 | `d6e80e70e3e4faed984276630aa2bdc3554207de6a33b1b0e339b16f8302104e` |
+| evidence artifact latest_core_e2e_invoices_csv | `latest_core_e2e_invoices_csv` | 608 | `4df6733f70d678ead8e27cf835a1e2f5d6405d73147b39d56ca881225877809d` |
+| evidence artifact latest_core_e2e_audit_json | `latest_core_e2e_audit_json` | 2974 | `f8005e1bd1820b9dc821cca97e2d387ab810f8fa69a318438443366cbbcc2832` |
+| evidence artifact latest_browser_smoke_json | `latest_browser_smoke_json` | 1626 | `eb6ad27c282f8f8bd66dd4707d27d5d0781d1e8639414da22c73b4b93b83b012` |
 | evidence artifact latest_browser_smoke_png | `latest_browser_smoke_png` | 155663 | `67fdcd5dec17a5c40015c724616afcd6ab46104e452b706c0f598dfe7e34134b` |
-| evidence artifact latest_secret_scan_json | `latest_secret_scan_json` | 463 | `d5cc97aa0f0d1f13c33b5ba7e6676561ecb856610f4c86ce813b749dcdaf9a67` |
-| evidence artifact latest_secret_scan_md | `latest_secret_scan_md` | 421 | `fc21d67be1c1a2b7e8f106cfe5363d6e9c724c62ead7be318842920f0c45c4b9` |
-| evidence artifact latest_tauri_desktop_e2e_json | `latest_tauri_desktop_e2e_json` | 1606 | `6e0408c99c3b508afa836f94fdce869513140420cd871fcf7c3a9394de2e4f64` |
-| evidence artifact latest_tauri_desktop_e2e_md | `latest_tauri_desktop_e2e_md` | 770 | `da100d27ea4cbe023500c04fbbf3012a7c18594b02e3f83e0c61a34d19543e5d` |
-| evidence artifact latest_external_acceptance_json | `latest_external_acceptance_json` | 995 | `631130c4d48a1b6faff8ee81be9e5d44829a4500127e5871b1dded267eeb9ca8` |
-| evidence artifact latest_external_acceptance_md | `latest_external_acceptance_md` | 638 | `f5625854c6339c1cfe7bdd4aac6a4e5222e1c9913b3e323b8eae811e50f58a83` |
-| evidence artifact latest_contapro_sidecar_import_json | `latest_contapro_sidecar_import_json` | 3011 | `7ebc2c1bd7261cd75b6ba21b8639cc1d30d6e03860eca70d35f5a68dc58c2a76` |
-| evidence artifact latest_contapro_sidecar_import_md | `latest_contapro_sidecar_import_md` | 1089 | `3ffb43997e157dfcddc2e40875fd7124a72d69873e8b3083023d666b924994a8` |
-| evidence artifact latest_external_readiness_json | `latest_external_readiness_json` | 11927 | `639e46beacdde5a49784953e0bc5d564b963789def35f01370b3e5bff07d3e5d` |
-| evidence artifact latest_external_readiness_md | `latest_external_readiness_md` | 2186 | `b1baefa995d7a5cfb4f00f0324ad1b8cceabe33024f0082c5ab74eb570d000be` |
-| gate log 20260628-212017-browser_smoke.log | `20260628-212017-browser_smoke` | 642 | `a064bd3a722080c844760d992281a5408da328a379220a9f938ea520831c55dc` |
-| gate log 20260628-212017-cargo_fmt_check.log | `20260628-212017-cargo_fmt_check` | 972 | `2e617e3bfdb3c56772be617239d08788c42dea2ed3e0276f88b39c7b738e6064` |
-| gate log 20260628-212017-cargo_test.log | `20260628-212017-cargo_test` | 13418 | `22af5d44f7e09d3e2444b19916fa4410330fc21e068a1e7ea03085b20126577c` |
-| gate log 20260628-212017-contapro_sidecar_import.log | `20260628-212017-contapro_sidecar_import` | 700 | `818b9a41832dda18cc29c9f63eee49376e70b4b57594849c2615e67a76737414` |
-| gate log 20260628-212017-core_e2e.log | `20260628-212017-core_e2e` | 1990 | `d48170b65405e4f168a73d7e629fd75f8286ef5af4ab58728975a858baa08dfb` |
-| gate log 20260628-212017-evidence_matrix.log | `20260628-212017-evidence_matrix` | 336 | `65bac1216e90c1b208c37cb85c03f4239ce3b2fdd40ed1c760dbe7891fd29bd6` |
-| gate log 20260628-212017-external_acceptance.log | `20260628-212017-external_acceptance` | 812 | `118771b5cd4baba650343a00b9565de6232fc3898a2949bc265bb8193ebd116b` |
-| gate log 20260628-212017-external_readiness.log | `20260628-212017-external_readiness` | 708 | `46f96964a2d7fc66faa98b1674b49b5d15069cdd52b63d9535d84e4ea4d8b815` |
-| gate log 20260628-212017-npm_build.log | `20260628-212017-npm_build` | 824 | `451316688e13753a23bccf37809f471820f0c3e1da382a7f38c04f35e2778f48` |
-| gate log 20260628-212017-secret_scan.log | `20260628-212017-secret_scan` | 576 | `e8323c1cbce07a11d64f09866b3ba49afc9fb3ad021e07a3cadc9d4610d60d94` |
-| gate log 20260628-212017-tauri_build.log | `20260628-212017-tauri_build` | 1706 | `1406050407167d4ba24ffd6162efbc325ce7b95a7d5111aa8aaa7943a086d95f` |
-| gate log 20260628-212017-tauri_desktop_e2e.log | `20260628-212017-tauri_desktop_e2e` | 636 | `91fbe1aa7210a79b2d69ec2963d52ddf496610af39793f568f6d402e0d99901d` |
-| gate log 20260628-212017-ui_contract.log | `20260628-212017-ui_contract` | 51804 | `e35ec88797073ae732a00fc66a0488868d235d7e4457de5d7a6f175e1364fe0b` |
-| gate log 20260628-212017-verifactu_xsd_fixture.log | `20260628-212017-verifactu_xsd_fixture` | 668 | `dc8c0276acd305e8aadd32bf81689cef585c2a10096ea893ffc59c525b19defe` |
+| evidence artifact latest_secret_scan_json | `latest_secret_scan_json` | 463 | `ecfccc813ae7ed44622832979c72138323ab40c66eb212b4858cd55eb9b89dbe` |
+| evidence artifact latest_secret_scan_md | `latest_secret_scan_md` | 421 | `c1ad94b6d0cbcbc1782b9f8a654a58ceb08951b26bdc50d7f6e3c502daece5b8` |
+| evidence artifact latest_tauri_desktop_e2e_json | `latest_tauri_desktop_e2e_json` | 820 | `f9ad38d3dcab97db3e5d637c6c660df772de94921307aa64c3ac2de24be5fd31` |
+| evidence artifact latest_tauri_desktop_e2e_md | `latest_tauri_desktop_e2e_md` | 536 | `d4ade2796ad3ce00d4aba9bd84d0ebbcb0fdbf4aa0006ceb7bd776411f070737` |
+| evidence artifact latest_external_acceptance_json | `latest_external_acceptance_json` | 1011 | `8a37abeb97594aeefd0dcb49836b40809637111b4c6e71d300ff2d90290fc0fd` |
+| evidence artifact latest_external_acceptance_md | `latest_external_acceptance_md` | 638 | `71d2a132e4eae2f498ca78121a5e5a4fd301ffa0c1a34a901229c80a879a8141` |
+| evidence artifact latest_sidecar_smoke_json | `latest_sidecar_smoke_json` | 641 | `5505f238403e3c8ca7f1d7200bcbe8e627dba621b65d0f89f127de2a1ec37078` |
+| evidence artifact latest_sidecar_smoke_md | `latest_sidecar_smoke_md` | 550 | `44e1c0d93663b7f2381d5cb7334e38af363483e71bdf0463d31bcde345048938` |
+| evidence artifact latest_external_readiness_json | `latest_external_readiness_json` | 9255 | `71fa0d9a3b54814a6917b7af0bcc0c2fabb8a216683a5758316d9f1fd0f69963` |
+| evidence artifact latest_external_readiness_md | `latest_external_readiness_md` | 2147 | `4f9f632715a09c3b9d5e51c70ad0aff1e48f41226229075bf8c95fd73d5a886b` |
+| gate log 20261120-013112-browser_smoke.log | `20261120-013112-browser_smoke` | 10478 | `dd5bbdd9e148b22e5616d72d217b322199e4753787c6bd9517fec17f2e499737` |
+| gate log 20261120-013112-cargo_test.log | `20261120-013112-cargo_test` | 34496 | `31ce71b99effb7b8fe5cfa82205222bcc491d19b5fb2bce9217ef98ef1cd5db7` |
+| gate log 20261120-013112-core_e2e.log | `20261120-013112-core_e2e` | 2606 | `fb955165cfe4c3d4a13e036a43cd5349169830d2e9a2e62fc1e9893ecaa84db7` |
+| gate log 20261120-013112-evidence_matrix.log | `20261120-013112-evidence_matrix` | 966 | `5906e011c7fb1f75bac80902e59f2e1b520f3ba532eaf5a90b23e1de164384a1` |
+| gate log 20261120-013112-external_acceptance.log | `20261120-013112-external_acceptance` | 868 | `60c1dfaa7837601be695e32a41cf800eb156cae1f08d12a3e34230214273ea5f` |
+| gate log 20261120-013112-external_readiness.log | `20261120-013112-external_readiness` | 764 | `bb9fa0ff716515742faeaa7ddcdf2125b2a270980a8e2dda483eb3224624d713` |
+| gate log 20261120-013112-npm_build.log | `20261120-013112-npm_build` | 1950 | `353269ab966b77efb68057165d4f5a1fa2268877909bc82f4353796b7d776a13` |
+| gate log 20261120-013112-secret_scan.log | `20261120-013112-secret_scan` | 632 | `0656decb599b488271829039687f67808d9fa54bbdd777b1a06d09fe40dbfa3a` |
+| gate log 20261120-013112-sidecar_build.log | `20261120-013112-sidecar_build` | 2374 | `e5ac98bd9994ff98b9fe5ccbd449d510b3d7fefea91f10238801e5c2d03ae5aa` |
+| gate log 20261120-013112-sidecar_smoke.log | `20261120-013112-sidecar_smoke` | 458 | `88f3575299e12a70d4ba172dd0a385f2cd4d9b24e30d6065e69255c74623dab0` |
+| gate log 20261120-013112-tauri_build.log | `20261120-013112-tauri_build` | 19864 | `52f80575c1ecf7722dc533e4b61ae4660aa3762f3ba8b7db8972c3a92e1fcaf0` |
+| gate log 20261120-013112-tauri_desktop_e2e.log | `20261120-013112-tauri_desktop_e2e` | 1416 | `06eadfad8cfee38838e44e6fffcfeb1f0c7a8e5e08378cf4209c0c3b655f4cc2` |
+| gate log 20261120-013112-ui_contract.log | `20261120-013112-ui_contract` | 52408 | `6a3bb53090c1b3222815d06029537fb3f40d84e1372a20208db68ebfce011d11` |
+| gate log 20261120-013112-verifactu_xsd_fixture.log | `20261120-013112-verifactu_xsd_fixture` | 696 | `00988019553191f254a07c2d0be00806ea61ed5aca1b8f2948404ae723f8ee99` |

@@ -77,6 +77,8 @@ export type Invoice = {
   fiscal_year?: number;
   series: string;
   number?: number | null;
+  /** `NumSerieFactura` fijado por Rust al emitir (mismo texto en XML, QR y PDF). */
+  num_serie?: string | null;
   kind?: string;
   status?: string;
   lines?: InvoiceLine[];
@@ -141,6 +143,7 @@ export type InvoiceSummary = {
   customer_id: string;
   series: string;
   number?: number | null;
+  num_serie?: string | null;
   kind: string;
   status: string;
   rectifies_invoice_id?: string | null;
@@ -223,6 +226,8 @@ export type NextNumberPreview = {
   fiscal_year: number;
   series: string;
   next_number: number;
+  /** Número formateado por Rust con la configuración de la serie. */
+  preview: string;
   source: string;
 };
 export type InvoiceLineForm = {

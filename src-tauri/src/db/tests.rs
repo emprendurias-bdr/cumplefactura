@@ -450,6 +450,19 @@ fn upserts_customer_by_id_without_replace_delete() {
     assert_eq!(rows[0].kind, "Individual");
 }
 
+/// Reserva suelta (la app solo reserva dentro de `issue_invoice`).
+fn reserve_invoice_number(
+    conn: &mut Connection,
+    company_id: &str,
+    fiscal_year: i32,
+    series: &str,
+) -> Result<i64, String> {
+    let tx = conn.transaction().map_err(db_error)?;
+    let next = super::invoices::reserve_invoice_number_tx(&tx, company_id, fiscal_year, series)?;
+    tx.commit().map_err(db_error)?;
+    Ok(next)
+}
+
 #[test]
 fn reserves_invoice_numbers_by_company_year_and_series() {
     let mut conn = memory_conn();
@@ -1032,4 +1045,245 @@ fn company_logo_is_copied_validated_and_cleared() {
     assert!(list_companies(&conn).expect("list")[0].logo_path.is_none());
     assert!(!std::path::Path::new(&stored).exists());
     std::fs::remove_dir_all(dir).expect("cleanup");
+}
+
+// --- N1: emisión en una transacción, hora de generación y formato único del número ---
+
+fn n1_issue_input(company_id: &str, customer_id: &str, series: &str) -> InvoiceIssueInput {
+    InvoiceIssueInput {
+        draft: InvoiceDraftInput {
+            company_id: company_id.to_string(),
+            customer_id: customer_id.to_string(),
+            fiscal_year: 2026,
+            series: series.to_string(),
+            number: None,
+            kind: InvoiceKind::Complete,
+            territory_flags: vec![TerritoryFlag::CommonTerritory, TerritoryFlag::VeriFactu],
+            lines: vec![InvoiceLineInput {
+                description: "Servicio".to_string(),
+                quantity: 1,
+                unit_price_cents: 10_000,
+                discount_rate_basis_points: None,
+                tax_rate_basis_points: 2_100,
+                withholding_rate_basis_points: None,
+                price_pending: None,
+            }],
+            rectifies_invoice_id: None,
+            rectification_reason_code: None,
+            rectification_method: None,
+            notes: String::new(),
+        },
+        number: 0,
+        issued_at: "2026-05-28T00:00:00Z".to_string(),
+        actor: "tester".to_string(),
+        previous_audit_hash: None,
+    }
+}
+
+fn n1_count(conn: &Connection, table: &str) -> i64 {
+    conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+        row.get(0)
+    })
+    .expect("count")
+}
+
+#[test]
+fn failed_issue_after_reserving_leaves_no_gap_nor_orphans() {
+    let mut conn = memory_conn();
+    let company = company();
+    let customer = customer();
+    insert_company(&conn, &company).expect("company");
+    upsert_customer(&conn, &customer).expect("customer");
+
+    // Falla después de reservar y de insertar alta, registro y auditoría: el borrador no existe.
+    let error = issue_invoice(
+        &mut conn,
+        n1_issue_input(&company.id, &customer.id, "A"),
+        Some("missing-draft"),
+        "2026-05-28T10:00:00+02:00",
+    )
+    .expect_err("must fail");
+    assert_eq!(error, "not_draft");
+    assert_eq!(
+        next_invoice_number_preview(&conn, &company.id, 2026, "A").expect("preview"),
+        1
+    );
+    for table in [
+        "invoices",
+        "invoice_lines",
+        "fiscal_records",
+        "audit_events",
+    ] {
+        assert_eq!(n1_count(&conn, table), 0, "{table}");
+    }
+
+    let issued = issue_invoice(
+        &mut conn,
+        n1_issue_input(&company.id, &customer.id, "A"),
+        None,
+        "2026-05-28T10:00:00+02:00",
+    )
+    .expect("issue");
+    assert_eq!(issued.invoice.number, Some(1));
+}
+
+#[test]
+fn generation_time_comes_from_backend_and_cannot_go_back() {
+    let mut conn = memory_conn();
+    let company = company();
+    let customer = customer();
+    insert_company(&conn, &company).expect("company");
+    upsert_customer(&conn, &customer).expect("customer");
+
+    let first = issue_invoice(
+        &mut conn,
+        n1_issue_input(&company.id, &customer.id, "A"),
+        None,
+        "2026-05-28T10:00:00+02:00",
+    )
+    .expect("first");
+    let generated_at: String = conn
+        .query_row(
+            "SELECT generated_at FROM fiscal_records WHERE invoice_id = ?1",
+            params![first.invoice.id],
+            |row| row.get(0),
+        )
+        .expect("record");
+    assert_eq!(generated_at, "2026-05-28T10:00:00+02:00");
+    assert_eq!(
+        first.invoice.issued_at.as_deref(),
+        Some("2026-05-28T00:00:00Z")
+    );
+
+    let error = issue_invoice(
+        &mut conn,
+        n1_issue_input(&company.id, &customer.id, "A"),
+        None,
+        "2026-05-28T09:59:59+02:00",
+    )
+    .expect_err("clock behind");
+    assert!(
+        error.starts_with("clock_before_previous_record:"),
+        "{error}"
+    );
+    assert_eq!(
+        next_invoice_number_preview(&conn, &company.id, 2026, "A").expect("preview"),
+        2
+    );
+    assert_eq!(n1_count(&conn, "fiscal_records"), 1);
+
+    issue_invoice(
+        &mut conn,
+        n1_issue_input(&company.id, &customer.id, "A"),
+        None,
+        "2026-05-28T10:00:01+02:00",
+    )
+    .expect("second");
+    let chain = crate::services::fiscal_chain::verify(&conn).expect("verify");
+    assert!(chain.valid, "{:?}", chain.issues);
+}
+
+#[test]
+fn same_number_in_series_preview_xml_qr_and_pdf() {
+    let mut conn = memory_conn();
+    let company = company();
+    let customer = customer();
+    insert_company(&conn, &company).expect("company");
+    upsert_customer(&conn, &customer).expect("customer");
+    let config = upsert_invoice_series_config(
+        &mut conn,
+        InvoiceSeriesConfigInput {
+            company_id: company.id.clone(),
+            label: "Principal".to_string(),
+            series_code: "F".to_string(),
+            fiscal_year: 2026,
+            include_year: true,
+            separator: "/".to_string(),
+            padding: 4,
+            next_number: 12,
+            is_default: true,
+        },
+    )
+    .expect("series");
+    assert_eq!(config.preview, "F2026/0012");
+
+    let issued = issue_invoice(
+        &mut conn,
+        n1_issue_input(&company.id, &customer.id, &config.resolved_series),
+        None,
+        "2026-05-28T10:00:00+02:00",
+    )
+    .expect("issue");
+    assert_eq!(issued.invoice.num_serie.as_deref(), Some("F2026/0012"));
+
+    let data = invoice_pdf_data(&conn, &issued.invoice.id).expect("pdf data");
+    assert_eq!(data.title(), "Factura F2026/0012");
+    let xml = crate::services::verifactu::build_verifactu_xml_draft(&data, None).expect("xml");
+    assert!(xml.contains("<sf:NumSerieFactura>F2026/0012</sf:NumSerieFactura>"));
+    assert!(xml.contains(
+        "<sf:FechaHoraHusoGenRegistro>2026-05-28T10:00:00+02:00</sf:FechaHoraHusoGenRegistro>"
+    ));
+    assert_eq!(
+        crate::services::verifactu::calculate_invoice_registro_alta_hash(&data, None)
+            .expect("hash"),
+        issued.fiscal_hash
+    );
+    let url =
+        crate::services::qr::verifactu_qr_url(&data, crate::services::qr::QrEnvironment::Test)
+            .expect("qr");
+    assert!(url.contains("numserie=F2026%2F0012"), "{url}");
+
+    // Un solo contador: la vista previa sigue a la reserva.
+    let configs = list_invoice_series_configs(&conn, &company.id, 2026).expect("configs");
+    assert_eq!(configs[0].preview, "F2026/0013");
+}
+
+#[test]
+fn migration_keeps_number_of_already_issued_invoices() {
+    // Base anterior a N1 (migraciones 1-12) con una emitida y una serie con contador propio.
+    let conn = Connection::open_in_memory().expect("memory db");
+    for migration in migrations().into_iter().filter(|m| m.version < 13) {
+        conn.execute_batch(migration.sql).expect("old migration");
+    }
+    conn.execute_batch(
+        "INSERT INTO companies (id, legal_name, tax_id, address, postal_code, municipality, province, created_at)
+         VALUES ('c1', 'Demo SL', 'B00000000', 'Calle 1', '28001', 'Madrid', 'Madrid', '2026-01-01T00:00:00Z');
+         INSERT INTO customers (id, display_name, tax_id, kind, address, postal_code, municipality, province, updated_at)
+         VALUES ('cu1', 'Cliente', '00000000T', 'Business', 'Calle 2', '28002', 'Madrid', 'Madrid', '2026-01-01T00:00:00Z');
+         INSERT INTO invoices (id, company_id, customer_id, fiscal_year, series, number, kind, status,
+                               taxable_base_cents, tax_cents, withholding_cents, total_cents, created_at, issued_at)
+         VALUES ('i1', 'c1', 'cu1', 2026, 'A', 7, 'Complete', 'Issued', 100, 21, 0, 121,
+                 '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+         INSERT INTO invoice_series_configs (id, company_id, label, series_code, fiscal_year, include_year,
+                                             separator, padding, next_number, created_at)
+         VALUES ('s1', 'c1', 'B', 'B', 2026, 0, '', 3, 40, '2026-01-01T00:00:00Z');",
+    )
+    .expect("legacy rows");
+
+    let n1 = migrations()
+        .into_iter()
+        .find(|m| m.version == 13)
+        .expect("013");
+    conn.execute_batch(n1.sql).expect("migration 013");
+
+    let num_serie: Option<String> = conn
+        .query_row(
+            "SELECT num_serie FROM invoices WHERE id = 'i1'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("num_serie");
+    assert_eq!(num_serie.as_deref(), Some("A-7"));
+    assert_eq!(
+        next_invoice_number_preview(&conn, "c1", 2026, "B").expect("preview"),
+        40
+    );
+    let has_old_counter: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('invoice_series_configs') WHERE name = 'next_number'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("pragma");
+    assert_eq!(has_old_counter, 0);
 }

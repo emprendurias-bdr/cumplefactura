@@ -5,7 +5,7 @@ use crate::domain::invoice::{
     Invoice, InvoiceDraftInput, InvoiceIssueInput, InvoiceKind, InvoiceLineInput,
 };
 use crate::domain::tax::TerritoryFlag;
-use crate::services::{audit::AuditEvent, export, fiscal_chain, pdf, verifactu, verifactu_submit};
+use crate::services::{export, fiscal_chain, pdf, verifactu, verifactu_submit};
 use serde_json::json;
 use std::fs;
 use std::path::PathBuf;
@@ -85,48 +85,22 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
     db::insert_invoice_draft(&mut conn, &draft).expect("draft persistence");
 
     let issued_at = "2026-05-31T10:00:00+02:00".to_string();
-    let reserved_number =
-        db::reserve_invoice_number(&mut conn, &company.id, 2026, &series_config.resolved_series)
-            .expect("reserved number");
-    let (issued, _) = Invoice::issue(InvoiceIssueInput {
-        draft: draft_input,
-        number: reserved_number,
-        issued_at: issued_at.clone(),
-        actor: "core-e2e".to_string(),
-        previous_audit_hash: db::latest_audit_hash(&conn).expect("previous audit hash"),
-    })
-    .expect("issued invoice");
-
-    let previous_fiscal_hash = db::latest_fiscal_record_hash_for_company(&conn, &company.id)
-        .expect("previous fiscal hash");
-    let invoice_type =
-        verifactu::registro_alta_invoice_type_for_kind("Complete", None).expect("invoice type");
-    let fiscal_hash = verifactu::IssuedAlta {
-        issuer_tax_id: &company.tax_id,
-        series: &issued.series,
-        number: issued.number.expect("issued number"),
-        issued_at: issued.issued_at.as_deref().expect("issued_at"),
-        tax_cents: issued.totals.tax_cents,
-        total_cents: issued.totals.total_cents,
-        invoice_type,
-        previous_hash: previous_fiscal_hash.as_deref(),
-    }
-    .hash()
-    .expect("AEAT fiscal hash");
-    let audit_event = AuditEvent::invoice_issued(
-        issued.id.clone(),
-        "core-e2e".to_string(),
-        fiscal_hash.clone(),
-        db::latest_audit_hash(&conn).expect("audit hash"),
-    );
-    db::insert_issued_invoice(
+    // Número, huella, alta, registro fiscal y auditoría en una sola transacción (N1).
+    let issued_result = db::issue_invoice(
         &mut conn,
-        &issued,
-        &fiscal_hash,
-        previous_fiscal_hash.as_deref(),
-        &audit_event,
+        InvoiceIssueInput {
+            draft: draft_input,
+            number: 0,
+            issued_at: issued_at.clone(),
+            actor: "core-e2e".to_string(),
+            previous_audit_hash: None,
+        },
+        Some(&draft.id),
+        &verifactu::generated_at_now(),
     )
     .expect("issued invoice persistence");
+    let issued = issued_result.invoice;
+    let fiscal_hash = issued_result.fiscal_hash;
 
     let invoice_data = db::invoice_pdf_data(&conn, &issued.id).expect("invoice data");
     let assets = verifactu::dev_verifactu_xsd_assets().expect("dev XSD assets");
@@ -236,7 +210,8 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
         .contains("Signature"));
     assert_eq!(db::list_companies(&conn).expect("companies").len(), 1);
     assert_eq!(db::list_customers(&conn).expect("customers").len(), 1);
-    assert_eq!(db::list_invoices(&conn).expect("invoices").len(), 2);
+    // El borrador se consume al emitir (misma transacción).
+    assert_eq!(db::list_invoices(&conn).expect("invoices").len(), 1);
     assert_eq!(db::list_audit_events(&conn).expect("audit").len(), 1);
     assert_eq!(
         db::list_fiscal_records(&conn)

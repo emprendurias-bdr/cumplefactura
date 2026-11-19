@@ -17,7 +17,7 @@ use crate::services::rectification_advisor::{self, RectificationAdvice, Rectific
 use crate::services::sidecar_process::{LaunchConfig, SidecarManager};
 use crate::services::verifactu;
 use crate::services::verifactu_submit::{self, SubmitInput, XmlExport};
-use chrono::{SecondsFormat, Utc};
+use chrono::Utc;
 use fiscal_contract::messages::{InvokeSubmitResponse, SubmitPreflightResponse};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -273,7 +273,9 @@ pub fn verifactu_xml_anulacion_draft_export(
     if invoice.fiscal_hash.is_none() {
         return Err("anulacion requires an issued invoice fiscal_hash".to_string());
     }
-    let generated_at = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+    let generated_at = verifactu::generated_at_now();
+    let head = db::latest_fiscal_record_head(&conn, &invoice.company_id)?;
+    verifactu::check_generated_at_after(head.as_ref().map(|(_, at)| at.as_str()), &generated_at)?;
     let previous = match db::latest_fiscal_record_link_for_company(&conn, &invoice.company_id)? {
         Some(link) => link,
         None => invoice_self_link(&invoice)?,
@@ -477,6 +479,10 @@ fn invoice_self_link(invoice: &db::InvoicePdfData) -> Result<PreviousInvoiceLink
     let number = invoice
         .number
         .ok_or_else(|| "issued invoice missing number".to_string())?;
+    let num_serie = invoice
+        .num_serie
+        .clone()
+        .ok_or_else(|| "issued invoice missing num_serie".to_string())?;
     let issued_at = invoice
         .issued_at
         .clone()
@@ -490,6 +496,7 @@ fn invoice_self_link(invoice: &db::InvoicePdfData) -> Result<PreviousInvoiceLink
         company_tax_id: invoice.company_tax_id.clone(),
         series: invoice.series.clone(),
         number,
+        num_serie,
         issued_at,
         fiscal_hash,
     })

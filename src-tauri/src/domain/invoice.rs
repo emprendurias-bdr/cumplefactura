@@ -111,6 +111,9 @@ pub struct Invoice {
     pub fiscal_year: i32,
     pub series: String,
     pub number: Option<i64>,
+    /// `NumSerieFactura` fijado al emitir con el formato de la serie; `None` en borradores.
+    #[serde(default)]
+    pub num_serie: Option<String>,
     pub kind: InvoiceKind,
     pub status: InvoiceStatus,
     pub territory_flags: Vec<TerritoryFlag>,
@@ -150,6 +153,7 @@ impl Invoice {
             fiscal_year: input.fiscal_year,
             series: input.series,
             number: input.number,
+            num_serie: None,
             kind: input.kind,
             status: InvoiceStatus::Draft,
             territory_flags: input.territory_flags,

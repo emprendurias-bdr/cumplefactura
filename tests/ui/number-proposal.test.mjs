@@ -3,10 +3,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { invoiceNumber, numberProposal } from "../../src/lib/numberProposal.ts";
 
-const preview = { company_id: "company-test", fiscal_year: 2026, series: "A", next_number: 129, source: "invoice_sequences" };
+const preview = { company_id: "company-test", fiscal_year: 2026, series: "A", next_number: 129, preview: "A-129", source: "invoice_sequences" };
 const scope = { companyId: "company-test", series: "A", fiscalYear: 2026 };
 
 test("shows the native preview in the same format used by XML: series-number", () => assert.equal(numberProposal(preview, scope), "A-129"));
+test("uses the series format decided by Rust, not a local one", () =>
+  assert.equal(numberProposal({ ...preview, series: "F2026", preview: "F2026/0129" }, { ...scope, series: "F2026" }), "F2026/0129"));
 test("does not reuse a preview from a previous company, series or fiscal year", () => {
   for (const s of [{ ...scope, companyId: "other" }, { ...scope, series: "R" }, { ...scope, fiscalYear: 2027 }]) assert.equal(numberProposal(preview, s), null);
 });
@@ -17,4 +19,5 @@ test("does not invent a sequence number before a safe native preview exists", ()
 test("a draft has no visible number", () => {
   assert.equal(invoiceNumber({ series: "A", number: null }), null);
   assert.equal(invoiceNumber({ series: "A", number: 7 }), "A-7");
+  assert.equal(invoiceNumber({ series: "F2026", number: 7, num_serie: "F2026/0007" }), "F2026/0007");
 });

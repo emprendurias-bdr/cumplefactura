@@ -115,11 +115,10 @@ fn invoice_sheet(invoice: &InvoicePdfData, env: QrEnvironment) -> Result<Sheet, 
         (true, "Simplified") => "Factura simplificada".to_string(),
         (true, _) => "Factura".to_string(),
     };
-    let mut subtitle = vec![match invoice.number {
-        Some(number) => format!(
-            "Nº {}-{} · Fecha {}",
-            invoice.series,
-            number,
+    let mut subtitle = vec![match &invoice.num_serie {
+        Some(num_serie) => format!(
+            "Nº {} · Fecha {}",
+            num_serie,
             spanish_date(invoice.issued_at.as_deref().unwrap_or_default())
         ),
         None => format!("Serie {} · sin número hasta emitir", invoice.series),
@@ -133,9 +132,8 @@ fn invoice_sheet(invoice: &InvoicePdfData, env: QrEnvironment) -> Result<Sheet, 
     }
     if let Some(source) = &invoice.rectified_invoice {
         details.push(format!(
-            "Rectifica a la factura {}-{} de {}",
-            source.series,
-            source.number,
+            "Rectifica a la factura {} de {}",
+            source.num_serie,
             spanish_date(&source.issued_at)
         ));
     }
@@ -832,6 +830,8 @@ pub(crate) mod tests {
             total_cents: 12_100,
             fiscal_hash: Some("hash".to_string()),
             issued_at: Some("2026-05-28T00:00:00Z".to_string()),
+            num_serie: Some("A-1".to_string()),
+            record_generated_at: Some("2026-05-28T00:00:05Z".to_string()),
             lines: vec![InvoicePdfLine {
                 description: "Servicio".to_string(),
                 quantity: 1,
@@ -869,6 +869,7 @@ pub(crate) mod tests {
 
         let mut draft = invoice;
         draft.number = None;
+        draft.num_serie = None;
         draft.issued_at = None;
         draft.status = "Draft".to_string();
         draft.fiscal_hash = None;

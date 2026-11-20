@@ -11,7 +11,7 @@ import { t } from "../i18n/es";
 import { invoiceDate } from "../lib/invoiceDate";
 import { formatCents } from "../lib/moneyFormat";
 import { invoiceNumber } from "../lib/numberProposal";
-import { recurringOrigin } from "../lib/periods";
+import { quarterRange, recurringOrigin } from "../lib/periods";
 import { href } from "../lib/routes";
 import { go } from "../shell/useRoute";
 import { SEARCH_ID } from "../shell/Shell";
@@ -20,6 +20,7 @@ import { Button } from "../ui/Button";
 import { Callout } from "../ui/Callout";
 import { DataTable, type Column } from "../ui/DataTable";
 import { EmptyState } from "../ui/EmptyState";
+import { DateInput, Field, Select } from "../ui/Field";
 import { Accent, Hero } from "../ui/Hero";
 import { Skeleton, useDelayedLoading } from "../ui/Skeleton";
 import { invoiceKind, invoiceStatus, paymentStatus } from "../ui/status";
@@ -137,9 +138,12 @@ export function FacturasSection(c: Ctx) {
           </>
         }
         secondary={
-          <Button onClick={() => void m.exportCsv()} disabled={m.invoices.length === 0}>
-            {t("facturas.exportarCsv")}
-          </Button>
+          <>
+            <LibroExpedidas c={c} />
+            <Button onClick={() => void m.exportCsv()} disabled={m.invoices.length === 0}>
+              {t("facturas.exportarCsv")}
+            </Button>
+          </>
         }
         primary={
           <a className="bdr-btn bdr-btn--primary" href="#/facturas/nueva" aria-keyshortcuts="N">
@@ -245,5 +249,49 @@ function FilterSelect({ label, value, onChange, options }: { label: string; valu
         ))}
       </select>
     </label>
+  );
+}
+
+/**
+ * X1 · Libro registro de facturas expedidas: desplegable con el periodo (trimestre del año fiscal o
+ * rango libre) y botón que pide la ruta con el diálogo nativo. Exporta la empresa activa.
+ */
+function LibroExpedidas({ c }: { c: Ctx }) {
+  const { m } = c;
+  const [periodo, setPeriodo] = useState(String(Math.ceil((new Date().getMonth() + 1) / 3)));
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [from, to] = periodo === "rango" ? [desde, hasta] : quarterRange(m.fiscalYear, Number(periodo));
+  const reason = !m.company ? t("error.sinEmpresa") : !from || !to || from > to ? t("libro.rangoInvalido") : null;
+  return (
+    <details className="cf-more">
+      <summary className="bdr-btn">{t("libro.boton")}</summary>
+      <div className="cf-more__body cf-more__body--end">
+        <Field label={t("libro.periodo")} wide>
+          <Select value={periodo} onChange={(event) => setPeriodo(event.target.value)}>
+            {[1, 2, 3, 4].map((q) => (
+              <option key={q} value={String(q)}>
+                {t("libro.trimestre", { n: q, anio: m.fiscalYear })}
+              </option>
+            ))}
+            <option value="rango">{t("libro.rango")}</option>
+          </Select>
+        </Field>
+        {periodo === "rango" ? (
+          <>
+            <Field label={t("libro.desde")}>
+              <DateInput value={desde} onChange={(event) => setDesde(event.target.value)} />
+            </Field>
+            <Field label={t("libro.hasta")}>
+              <DateInput value={hasta} onChange={(event) => setHasta(event.target.value)} />
+            </Field>
+          </>
+        ) : null}
+        <span className="bdr-help cf-wide">{t("libro.ayuda")}</span>
+        <Button variant="primary" icon="download" disabled={reason !== null} reason={reason} onClick={() => void m.exportLibroExpedidas(from, to)}>
+          {t("libro.exportar")}
+        </Button>
+      </div>
+    </details>
   );
 }

@@ -64,6 +64,7 @@ pub fn run() {
             commands::fiscal::backup_restore,
             commands::fiscal::invoice_export_json,
             commands::fiscal::invoice_export_csv,
+            commands::libros::libro_expedidas_export,
             commands::fiscal::fiscal_audit_export,
             commands::fiscal::verifactu_xml_draft_export,
             commands::fiscal::verifactu_xml_anulacion_draft_export,

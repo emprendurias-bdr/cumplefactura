@@ -126,6 +126,7 @@ a.bdr-btn--secondary { color: var(--fg); }
 .cf-more > summary { list-style: none; }
 .cf-more > summary::-webkit-details-marker { display: none; }
 .cf-more__body { position: absolute; z-index: 25; top: calc(100% + 6px); left: 0; display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 8px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-s); box-shadow: var(--sombra-2); }
+.cf-more__body--end { left: auto; right: 0; } /* desplegable alineado a la derecha (hero) */
 .cf-filter-inline { gap: 6px; }
 
 /* --- Tablas --- */

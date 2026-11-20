@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { docActions, groupInvoiceReason } from "../../src/lib/documents.ts";
 import { decimal, editorTotals, invoiceToLines } from "../../src/lib/format.ts";
-import { isValidDay, periodKey, periodLabel } from "../../src/lib/periods.ts";
+import { isValidDay, periodKey, periodLabel, quarterRange } from "../../src/lib/periods.ts";
 
 const albaran = (over = {}) => ({ customer_id: "c1", status: "delivered", delivery_date: "2026-11-05", issue_date: "2026-11-05", invoice_id: null, ...over });
 
@@ -46,4 +46,10 @@ test("Spanish decimal input and lines from Rust", () => {
   assert.equal(lines[0].tax_rate_percent, "21");
   assert.equal(editorTotals(lines).total_cents, 25100 + 5271 - 3765);
   assert.equal(invoiceToLines({}).length, 1);
+});
+
+test("quarterRange gives the first and last day of each quarter", () => {
+  assert.deepEqual(quarterRange(2026, 1), ["2026-01-01", "2026-03-31"]);
+  assert.deepEqual(quarterRange(2026, 2), ["2026-04-01", "2026-06-30"]);
+  assert.deepEqual(quarterRange(2026, 4), ["2026-10-01", "2026-12-31"]);
 });

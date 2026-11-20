@@ -374,6 +374,7 @@ export function installTauriMock(page, seed = null) {
       invoice_export_pdf: (args) => args.targetPath,
       invoice_export_json: (args) => ({ target_path: args.targetPath, status: "created", notes: ["browser smoke mock"] }),
       invoice_export_csv: (args) => ({ target_path: args.targetPath, status: "created", notes: ["browser smoke mock"] }),
+      libro_expedidas_export: (args) => ({ target_path: args.targetPath, status: "created", notes: ["browser smoke mock"] }),
       fiscal_audit_export: (args) => ({ target_path: args.targetPath, status: "created", notes: ["browser smoke mock"] }),
       rectification_advice: () => ({ reason_code: "R4", method: "I", confidence: "medium", source_refs: [], notes: [], warnings: [] }),
       verifactu_xml_draft_export: (args) => ({

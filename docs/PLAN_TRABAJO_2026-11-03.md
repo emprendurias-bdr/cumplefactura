@@ -166,7 +166,7 @@ Sigue el orden y los criterios de `docs/PLAN_UX_UI_2026-10-30.md` (tokens → sh
 | F2.5 Editor, emisión y Verifactu | Editor partido 1fr/420 px, ConfirmDialog de emisión con «Lo entiendo», `Ctrl+Enter`, asistente de rectificativa en 4 pasos; pantalla Verifactu con el flujo real de PR #7 (Exportar XML → Comprobación previa → Enviar → Respuesta AEAT) y técnico en `<details>`. | `RectificationWizard.tsx`, `FiscalProgress` → `progress.ts` + test. | 1,5 |
 | F2.6 Ajustes, primer arranque, clientes y productos | Subpáginas de Ajustes (Empresa, Series, Fiscalidad, Certificado, Copias, Avanzado); `FirstRun` a pantalla completa; Clientes y Productos como tabla + formulario lateral. | `FirstRun.tsx`, `Onboarding.tsx` (estructura). | 1 |
 
-Pasos del Stepper Verifactu: **5**, como fija `design.md` v1.4 §10 (ADR-003). Pasos 4 y 5 solo se colorean con fila en `verifactu_submissions`.
+Pasos del Stepper Verifactu: **5**, como fija `design.md` v1.4 §10 (ADR-003). No confundir con las **3 acciones** de envío (Exportar XML → Comprobación previa → Enviar); «Respuesta AEAT» es el resultado de la tercera, no un paso (aclaración L1, 20/11/2026). Pasos 4 y 5 solo se colorean con fila en `verifactu_submissions`.
 
 ### F3 — Cierre fiscal y local-first (4 PR, ~4 días; empieza tras F1.2)
 

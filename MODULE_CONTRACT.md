@@ -1,6 +1,6 @@
 # CumpleFactura - Module contract
 
-Estado: pre-MVP fiscal verificable
+Estado: MVP funcional sin homologar; no apto para producción (ver `docs/legal/REQUISITOS_SIF.md`)
 Fecha: 2026-11-02
 Stack: Tauri 2 + React + TypeScript + Rust + SQLite; sidecar Rust `cumplefactura-sidecar` para la AEAT
 
@@ -130,14 +130,14 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite; sidecar Rust `cumplefactura
 - Flujo demo cableado tras control explicito `Activar datos demo`: emisor -> cliente -> borrador -> emision -> listados -> backup/export.
 - Flujo real cableado: guardar/editar empresa, guardar/editar cliente, configurar serie, crear borrador, emitir y exportar.
 - La UI invoca comandos Tauri reales con `@tauri-apps/api/core`.
-- Muestra estado pre-MVP: `local_evidence`, `external_blocked`, limites y directorio export seguro.
+- Muestra el estado sin homologar: `local_evidence`, `external_blocked`, limites y directorio export seguro.
 - Incluye onboarding inicial guiado para empresa, fiscalidad local, primera serie y carpeta export persistida.
 - Incluye file picker nativo para carpeta export, backup, restore y artefactos PDF/JSON/CSV/XML/auditoria.
 - Incluye catalogo productos/servicios por empresa y boton para rellenar una linea de factura.
 - Incluye buscador/filtros de facturas por texto, empresa, cliente, año, serie, estado y tipo.
 - Incluye paginacion local de facturas, auditoria y registros fiscales.
 - Incluye pantalla de auditoria fiscal local con estado de cadena, incidencias, hash final por empresa y export JSON.
-- Incluye envio VERI*FACTU en tres pasos: Exportar XML (o anulacion) -> Preflight envio -> Enviar, con referencia `vault://certs/<id>` y entorno elegido en Ajustes.
+- Incluye envio VERI*FACTU manual en tres acciones: Exportar XML (o anulacion) -> Comprobacion previa -> Enviar, con referencia `vault://certs/<id>` y entorno elegido en Ajustes; la respuesta de la AEAT es el resultado de la tercera (`src/sections/VerifactuEnvio.tsx`). Aparte, el estado fiscal de cada factura se muestra en un `Stepper` de 5 pasos: Emitida -> Registro -> XML -> Enviada -> Aceptada (`src/lib/progress.ts`). No hay envio automatico, cola ni reintento horario (ver `docs/legal/REQUISITOS_SIF.md`, filas 11-12).
 - Permite configurar series: `VENDI202601`, `AL-001`, `C-001`, `I-001`.
 - Permite elegir la serie activa de cada factura y editar lineas con cantidad, precio, descuento, IVA e IRPF antes de crear borrador o emitir.
 - Exporta PDF, JSON, CSV, auditoria JSON y XML VERI*FACTU alta/anulacion borrador XSD-validado desde factura emitida.

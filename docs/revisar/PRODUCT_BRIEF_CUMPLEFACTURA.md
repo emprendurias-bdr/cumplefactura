@@ -14,7 +14,7 @@ CumpleFactura es una app desktop local-first para facturacion y cumplimiento fis
 | Series y numeracion | Presupuestos/albaranes | SII completo si no aplica al target |
 | IVA/IRPF basicos | Plantillas PDF editables | TicketBAI completo v1 salvo decision comercial |
 | PDF factura | Email integrado | Portal cliente |
-| SQLite local cifrable | Backup cloud opcional | SaaS multiusuario |
+| SQLite local (sin cifrar en v1; el cifrado está fuera de la GA) | Backup cloud opcional | SaaS multiusuario |
 | Export JSON/CSV | Import Facturae | Inventario avanzado |
 | Preparacion VERI*FACTU | API fiscal hibrida | BI complejo |
 | Auditoria local append-only | Firma avanzada propia | Marketplace |
@@ -74,7 +74,7 @@ CumpleFactura/
 | `invoice_issue` | `InvoiceIssueInput` | `IssuedInvoice` | Emitir, numerar, auditar. |
 | `invoice_export_pdf` | `invoiceId` | `FilePath` | Generar PDF local. |
 | `fiscal_prepare_verifactu` | `invoiceId` | `FiscalPayload` | Preparar payload para sidecar/API. |
-| `backup_export` | `targetPath` | `BackupResult` | Export local cifrado. |
+| `backup_export` | `targetPath` | `BackupResult` | Copia local SQLite (`VACUUM INTO`), sin cifrar en v1. |
 
 ## Primer Sprint: 20 Issues Priorizados
 

@@ -1,6 +1,6 @@
 # CumpleFactura
 
-App de escritorio **local-first** (Tauri 2 + React + SQLite) para facturación y cumplimiento VERI\*FACTU. Estado: pre-MVP, pendiente de homologación.
+App de escritorio **local-first** (Tauri 2 + React + SQLite) para facturación y cumplimiento VERI\*FACTU. Estado: MVP funcional sin homologar; no apto para producción (ver `docs/legal/REQUISITOS_SIF.md`).
 
 ## Arquitectura
 

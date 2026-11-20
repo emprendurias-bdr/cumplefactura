@@ -8,5 +8,5 @@ Dominio: cumplimiento de facturacion local-first. Ver `docs/revisar/PRODUCT_BRIE
 
 Reglas:
 - Seguir `C:\07 DESARROLLO\CLAUDE.md`.
-- Login/identidad comun: ver `docs/revisar/IDENTITY_ADOPTION.md` + `tools/login-core/`.
-- Estado: MVP funcional, falta homologacion.
+- Login/identidad comun: ver `docs/revisar/IDENTITY_ADOPTION.md` + `C:\07 DESARROLLO\tools\login-core\` (carpeta del workspace, fuera de este repo; v1 sin login, local-first).
+- Estado: MVP funcional sin homologar; no apto para producción (ver `docs/legal/REQUISITOS_SIF.md`).

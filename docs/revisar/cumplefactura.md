@@ -79,7 +79,7 @@ Decision recogida en `docs/memory/decisions/ADR-0001-arquitectura-ia.md` y `MAST
 | Offline-first | ❌ (web) | ✅ (Tauri+SQLite local) |
 | Modulos IA (captura, sugerencias) | ❌ | ✅ FacturaIA add-on |
 | Gestion gastos / inmovilizado | ❌ | ✅ GastoClaro add-on |
-| Backup local cifrable | ❌ | ✅ |
+| Backup local (sin cifrar en v1) | ❌ | ✅ |
 | UX cuidada / personalizable | ⚠ funcional minimalista | ✅ |
 | Soporte tecnico humano | Solo informacion AEAT | ✅ Pro/Business |
 

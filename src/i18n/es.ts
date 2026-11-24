@@ -849,6 +849,8 @@ const ERRORS: Record<string, string> = {
   // R2: borradores, cobros, series de documentos y logo
   price_pending_lines: "Hay {d} líneas del albarán sin precio. Pon el precio antes de emitir.",
   payments_exceed_total: "Lo cobrado supera el total de la factura. Revisa las líneas o borra algún cobro.",
+  // N1: hora de generación del registro fiscal
+  clock_before_previous_record: "La hora del equipo es anterior a la del último registro fiscal ({d}). Revisa el reloj del sistema y vuelve a intentarlo.",
   invoice_not_issued: "Emite la factura antes de registrar cobros.",
   payment_not_allowed: "Aquí no se pueden registrar cobros: solo en facturas emitidas y en proformas enviadas.",
   payment_exceeds_total: "El cobro supera lo que queda pendiente ({d}).",

@@ -6,9 +6,9 @@
 use crate::db::{
     self, AppState, InvoiceDetail, InvoiceListFilters, InvoiceSummary, ListPagination,
 };
+use crate::domain::company::format_invoice_number;
 use crate::domain::invoice::{Invoice, InvoiceDraftInput, InvoiceIssueInput, IssuedInvoice};
 use crate::domain::require;
-use crate::services::audit::AuditEvent;
 use crate::services::pdf;
 use crate::services::qr::QrEnvironment;
 use crate::services::verifactu;
@@ -21,6 +21,8 @@ pub struct NextNumberPreview {
     pub fiscal_year: i32,
     pub series: String,
     pub next_number: i64,
+    /// `NumSerieFactura` que llevará la factura si se emite ahora (mismo formato que XML y PDF).
+    pub preview: String,
     pub source: String,
 }
 
@@ -59,7 +61,8 @@ pub fn invoice_get(
     db::get_invoice_detail(&conn, &invoice_id)
 }
 
-/// Emite: reserva secuencia, calcula huella, audit trail y registro fiscal.
+/// Emite en una sola transacción (`db::issue_invoice`): número, huella, alta, registro fiscal y
+/// auditoría. `FechaHoraHusoGenRegistro` sale del reloj del sistema, no de `issued_at`.
 /// `draft_id` (opcional): borrador que se emite. Se borra en la misma transacción y sus albaranes
 /// y periodos recurrentes pasan a la factura emitida.
 #[tauri::command]
@@ -73,76 +76,14 @@ pub fn invoice_issue(
         db::check_commercial_links_for_issue(&conn, draft_id, &input.draft.customer_id)?;
     }
     db::check_price_pending_for_issue(&conn, draft_id.as_deref(), &input.draft)?;
-    let previous_hash = match input.previous_audit_hash.clone() {
-        Some(hash) => Some(hash),
-        None => db::latest_audit_hash(&conn)?,
-    };
-    let actor = input.actor.clone();
-    let mut issue_input = input;
-    require("actor", &issue_input.actor)?;
-    require("issued_at", &issue_input.issued_at)?;
-    Invoice::draft(issue_input.draft.clone())?;
-    let number = db::reserve_invoice_number(
+    require("actor", &input.actor)?;
+    require("issued_at", &input.issued_at)?;
+    db::issue_invoice(
         &mut conn,
-        &issue_input.draft.company_id,
-        issue_input.draft.fiscal_year,
-        &issue_input.draft.series,
-    )?;
-    issue_input.number = number;
-    issue_input.previous_audit_hash = previous_hash.clone();
-
-    let (invoice, _technical_hash) = Invoice::issue(issue_input)?;
-    let issued_at = invoice
-        .issued_at
-        .as_deref()
-        .ok_or_else(|| "issued invoice missing issued_at".to_string())?;
-    let number = invoice
-        .number
-        .ok_or_else(|| "issued invoice missing number".to_string())?;
-    let company_tax_id = db::company_tax_id(&conn, &invoice.company_id)?;
-    let previous_fiscal_hash =
-        db::latest_fiscal_record_hash_for_company(&conn, &invoice.company_id)?;
-    let rectification_reason_code = invoice
-        .rectification_reason_code
-        .as_ref()
-        .map(|value| format!("{:?}", value));
-    let invoice_type = verifactu::registro_alta_invoice_type_for_kind(
-        &format!("{:?}", invoice.kind),
-        rectification_reason_code.as_deref(),
-    )?;
-    let fiscal_hash = verifactu::IssuedAlta {
-        issuer_tax_id: &company_tax_id,
-        series: &invoice.series,
-        number,
-        issued_at,
-        tax_cents: invoice.totals.tax_cents,
-        total_cents: invoice.totals.total_cents,
-        invoice_type,
-        previous_hash: previous_fiscal_hash.as_deref(),
-    }
-    .hash()?;
-    let audit_event = AuditEvent::invoice_issued(
-        invoice.id.clone(),
-        actor,
-        fiscal_hash.clone(),
-        previous_hash,
-    );
-    let audit_hash = audit_event.chain_hash();
-
-    db::insert_issued_invoice_from_draft(
-        &mut conn,
-        &invoice,
-        &fiscal_hash,
-        previous_fiscal_hash.as_deref(),
-        &audit_event,
+        input,
         draft_id.as_deref(),
-    )?;
-
-    Ok(IssuedInvoice {
-        invoice,
-        fiscal_hash,
-        audit_hash,
-    })
+        &verifactu::generated_at_now(),
+    )
 }
 
 /// Consulta el próximo número sin consumir la secuencia.
@@ -157,7 +98,9 @@ pub fn invoice_next_number_preview(
     require("series", &series)?;
     let conn = state.lock()?;
     let next_number = db::next_invoice_number_preview(&conn, &company_id, fiscal_year, &series)?;
+    let (separator, padding) = db::invoice_number_format(&conn, &company_id, fiscal_year, &series)?;
     Ok(NextNumberPreview {
+        preview: format_invoice_number(&series, &separator, padding, next_number),
         company_id,
         fiscal_year,
         series,

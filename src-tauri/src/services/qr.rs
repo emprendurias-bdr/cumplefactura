@@ -11,7 +11,7 @@
 //! que coteja el receptor coincide byte a byte con lo registrado.
 
 use crate::db::InvoicePdfData;
-use crate::services::verifactu::{aeat_date, format_invoice_number, money};
+use crate::services::verifactu::{aeat_date, money};
 use qrcode::{EcLevel, QrCode};
 
 const AEAT_QR_PRODUCTION: &str = "https://www2.agenciatributaria.gob.es/wlpl/TIKE-CONT/ValidarQR";
@@ -48,8 +48,9 @@ impl QrEnvironment {
 
 /// URL de cotejo de una factura emitida. Falla si no tiene número o fecha (borrador).
 pub fn verifactu_qr_url(invoice: &InvoicePdfData, env: QrEnvironment) -> Result<String, String> {
-    let number = invoice
-        .number
+    let num_serie = invoice
+        .num_serie
+        .as_deref()
         .ok_or_else(|| "QR requires an issued invoice number".to_string())?;
     let issued_at = invoice
         .issued_at
@@ -59,7 +60,7 @@ pub fn verifactu_qr_url(invoice: &InvoicePdfData, env: QrEnvironment) -> Result<
         "{}?nif={}&numserie={}&fecha={}&importe={}",
         env.base_url(),
         percent_encode(invoice.company_tax_id.trim()),
-        percent_encode(&format_invoice_number(&invoice.series, number)),
+        percent_encode(num_serie),
         percent_encode(&aeat_date(issued_at)?),
         percent_encode(&money(invoice.total_cents)),
     ))
@@ -117,6 +118,8 @@ pub(crate) mod tests {
             total_cents: 24_140,
             fiscal_hash: Some("A".repeat(64)),
             issued_at: Some("2026-09-01T10:00:00+02:00".to_string()),
+            num_serie: Some("A&B-7".to_string()),
+            record_generated_at: Some("2026-09-01T10:00:05+02:00".to_string()),
             lines: vec![InvoicePdfLine {
                 description: "Servicio".to_string(),
                 quantity: 1,
@@ -154,6 +157,7 @@ pub(crate) mod tests {
     fn url_matches_the_registro_alta_formatters() {
         let mut invoice = issued_invoice();
         invoice.series = "A".to_string();
+        invoice.num_serie = Some("A-007".to_string());
         let xml = build_verifactu_xml_draft(&invoice, None).expect("xml");
         let url = verifactu_qr_url(&invoice, QrEnvironment::Test).expect("url");
         let expected = format!(
@@ -170,6 +174,7 @@ pub(crate) mod tests {
     fn drafts_have_no_qr_url() {
         let mut draft = issued_invoice();
         draft.number = None;
+        draft.num_serie = None;
         assert!(verifactu_qr_url(&draft, QrEnvironment::Test).is_err());
         let mut undated = issued_invoice();
         undated.issued_at = None;

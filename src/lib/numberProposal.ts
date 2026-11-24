@@ -17,10 +17,12 @@ export function numberProposal(
     preview.next_number <= 0
   )
     return null;
-  return `${preview.series}-${preview.next_number}`;
+  // El formato (separador, ceros, año) lo decide Rust: el mismo texto irá al XML y al PDF.
+  return preview.preview || null;
 }
 
-/** Número visible de una factura: `A-12`, o null si aún es borrador. */
-export function invoiceNumber(invoice: { series: string; number?: number | null }): string | null {
-  return invoice.number != null && invoice.number > 0 ? `${invoice.series}-${invoice.number}` : null;
+/** Número visible de una factura: el `num_serie` guardado al emitir, o null si aún es borrador. */
+export function invoiceNumber(invoice: { series: string; number?: number | null; num_serie?: string | null }): string | null {
+  if (invoice.number == null || invoice.number <= 0) return null;
+  return invoice.num_serie || `${invoice.series}-${invoice.number}`;
 }

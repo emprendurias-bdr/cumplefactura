@@ -94,7 +94,7 @@ fn validate_record_shape(record: &FiscalRecordVerificationRow, issues: &mut Vec<
         );
     }
 
-    if record.invoice_number.is_none() {
+    if record.invoice_number.is_none() || record.invoice_num_serie.is_none() {
         push_issue(
             issues,
             record,
@@ -218,7 +218,7 @@ fn validate_recomputed_hash(
     record: &FiscalRecordVerificationRow,
     issues: &mut Vec<FiscalChainIssue>,
 ) {
-    let Some(number) = record.invoice_number else {
+    let Some(num_serie) = record.invoice_num_serie.as_deref() else {
         return;
     };
     let Some(issued_at) = record.invoice_issued_at.as_deref() else {
@@ -233,9 +233,9 @@ fn validate_recomputed_hash(
         .and_then(|invoice_type| {
             verifactu::IssuedAlta {
                 issuer_tax_id: &record.company_tax_id,
-                series: &record.invoice_series,
-                number,
+                invoice_number: num_serie,
                 issued_at,
+                generated_at: &record.generated_at,
                 tax_cents: record.invoice_tax_cents,
                 total_cents: record.invoice_total_cents,
                 invoice_type,
@@ -246,8 +246,7 @@ fn validate_recomputed_hash(
         "Anulacion" => match record.previous_fiscal_hash.as_deref() {
             Some(previous_hash) => verifactu::calculate_issued_invoice_registro_anulacion_hash(
                 &record.company_tax_id,
-                &record.invoice_series,
-                number,
+                num_serie,
                 issued_at,
                 previous_hash,
                 &record.generated_at,
@@ -388,9 +387,9 @@ mod tests {
         let number = invoice.number.expect("number");
         let fiscal_hash = verifactu::IssuedAlta {
             issuer_tax_id: "B00000000",
-            series: &invoice.series,
-            number,
+            invoice_number: &format!("{}-{}", invoice.series, number),
             issued_at,
+            generated_at: issued_at,
             tax_cents: invoice.totals.tax_cents,
             total_cents: invoice.totals.total_cents,
             invoice_type: "F1",
@@ -427,8 +426,7 @@ mod tests {
         let generated_at = "2026-05-28T10:05:00Z";
         let anulacion_hash = verifactu::calculate_issued_invoice_registro_anulacion_hash(
             "B00000000",
-            &invoice.series,
-            invoice.number.expect("number"),
+            &format!("{}-{}", invoice.series, invoice.number.expect("number")),
             invoice.issued_at.as_deref().expect("issued_at"),
             &alta_hash,
             generated_at,

@@ -90,6 +90,17 @@ pub fn upsert_invoice_series_config(
             "next_number must be greater than existing max invoice number {max_existing}"
         ));
     }
+    // RD 1619/2012, art. 6.1.a: numeración correlativa dentro de cada serie; con facturas
+    // emitidas el formato del número queda fijo (decisión 11.2).
+    if max_existing > 0 {
+        let (current_separator, current_padding) =
+            invoice_number_format(conn, &input.company_id, input.fiscal_year, &resolved_series)?;
+        if current_separator != separator || current_padding != input.padding {
+            return Err(format!(
+                "La serie {resolved_series} ya tiene facturas emitidas; para cambiar el formato crea una serie nueva"
+            ));
+        }
+    }
 
     let existing_id: Option<String> = conn
         .query_row(
@@ -120,14 +131,13 @@ pub fn upsert_invoice_series_config(
 
     tx.execute(
         "INSERT INTO invoice_series_configs
-         (id, company_id, label, series_code, fiscal_year, include_year, separator, padding, next_number, is_default, active, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 1, ?11)
+         (id, company_id, label, series_code, fiscal_year, include_year, separator, padding, is_default, active, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 1, ?10)
          ON CONFLICT(company_id, fiscal_year, series_code) DO UPDATE SET
            label = excluded.label,
            include_year = excluded.include_year,
            separator = excluded.separator,
            padding = excluded.padding,
-           next_number = excluded.next_number,
            is_default = excluded.is_default,
            active = 1",
         params![
@@ -139,7 +149,6 @@ pub fn upsert_invoice_series_config(
             if input.include_year { 1 } else { 0 },
             separator,
             input.padding,
-            input.next_number,
             if input.is_default { 1 } else { 0 },
             created_at,
         ],
@@ -177,7 +186,7 @@ pub fn list_invoice_series_configs(
         .prepare(
             "SELECT cfg.id, cfg.company_id, cfg.label, cfg.series_code, cfg.fiscal_year,
                     cfg.include_year, cfg.separator, cfg.padding,
-                    COALESCE(seq.next_number, cfg.next_number) AS next_number,
+                    COALESCE(seq.next_number, 1) AS next_number,
                     cfg.is_default, cfg.active, cfg.created_at
              FROM invoice_series_configs cfg
              LEFT JOIN invoice_sequences seq
@@ -220,6 +229,32 @@ pub fn list_invoice_series_configs(
         })
         .map_err(db_error)?;
     rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
+}
+
+/// Separador y relleno de la serie ya resuelta (`A2026`); sin configuración, el formato por defecto.
+pub fn invoice_number_format(
+    conn: &Connection,
+    company_id: &str,
+    fiscal_year: i32,
+    resolved_series: &str,
+) -> Result<(String, i32), String> {
+    conn.query_row(
+        "SELECT separator, padding FROM invoice_series_configs
+         WHERE company_id = ?1 AND fiscal_year = ?2 AND active = 1
+           AND CASE WHEN include_year = 1 THEN series_code || fiscal_year ELSE series_code END = ?3",
+        params![company_id, fiscal_year, resolved_series],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )
+    .optional()
+    .map_err(db_error)
+    .map(|found| {
+        found.unwrap_or_else(|| {
+            (
+                crate::domain::company::DEFAULT_NUMBER_SEPARATOR.to_string(),
+                crate::domain::company::DEFAULT_NUMBER_PADDING,
+            )
+        })
+    })
 }
 
 pub fn company_tax_id(conn: &Connection, company_id: &str) -> Result<String, String> {

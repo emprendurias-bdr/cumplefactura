@@ -138,8 +138,8 @@ pub struct FiscalRecordVerificationRow {
     pub invoice_id: String,
     pub invoice_kind: String,
     pub invoice_rectification_reason_code: Option<String>,
-    pub invoice_series: String,
     pub invoice_number: Option<i64>,
+    pub invoice_num_serie: Option<String>,
     pub invoice_status: String,
     pub invoice_tax_cents: i64,
     pub invoice_total_cents: i64,
@@ -226,7 +226,7 @@ pub fn list_fiscal_records_for_verification(
         .prepare(
             "SELECT fr.id, fr.company_id, c.tax_id, fr.invoice_id, i.kind, i.rectification_reason_code, i.series, i.number, i.status,
                     i.tax_cents, i.total_cents, i.fiscal_hash, i.issued_at, fr.record_type,
-                    fr.generated_at, fr.fiscal_hash, fr.previous_fiscal_hash, fr.xml_path
+                    fr.generated_at, fr.fiscal_hash, fr.previous_fiscal_hash, fr.xml_path, i.num_serie
              FROM fiscal_records fr
              JOIN companies c ON c.id = fr.company_id
              JOIN invoices i ON i.id = fr.invoice_id
@@ -242,8 +242,8 @@ pub fn list_fiscal_records_for_verification(
                 invoice_id: row.get(3)?,
                 invoice_kind: row.get(4)?,
                 invoice_rectification_reason_code: row.get(5)?,
-                invoice_series: row.get(6)?,
                 invoice_number: row.get(7)?,
+                invoice_num_serie: row.get(18)?,
                 invoice_status: row.get(8)?,
                 invoice_tax_cents: row.get(9)?,
                 invoice_total_cents: row.get(10)?,
@@ -435,6 +435,8 @@ pub struct PreviousInvoiceLink {
     pub company_tax_id: String,
     pub series: String,
     pub number: i64,
+    /// `NumSerieFactura` guardado al emitir.
+    pub num_serie: String,
     pub issued_at: String,
     pub fiscal_hash: String,
 }
@@ -444,11 +446,13 @@ pub struct RectifiedInvoiceLink {
     pub company_tax_id: String,
     pub series: String,
     pub number: i64,
+    pub num_serie: String,
     pub issued_at: String,
     pub taxable_base_cents: i64,
     pub tax_cents: i64,
 }
 
+#[cfg(test)]
 pub fn latest_fiscal_record_hash_for_company(
     conn: &Connection,
     company_id: &str,
@@ -465,12 +469,29 @@ pub fn latest_fiscal_record_hash_for_company(
     .map_err(db_error)
 }
 
+/// Cabeza de la cadena de la empresa: (`fiscal_hash`, `generated_at`) del último registro.
+pub fn latest_fiscal_record_head(
+    conn: &Connection,
+    company_id: &str,
+) -> Result<Option<(String, String)>, String> {
+    conn.query_row(
+        "SELECT fiscal_hash, generated_at FROM fiscal_records
+         WHERE company_id = ?1
+         ORDER BY generated_at DESC, rowid DESC
+         LIMIT 1",
+        params![company_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )
+    .optional()
+    .map_err(db_error)
+}
+
 pub fn latest_fiscal_record_link_for_company(
     conn: &Connection,
     company_id: &str,
 ) -> Result<Option<PreviousInvoiceLink>, String> {
     conn.query_row(
-        "SELECT c.tax_id, i.series, i.number, i.issued_at, fr.fiscal_hash
+        "SELECT c.tax_id, i.series, i.number, i.issued_at, fr.fiscal_hash, i.num_serie
          FROM fiscal_records fr
          JOIN invoices i ON i.id = fr.invoice_id
          JOIN companies c ON c.id = fr.company_id
@@ -485,6 +506,7 @@ pub fn latest_fiscal_record_link_for_company(
                 company_tax_id: row.get(0)?,
                 series: row.get(1)?,
                 number: row.get(2)?,
+                num_serie: row.get(5)?,
                 issued_at: row.get(3)?,
                 fiscal_hash: row.get(4)?,
             })
@@ -500,7 +522,7 @@ pub fn previous_fiscal_record_link_for_invoice(
     record_type: &str,
 ) -> Result<Option<PreviousInvoiceLink>, String> {
     conn.query_row(
-        "SELECT c.tax_id, i.series, i.number, i.issued_at, prev.fiscal_hash
+        "SELECT c.tax_id, i.series, i.number, i.issued_at, prev.fiscal_hash, i.num_serie
          FROM fiscal_records cur
          JOIN fiscal_records prev ON prev.fiscal_hash = cur.previous_fiscal_hash
          JOIN invoices i ON i.id = prev.invoice_id
@@ -517,6 +539,7 @@ pub fn previous_fiscal_record_link_for_invoice(
                 company_tax_id: row.get(0)?,
                 series: row.get(1)?,
                 number: row.get(2)?,
+                num_serie: row.get(5)?,
                 issued_at: row.get(3)?,
                 fiscal_hash: row.get(4)?,
             })
@@ -531,7 +554,7 @@ pub fn rectified_invoice_link(
     invoice_id: &str,
 ) -> Result<RectifiedInvoiceLink, String> {
     conn.query_row(
-        "SELECT c.tax_id, i.series, i.number, i.issued_at, i.taxable_base_cents, i.tax_cents
+        "SELECT c.tax_id, i.series, i.number, i.issued_at, i.taxable_base_cents, i.tax_cents, i.num_serie
          FROM invoices i
          JOIN companies c ON c.id = i.company_id
          WHERE i.id = ?1
@@ -544,6 +567,7 @@ pub fn rectified_invoice_link(
                 company_tax_id: row.get(0)?,
                 series: row.get(1)?,
                 number: row.get(2)?,
+                num_serie: row.get(6)?,
                 issued_at: row.get(3)?,
                 taxable_base_cents: row.get(4)?,
                 tax_cents: row.get(5)?,
@@ -560,7 +584,7 @@ pub fn previous_issued_invoice_link(
     invoice_id: &str,
 ) -> Result<Option<PreviousInvoiceLink>, String> {
     conn.query_row(
-        "SELECT c.tax_id, p.series, p.number, p.issued_at, p.fiscal_hash
+        "SELECT c.tax_id, p.series, p.number, p.issued_at, p.fiscal_hash, p.num_serie
          FROM invoices cur
          JOIN invoices p ON p.company_id = cur.company_id
          JOIN companies c ON c.id = p.company_id
@@ -582,6 +606,7 @@ pub fn previous_issued_invoice_link(
                 company_tax_id: row.get(0)?,
                 series: row.get(1)?,
                 number: row.get(2)?,
+                num_serie: row.get(5)?,
                 issued_at: row.get(3)?,
                 fiscal_hash: row.get(4)?,
             })

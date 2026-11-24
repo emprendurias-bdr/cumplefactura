@@ -188,6 +188,11 @@ pub fn resolve_series(series_code: &str, fiscal_year: i32, include_year: bool) -
     }
 }
 
+/// Formato de una serie sin configuración guardada: `A-7` (el histórico del XML).
+pub const DEFAULT_NUMBER_SEPARATOR: &str = "-";
+pub const DEFAULT_NUMBER_PADDING: i32 = 1;
+
+/// Único constructor de `NumSerieFactura`: vista previa de series, XML, huella, QR y PDF.
 pub fn format_invoice_number(
     resolved_series: &str,
     separator: &str,

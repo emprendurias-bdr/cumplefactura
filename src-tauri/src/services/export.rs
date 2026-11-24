@@ -31,11 +31,11 @@ pub fn write_invoice_json(path: &str, invoice: &InvoicePdfData) -> Result<(), St
 /// Exporta un listado de facturas a CSV (MVP: sin filtrar columnas extra).
 pub fn write_invoice_csv(path: &str, invoices: &[InvoiceSummary]) -> Result<(), String> {
     let mut csv = String::from(
-        "id,company_id,customer_id,fiscal_year,series,number,kind,status,total_cents,fiscal_hash,created_at,issued_at\n",
+        "id,company_id,customer_id,fiscal_year,series,number,kind,status,total_cents,fiscal_hash,created_at,issued_at,num_serie\n",
     );
     for invoice in invoices {
         csv.push_str(&format!(
-            "{},{},{},{},{},{},{},{},{},{},{},{}\n",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
             cell(&invoice.id),
             cell(&invoice.company_id),
             cell(&invoice.customer_id),
@@ -50,7 +50,9 @@ pub fn write_invoice_csv(path: &str, invoices: &[InvoiceSummary]) -> Result<(), 
             invoice.total_cents,
             cell(invoice.fiscal_hash.as_deref().unwrap_or("")),
             cell(&invoice.created_at),
-            cell(invoice.issued_at.as_deref().unwrap_or(""))
+            cell(invoice.issued_at.as_deref().unwrap_or("")),
+            // NumSerieFactura tal cual va en XML y PDF (columna añadida al final: N1).
+            cell(invoice.num_serie.as_deref().unwrap_or(""))
         ));
     }
     write_new_file(path, &csv)
@@ -153,6 +155,7 @@ mod tests {
             fiscal_year: 2026,
             series: "A".to_string(),
             number: Some(1),
+            num_serie: Some("A-1".to_string()),
             kind: "Complete".to_string(),
             status: "Issued".to_string(),
             rectifies_invoice_id: None,
@@ -173,6 +176,7 @@ mod tests {
         let contents = fs::read_to_string(&target).expect("read csv");
 
         assert!(contents.contains("\"invoice-1\""));
+        assert!(contents.trim_end().ends_with(",\"A-1\""), "{contents}");
         assert!(write_invoice_csv(target.to_str().expect("utf8"), &[]).is_err());
         fs::remove_file(target).expect("cleanup");
     }

@@ -1,11 +1,12 @@
-//! Facturas: borradores, emisión con numeración reservada en transacción, listados y datos para PDF/XML.
+//! Facturas: borradores, emisión en una sola transacción (número, alta, registro y auditoría), listados y datos para PDF/XML.
 //!
 //! Observaciones (`notes`), vencimiento, cobros, origen recurrente y `price_pending` son
 //! operativos: se guardan y se listan, pero nunca entran en la huella ni en el XML. La única
 //! marca que cambia el XML es `is_recapitulative` (sin `FechaOperacion`, decisión D5).
 
 use super::*;
-use crate::domain::invoice::InvoiceDraftInput;
+use crate::domain::invoice::{InvoiceDraftInput, InvoiceIssueInput, IssuedInvoice};
+use crate::services::verifactu;
 
 pub fn insert_invoice_draft(conn: &mut Connection, invoice: &Invoice) -> Result<(), String> {
     let tx = conn.transaction().map_err(db_error)?;
@@ -13,7 +14,104 @@ pub fn insert_invoice_draft(conn: &mut Connection, invoice: &Invoice) -> Result<
     tx.commit().map_err(db_error)
 }
 
-/// Emisión sin borrador previo; la app usa `insert_issued_invoice_from_draft`.
+/// Emite en UNA transacción: reserva del número, `NumSerieFactura` según la serie, huella,
+/// alta de la factura, registro fiscal y evento de auditoría. Si cualquier paso falla, el
+/// rollback devuelve el número a la secuencia: no quedan huecos ni filas huérfanas.
+/// `generated_at` es `FechaHoraHusoGenRegistro` (reloj del sistema, no lo manda el cliente).
+/// Con `draft_id`, consume el borrador (ver `consume_draft`) dentro de la misma transacción.
+pub fn issue_invoice(
+    conn: &mut Connection,
+    mut input: InvoiceIssueInput,
+    draft_id: Option<&str>,
+    generated_at: &str,
+) -> Result<IssuedInvoice, String> {
+    require_company(conn, &input.draft.company_id)?;
+    crate::domain::require("series", &input.draft.series)?;
+    // Valida el borrador antes de tocar la secuencia.
+    Invoice::draft(input.draft.clone())?;
+
+    let tx = conn.transaction().map_err(db_error)?;
+    input.number = reserve_invoice_number_tx(
+        &tx,
+        &input.draft.company_id,
+        input.draft.fiscal_year,
+        &input.draft.series,
+    )?;
+    let previous_audit_hash = match input.previous_audit_hash.take() {
+        Some(hash) => Some(hash),
+        None => latest_audit_hash(&tx)?,
+    };
+    let actor = input.actor.clone();
+    let (mut invoice, _technical_hash) = Invoice::issue(input)?;
+    let number = invoice
+        .number
+        .ok_or_else(|| "issued invoice missing number".to_string())?;
+    let (separator, padding) = invoice_number_format(
+        &tx,
+        &invoice.company_id,
+        invoice.fiscal_year,
+        &invoice.series,
+    )?;
+    let num_serie = format_invoice_number(&invoice.series, &separator, padding, number);
+    invoice.num_serie = Some(num_serie.clone());
+    let issued_at = invoice
+        .issued_at
+        .clone()
+        .ok_or_else(|| "issued invoice missing issued_at".to_string())?;
+
+    let company_tax_id = company_tax_id(&tx, &invoice.company_id)?;
+    let head = latest_fiscal_record_head(&tx, &invoice.company_id)?;
+    verifactu::check_generated_at_after(
+        head.as_ref().map(|(_, previous)| previous.as_str()),
+        generated_at,
+    )?;
+    let previous_fiscal_hash = head.map(|(hash, _)| hash);
+    let rectification_reason_code = invoice
+        .rectification_reason_code
+        .as_ref()
+        .map(|value| format!("{:?}", value));
+    let invoice_type = verifactu::registro_alta_invoice_type_for_kind(
+        &format!("{:?}", invoice.kind),
+        rectification_reason_code.as_deref(),
+    )?;
+    let fiscal_hash = verifactu::IssuedAlta {
+        issuer_tax_id: &company_tax_id,
+        invoice_number: &num_serie,
+        issued_at: &issued_at,
+        generated_at,
+        tax_cents: invoice.totals.tax_cents,
+        total_cents: invoice.totals.total_cents,
+        invoice_type,
+        previous_hash: previous_fiscal_hash.as_deref(),
+    }
+    .hash()?;
+    let audit_event = AuditEvent::invoice_issued(
+        invoice.id.clone(),
+        actor,
+        fiscal_hash.clone(),
+        previous_audit_hash,
+    );
+    let audit_hash = audit_event.chain_hash();
+
+    insert_issued_invoice_tx(
+        &tx,
+        &invoice,
+        generated_at,
+        &fiscal_hash,
+        previous_fiscal_hash.as_deref(),
+        &audit_event,
+        draft_id,
+    )?;
+    tx.commit().map_err(db_error)?;
+    Ok(IssuedInvoice {
+        invoice,
+        fiscal_hash,
+        audit_hash,
+    })
+}
+
+/// Solo tests: guarda una emitida ya calculada como las históricas (`{serie}-{n}` y registro
+/// generado a la hora de expedición). La app emite con `issue_invoice`.
 #[cfg(test)]
 pub fn insert_issued_invoice(
     conn: &mut Connection,
@@ -32,9 +130,8 @@ pub fn insert_issued_invoice(
     )
 }
 
-/// Emite como `insert_issued_invoice`. Con `draft_id`, en la misma transacción pasa a la factura
-/// emitida los albaranes y periodos recurrentes del borrador y borra el borrador: así no puede
-/// emitirse dos veces ni facturar dos veces los mismos albaranes.
+/// Solo tests: como `insert_issued_invoice`, consumiendo además el borrador `draft_id`.
+#[cfg(test)]
 pub fn insert_issued_invoice_from_draft(
     conn: &mut Connection,
     invoice: &Invoice,
@@ -43,8 +140,50 @@ pub fn insert_issued_invoice_from_draft(
     audit_event: &AuditEvent,
     draft_id: Option<&str>,
 ) -> Result<(), String> {
-    let audit_hash = audit_event.chain_hash();
+    let mut invoice = invoice.clone();
+    if invoice.num_serie.is_none() {
+        invoice.num_serie = invoice.number.map(|number| {
+            format_invoice_number(
+                &invoice.series,
+                crate::domain::company::DEFAULT_NUMBER_SEPARATOR,
+                crate::domain::company::DEFAULT_NUMBER_PADDING,
+                number,
+            )
+        });
+    }
+    let generated_at = invoice
+        .issued_at
+        .clone()
+        .ok_or_else(|| "issued invoice missing issued_at".to_string())?;
     let tx = conn.transaction().map_err(db_error)?;
+    insert_issued_invoice_tx(
+        &tx,
+        &invoice,
+        &generated_at,
+        fiscal_hash,
+        previous_fiscal_hash,
+        audit_event,
+        draft_id,
+    )?;
+    tx.commit().map_err(db_error)
+}
+
+/// Alta, registro fiscal `Alta` y auditoría dentro de la transacción del llamador.
+/// Con `draft_id` pasa a la emitida los albaranes y periodos recurrentes del borrador y lo borra:
+/// así no puede emitirse dos veces ni facturar dos veces los mismos albaranes.
+fn insert_issued_invoice_tx(
+    tx: &Transaction<'_>,
+    invoice: &Invoice,
+    generated_at: &str,
+    fiscal_hash: &str,
+    previous_fiscal_hash: Option<&str>,
+    audit_event: &AuditEvent,
+    draft_id: Option<&str>,
+) -> Result<(), String> {
+    if invoice.num_serie.is_none() {
+        return Err("issued invoice missing num_serie".to_string());
+    }
+    let audit_hash = audit_event.chain_hash();
     if let Some(source_invoice_id) = &invoice.rectifies_invoice_id {
         let updated = tx
             .execute(
@@ -57,18 +196,15 @@ pub fn insert_issued_invoice_from_draft(
             return Err("rectifying invoice source must be issued in the same company".to_string());
         }
     }
-    insert_invoice(&tx, invoice, Some(fiscal_hash))?;
+    insert_invoice(tx, invoice, Some(fiscal_hash))?;
     insert_fiscal_record_tx(
-        &tx,
+        tx,
         &FiscalRecordInput {
             id: uuid::Uuid::new_v4().to_string(),
             company_id: invoice.company_id.clone(),
             invoice_id: invoice.id.clone(),
             record_type: "Alta".to_string(),
-            generated_at: invoice
-                .issued_at
-                .clone()
-                .ok_or_else(|| "issued invoice missing issued_at".to_string())?,
+            generated_at: generated_at.to_string(),
             fiscal_hash: fiscal_hash.to_string(),
             previous_fiscal_hash: previous_fiscal_hash.map(str::to_string),
             xml_path: None,
@@ -93,9 +229,9 @@ pub fn insert_issued_invoice_from_draft(
     )
     .map_err(db_error)?;
     if let Some(draft_id) = draft_id {
-        consume_draft(&tx, draft_id, invoice)?;
+        consume_draft(tx, draft_id, invoice)?;
     }
-    tx.commit().map_err(db_error)
+    Ok(())
 }
 
 fn consume_draft(tx: &Connection, draft_id: &str, issued: &Invoice) -> Result<(), String> {
@@ -289,22 +425,6 @@ pub fn next_invoice_number_preview(
     .map(|value| value.unwrap_or(1))
 }
 
-pub fn reserve_invoice_number(
-    conn: &mut Connection,
-    company_id: &str,
-    fiscal_year: i32,
-    series: &str,
-) -> Result<i64, String> {
-    require_company(conn, company_id)?;
-    if series.trim().is_empty() {
-        return Err("series is required".to_string());
-    }
-    let tx = conn.transaction().map_err(db_error)?;
-    let next = reserve_invoice_number_tx(&tx, company_id, fiscal_year, series)?;
-    tx.commit().map_err(db_error)?;
-    Ok(next)
-}
-
 pub(super) fn max_invoice_number(
     conn: &Connection,
     company_id: &str,
@@ -345,6 +465,8 @@ pub struct InvoiceSummary {
     /// Plantilla y periodo si la factura salió de una recurrente («Recurrente · <plantilla> · <periodo>»).
     pub recurring_label: Option<String>,
     pub recurring_period_key: Option<String>,
+    /// `NumSerieFactura` guardado al emitir; `None` en borradores.
+    pub num_serie: Option<String>,
 }
 
 /// Columnas operativas comunes a listado y ficha (alias `i` = `invoices`).
@@ -418,7 +540,7 @@ pub fn list_invoices_filtered_paginated(
         .prepare(&format!(
             "SELECT i.id, i.company_id, i.customer_id, i.fiscal_year, i.series, i.number, i.kind, i.status,
                     i.rectifies_invoice_id, i.rectification_reason_code, i.rectification_method,
-                    i.total_cents, i.fiscal_hash, i.created_at, i.issued_at, {OPERATIONAL_COLUMNS}
+                    i.total_cents, i.fiscal_hash, i.created_at, i.issued_at, {OPERATIONAL_COLUMNS}, i.num_serie
              FROM invoices i
              JOIN companies c ON c.id = i.company_id
              JOIN customers cu ON cu.id = i.customer_id
@@ -432,6 +554,7 @@ pub fn list_invoices_filtered_paginated(
                  ?7 IS NULL
                  OR lower(i.series) LIKE ?7
                  OR lower(COALESCE(CAST(i.number AS TEXT), 'bor')) LIKE ?7
+                 OR lower(COALESCE(i.num_serie, '')) LIKE ?7
                  OR lower(i.kind) LIKE ?7
                  OR lower(i.status) LIKE ?7
                  OR lower(COALESCE(i.fiscal_hash, '')) LIKE ?7
@@ -488,6 +611,7 @@ pub fn list_invoices_filtered_paginated(
                     paid_cents,
                     recurring_label: row.get(17)?,
                     recurring_period_key: row.get(18)?,
+                    num_serie: row.get(19)?,
                 })
             },
         )
@@ -532,6 +656,10 @@ pub struct InvoicePdfData {
     pub total_cents: i64,
     pub fiscal_hash: Option<String>,
     pub issued_at: Option<String>,
+    /// `NumSerieFactura` guardado al emitir.
+    pub num_serie: Option<String>,
+    /// `FechaHoraHusoGenRegistro` del registro de alta (reloj del sistema al emitir).
+    pub record_generated_at: Option<String>,
     pub lines: Vec<InvoicePdfLine>,
     pub rectified_invoice: Option<RectifiedInvoiceLink>,
     pub withholding_cents: i64,
@@ -549,8 +677,8 @@ pub struct InvoicePdfData {
 
 impl InvoicePdfData {
     pub fn title(&self) -> String {
-        match self.number {
-            Some(number) => format!("Factura {}-{} / {}", self.series, number, self.fiscal_year),
+        match &self.num_serie {
+            Some(num_serie) => format!("Factura {num_serie}"),
             None => format!("Borrador {} / {}", self.series, self.fiscal_year),
         }
     }
@@ -566,7 +694,9 @@ pub fn invoice_pdf_data(conn: &Connection, invoice_id: &str) -> Result<InvoicePd
                     {OPERATIONAL_COLUMNS},
                     i.withholding_cents, i.notes, i.is_recapitulative, c.logo_path,
                     c.address, c.postal_code, c.municipality, c.province,
-                    cu.address, cu.postal_code, cu.municipality, cu.province
+                    cu.address, cu.postal_code, cu.municipality, cu.province, i.num_serie,
+                    (SELECT fr.generated_at FROM fiscal_records fr
+                     WHERE fr.invoice_id = i.id AND fr.record_type = 'Alta' LIMIT 1)
              FROM invoices i
              JOIN companies c ON c.id = i.company_id
              JOIN customers cu ON cu.id = i.customer_id
@@ -623,6 +753,8 @@ pub fn invoice_pdf_data(conn: &Connection, invoice_id: &str) -> Result<InvoicePd
                     company_logo_path: row.get(26)?,
                     company_address: address(27)?,
                     customer_address: address(31)?,
+                    num_serie: row.get(35)?,
+                    record_generated_at: row.get(36)?,
                 })
             },
         )
@@ -751,7 +883,7 @@ pub fn get_invoice_detail(conn: &Connection, invoice_id: &str) -> Result<Invoice
                         i.rectifies_invoice_id, i.rectification_reason_code, i.rectification_method,
                         i.taxable_base_cents, i.tax_cents, i.withholding_cents, i.total_cents,
                         i.created_at, i.issued_at, i.notes, i.is_recapitulative, i.void_reason,
-                        {OPERATIONAL_COLUMNS}
+                        {OPERATIONAL_COLUMNS}, i.num_serie
                  FROM invoices i WHERE i.id = ?1"
             ),
             params![invoice_id],
@@ -767,6 +899,7 @@ pub fn get_invoice_detail(conn: &Connection, invoice_id: &str) -> Result<Invoice
                         fiscal_year: row.get(3)?,
                         series: row.get(4)?,
                         number: row.get(5)?,
+                        num_serie: row.get(24)?,
                         kind: stored_enum(row.get(6)?)?,
                         status: stored_enum(row.get(7)?)?,
                         territory_flags: Vec::new(),
@@ -850,8 +983,8 @@ pub(super) fn insert_invoice(
     fiscal_hash: Option<&str>,
 ) -> Result<(), String> {
     tx.execute(
-        "INSERT INTO invoices (id, company_id, customer_id, fiscal_year, series, number, kind, status, rectifies_invoice_id, rectification_reason_code, rectification_method, taxable_base_cents, tax_cents, withholding_cents, total_cents, fiscal_hash, created_at, issued_at, notes)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+        "INSERT INTO invoices (id, company_id, customer_id, fiscal_year, series, number, kind, status, rectifies_invoice_id, rectification_reason_code, rectification_method, taxable_base_cents, tax_cents, withholding_cents, total_cents, fiscal_hash, created_at, issued_at, notes, num_serie)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
         params![
             invoice.id,
             invoice.company_id,
@@ -878,6 +1011,7 @@ pub(super) fn insert_invoice(
             invoice.created_at,
             invoice.issued_at,
             invoice.notes,
+            invoice.num_serie,
         ],
     )
     .map_err(db_error)?;

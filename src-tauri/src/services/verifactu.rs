@@ -159,16 +159,14 @@ pub fn build_verifactu_xml_draft(
     invoice: &InvoicePdfData,
     previous: Option<&PreviousInvoiceLink>,
 ) -> Result<String, String> {
-    let number = invoice
-        .number
-        .ok_or_else(|| "VERI*FACTU XML requires an issued invoice number".to_string())?;
+    let current_invoice_number = invoice_num_serie(invoice)?;
     let issued_at = invoice
         .issued_at
         .as_deref()
         .ok_or_else(|| "VERI*FACTU XML requires issued_at".to_string())?;
+    let generated_at = record_generated_at(invoice)?;
     let expedition_date = aeat_date(issued_at)?;
     let description = operation_description(invoice);
-    let current_invoice_number = format_invoice_number(&invoice.series, number);
     let invoice_type = registro_alta_invoice_type(invoice)?;
     let fiscal_hash = calculate_invoice_registro_alta_hash(invoice, previous)?;
     let mut xml = String::new();
@@ -189,7 +187,7 @@ pub fn build_verifactu_xml_draft(
     push_text(&mut xml, 6, "sf:IDVersion", "1.0");
     xml.push_str("      <sf:IDFactura>\n");
     push_text(&mut xml, 8, "sf:IDEmisorFactura", &invoice.company_tax_id);
-    push_text(&mut xml, 8, "sf:NumSerieFactura", &current_invoice_number);
+    push_text(&mut xml, 8, "sf:NumSerieFactura", current_invoice_number);
     push_text(&mut xml, 8, "sf:FechaExpedicionFactura", &expedition_date);
     xml.push_str("      </sf:IDFactura>\n");
     push_text(
@@ -225,12 +223,7 @@ pub fn build_verifactu_xml_draft(
         let previous_date = aeat_date(&previous.issued_at)?;
         xml.push_str("        <sf:RegistroAnterior>\n");
         push_text(&mut xml, 10, "sf:IDEmisorFactura", &previous.company_tax_id);
-        push_text(
-            &mut xml,
-            10,
-            "sf:NumSerieFactura",
-            &format_invoice_number(&previous.series, previous.number),
-        );
+        push_text(&mut xml, 10, "sf:NumSerieFactura", &previous.num_serie);
         push_text(&mut xml, 10, "sf:FechaExpedicionFactura", &previous_date);
         push_text(
             &mut xml,
@@ -244,7 +237,7 @@ pub fn build_verifactu_xml_draft(
     }
     xml.push_str("      </sf:Encadenamiento>\n");
     push_system_info(&mut xml, invoice);
-    push_text(&mut xml, 6, "sf:FechaHoraHusoGenRegistro", issued_at);
+    push_text(&mut xml, 6, "sf:FechaHoraHusoGenRegistro", generated_at);
     push_text(&mut xml, 6, "sf:TipoHuella", "01");
     push_text(&mut xml, 6, "sf:Huella", &fiscal_hash);
     xml.push_str("    </sf:RegistroAlta>\n");
@@ -260,17 +253,14 @@ pub fn build_verifactu_anulacion_xml_draft(
     previous: &PreviousInvoiceLink,
     generated_at: &str,
 ) -> Result<String, String> {
-    let number = invoice
-        .number
-        .ok_or_else(|| "VERI*FACTU anulacion XML requires an issued invoice number".to_string())?;
+    let invoice_number = invoice_num_serie(invoice)?;
     let issued_at = invoice
         .issued_at
         .as_deref()
         .ok_or_else(|| "VERI*FACTU anulacion XML requires issued_at".to_string())?;
     let expedition_date = aeat_date(issued_at)?;
-    let invoice_number = format_invoice_number(&invoice.series, number);
     let previous_date = aeat_date(&previous.issued_at)?;
-    let previous_invoice_number = format_invoice_number(&previous.series, previous.number);
+    let previous_invoice_number = previous.num_serie.as_str();
     let cancellation_hash =
         calculate_invoice_registro_anulacion_hash(invoice, &previous.fiscal_hash, generated_at)?;
     let mut xml = String::new();
@@ -296,7 +286,7 @@ pub fn build_verifactu_anulacion_xml_draft(
         "sf:IDEmisorFacturaAnulada",
         &invoice.company_tax_id,
     );
-    push_text(&mut xml, 8, "sf:NumSerieFacturaAnulada", &invoice_number);
+    push_text(&mut xml, 8, "sf:NumSerieFacturaAnulada", invoice_number);
     push_text(
         &mut xml,
         8,
@@ -307,7 +297,7 @@ pub fn build_verifactu_anulacion_xml_draft(
     xml.push_str("      <sf:Encadenamiento>\n");
     xml.push_str("        <sf:RegistroAnterior>\n");
     push_text(&mut xml, 10, "sf:IDEmisorFactura", &previous.company_tax_id);
-    push_text(&mut xml, 10, "sf:NumSerieFactura", &previous_invoice_number);
+    push_text(&mut xml, 10, "sf:NumSerieFactura", previous_invoice_number);
     push_text(&mut xml, 10, "sf:FechaExpedicionFactura", &previous_date);
     push_text(
         &mut xml,
@@ -335,14 +325,12 @@ pub fn calculate_invoice_registro_alta_hash(
 ) -> Result<String, String> {
     IssuedAlta {
         issuer_tax_id: &invoice.company_tax_id,
-        series: &invoice.series,
-        number: invoice
-            .number
-            .ok_or_else(|| "VERI*FACTU hash requires an issued invoice number".to_string())?,
+        invoice_number: invoice_num_serie(invoice)?,
         issued_at: invoice
             .issued_at
             .as_deref()
             .ok_or_else(|| "VERI*FACTU hash requires issued_at".to_string())?,
+        generated_at: record_generated_at(invoice)?,
         tax_cents: invoice.tax_cents,
         total_cents: invoice.total_cents,
         invoice_type: registro_alta_invoice_type(invoice)?,
@@ -354,10 +342,12 @@ pub fn calculate_invoice_registro_alta_hash(
 /// Factura emitida tal y como entra en la huella de su RegistroAlta.
 pub struct IssuedAlta<'a> {
     pub issuer_tax_id: &'a str,
-    pub series: &'a str,
-    pub number: i64,
-    /// RFC 3339; es a la vez fecha de expedición y `FechaHoraHusoGenRegistro`.
+    /// `NumSerieFactura` guardado en la factura.
+    pub invoice_number: &'a str,
+    /// RFC 3339; solo da la fecha de expedición.
     pub issued_at: &'a str,
+    /// `FechaHoraHusoGenRegistro`: momento de generación del registro (reloj del sistema).
+    pub generated_at: &'a str,
     pub tax_cents: i64,
     pub total_cents: i64,
     /// `TipoFactura` AEAT (F1, F2, R1…).
@@ -369,13 +359,13 @@ impl IssuedAlta<'_> {
     pub fn hash(&self) -> Result<String, String> {
         Ok(AltaHash {
             issuer_tax_id: self.issuer_tax_id,
-            invoice_number: &format_invoice_number(self.series, self.number),
+            invoice_number: self.invoice_number,
             expedition_date: &aeat_date(self.issued_at)?,
             invoice_type: self.invoice_type,
             tax_total: &money(self.tax_cents),
             invoice_total: &money(self.total_cents),
             previous_hash: self.previous_hash,
-            generated_at: self.issued_at,
+            generated_at: self.generated_at,
         }
         .hash())
     }
@@ -414,17 +404,13 @@ pub fn calculate_invoice_registro_anulacion_hash(
     previous_hash: &str,
     generated_at: &str,
 ) -> Result<String, String> {
-    let number = invoice
-        .number
-        .ok_or_else(|| "VERI*FACTU anulacion hash requires an issued invoice number".to_string())?;
     let issued_at = invoice
         .issued_at
         .as_deref()
         .ok_or_else(|| "VERI*FACTU anulacion hash requires issued_at".to_string())?;
     calculate_issued_invoice_registro_anulacion_hash(
         &invoice.company_tax_id,
-        &invoice.series,
-        number,
+        invoice_num_serie(invoice)?,
         issued_at,
         previous_hash,
         generated_at,
@@ -434,15 +420,14 @@ pub fn calculate_invoice_registro_anulacion_hash(
 /// Huella Anulación para factura emitida.
 pub fn calculate_issued_invoice_registro_anulacion_hash(
     issuer_tax_id: &str,
-    series: &str,
-    number: i64,
+    invoice_number: &str,
     issued_at: &str,
     previous_hash: &str,
     generated_at: &str,
 ) -> Result<String, String> {
     Ok(AnulacionHash {
         issuer_tax_id,
-        invoice_number: &format_invoice_number(series, number),
+        invoice_number,
         expedition_date: &aeat_date(issued_at)?,
         previous_hash,
         generated_at,
@@ -524,12 +509,7 @@ fn push_rectification_info(xml: &mut String, invoice: &InvoicePdfData) -> Result
     xml.push_str("      <sf:FacturasRectificadas>\n");
     xml.push_str("        <sf:IDFacturaRectificada>\n");
     push_text(xml, 10, "sf:IDEmisorFactura", &source.company_tax_id);
-    push_text(
-        xml,
-        10,
-        "sf:NumSerieFactura",
-        &format_invoice_number(&source.series, source.number),
-    );
+    push_text(xml, 10, "sf:NumSerieFactura", &source.num_serie);
     push_text(xml, 10, "sf:FechaExpedicionFactura", &source_date);
     xml.push_str("        </sf:IDFacturaRectificada>\n");
     xml.push_str("      </sf:FacturasRectificadas>\n");
@@ -605,8 +585,42 @@ pub(crate) fn aeat_date(value: &str) -> Result<String, String> {
     ))
 }
 
-pub(crate) fn format_invoice_number(series: &str, number: i64) -> String {
-    format!("{}-{}", series, number)
+/// `NumSerieFactura` guardado al emitir; nunca se recompone a partir de serie y número.
+pub(crate) fn invoice_num_serie(invoice: &InvoicePdfData) -> Result<&str, String> {
+    invoice
+        .num_serie
+        .as_deref()
+        .ok_or_else(|| "VERI*FACTU requires an issued invoice number".to_string())
+}
+
+/// `FechaHoraHusoGenRegistro` del alta, guardado en `fiscal_records` al emitir.
+fn record_generated_at(invoice: &InvoicePdfData) -> Result<&str, String> {
+    invoice
+        .record_generated_at
+        .as_deref()
+        .ok_or_else(|| "VERI*FACTU requires the Alta record generation time".to_string())
+}
+
+/// `FechaHoraHusoGenRegistro` = ahora, con el huso horario del sistema (`2024-01-01T19:20:30+01:00`).
+pub fn generated_at_now() -> String {
+    chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, false)
+}
+
+/// El registro nuevo no puede ser anterior al último de la cadena. También exige que el texto no
+/// ordene antes (la cabeza de la cadena se elige ordenando `generated_at`): en el cambio de hora
+/// de octubre pide esperar en lugar de encadenar mal.
+pub fn check_generated_at_after(previous: Option<&str>, generated_at: &str) -> Result<(), String> {
+    let current = DateTime::parse_from_rfc3339(generated_at)
+        .map_err(|err| format!("invalid FechaHoraHusoGenRegistro: {err}"))?;
+    let Some(previous) = previous else {
+        return Ok(());
+    };
+    let previous_instant = DateTime::parse_from_rfc3339(previous)
+        .map_err(|err| format!("invalid previous FechaHoraHusoGenRegistro: {err}"))?;
+    if current < previous_instant || generated_at < previous {
+        return Err(format!("clock_before_previous_record:{previous}"));
+    }
+    Ok(())
 }
 
 /// Importe AEAT con 2 decimales desde céntimos.
@@ -684,6 +698,8 @@ mod tests {
             total_cents: 12_100,
             fiscal_hash: Some("a".repeat(64)),
             issued_at: Some("2026-05-28T12:00:00Z".to_string()),
+            num_serie: Some("A-7".to_string()),
+            record_generated_at: Some("2026-05-28T12:00:00Z".to_string()),
             lines: vec![InvoicePdfLine {
                 description: "Servicio & soporte".to_string(),
                 quantity: 1,
@@ -703,6 +719,7 @@ mod tests {
         let mut invoice = invoice();
         invoice.id = "i2".to_string();
         invoice.number = Some(8);
+        invoice.num_serie = Some("A-8".to_string());
         invoice.kind = "Rectifying".to_string();
         invoice.rectifies_invoice_id = Some("i1".to_string());
         invoice.rectification_reason_code = Some("R4".to_string());
@@ -725,6 +742,7 @@ mod tests {
             company_tax_id: "B00000000".to_string(),
             series: "A".to_string(),
             number: 7,
+            num_serie: "A-7".to_string(),
             issued_at: "2026-05-28T12:00:00Z".to_string(),
             taxable_base_cents: 10_000,
             tax_cents: 2_100,
@@ -737,6 +755,7 @@ mod tests {
             company_tax_id: "B00000000".to_string(),
             series: "A".to_string(),
             number: 7,
+            num_serie: "A-7".to_string(),
             issued_at: "2026-05-28T12:00:00Z".to_string(),
             fiscal_hash: "a".repeat(64),
         }
@@ -903,6 +922,7 @@ mod tests {
             company_tax_id: "B00000000".to_string(),
             series: "A".to_string(),
             number: 6,
+            num_serie: "A-6".to_string(),
             issued_at: "2026-05-27T09:00:00Z".to_string(),
             fiscal_hash: "b".repeat(64),
         };
@@ -948,10 +968,53 @@ mod tests {
     fn rejects_unissued_invoice() {
         let mut invoice = invoice();
         invoice.number = None;
+        invoice.num_serie = None;
 
         let error = build_verifactu_xml_draft(&invoice, None).expect_err("must reject draft");
 
         assert!(error.contains("issued invoice number"));
+    }
+
+    #[test]
+    fn registro_alta_uses_generation_time_not_issue_time() {
+        let mut invoice = invoice();
+        invoice.record_generated_at = Some("2026-05-28T14:00:07+02:00".to_string());
+        let xml = build_verifactu_xml_draft(&invoice, None).expect("xml");
+
+        assert!(xml.contains(
+            "<sf:FechaHoraHusoGenRegistro>2026-05-28T14:00:07+02:00</sf:FechaHoraHusoGenRegistro>"
+        ));
+        assert!(xml.contains("<sf:FechaExpedicionFactura>28-05-2026</sf:FechaExpedicionFactura>"));
+        assert_ne!(
+            calculate_invoice_registro_alta_hash(&invoice, None).expect("hash"),
+            calculate_invoice_registro_alta_hash(&self::invoice(), None).expect("hash")
+        );
+    }
+
+    #[test]
+    fn generation_time_has_offset_and_never_goes_back() {
+        let now = generated_at_now();
+        assert!(DateTime::parse_from_rfc3339(&now).is_ok());
+        assert!(!now.ends_with('Z'), "huso explícito: {now}");
+
+        assert!(check_generated_at_after(None, "2026-05-28T12:00:00+02:00").is_ok());
+        assert!(check_generated_at_after(
+            Some("2026-05-28T10:00:00Z"),
+            "2026-05-28T12:00:01+02:00"
+        )
+        .is_ok());
+        let error = check_generated_at_after(
+            Some("2026-05-28T12:00:00+02:00"),
+            "2026-05-28T11:59:59+02:00",
+        )
+        .expect_err("earlier than previous");
+        assert!(error.starts_with("clock_before_previous_record:"));
+        // Mismo instante pero ordenaría antes que la cabeza de la cadena: se rechaza.
+        assert!(check_generated_at_after(
+            Some("2026-10-25T02:30:00+02:00"),
+            "2026-10-25T02:10:00+01:00"
+        )
+        .is_err());
     }
 
     #[cfg(target_os = "windows")]

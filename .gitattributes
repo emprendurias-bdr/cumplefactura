@@ -1,0 +1,2 @@
+# Fixtures comparados byte a byte con el XML generado (LF): sin conversión en Windows.
+src-tauri/src/services/testdata/*.xml text eol=lf

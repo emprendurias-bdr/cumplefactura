@@ -8,6 +8,7 @@
 //! VERI*FACTU los registros no se firman (RD 1007/2023 art. 16.3); basta la huella.
 
 use crate::db::{InvoicePdfData, PreviousInvoiceLink};
+use crate::domain::fabricante;
 use chrono::{DateTime, Datelike};
 use std::collections::BTreeMap;
 use std::fs;
@@ -204,17 +205,7 @@ pub fn build_verifactu_xml_draft(
         push_text(&mut xml, 6, "sf:FechaOperacion", &expedition_date);
     }
     push_text(&mut xml, 6, "sf:DescripcionOperacion", &description);
-    xml.push_str("      <sf:Destinatarios>\n");
-    xml.push_str("        <sf:IDDestinatario>\n");
-    push_text(
-        &mut xml,
-        10,
-        "sf:NombreRazon",
-        &invoice.customer_display_name,
-    );
-    push_text(&mut xml, 10, "sf:NIF", &invoice.customer_tax_id);
-    xml.push_str("        </sf:IDDestinatario>\n");
-    xml.push_str("      </sf:Destinatarios>\n");
+    push_recipient(&mut xml, invoice, invoice_type)?;
     push_tax_breakdown(&mut xml, invoice);
     push_text(&mut xml, 6, "sf:CuotaTotal", &money(invoice.tax_cents));
     push_text(&mut xml, 6, "sf:ImporteTotal", &money(invoice.total_cents));
@@ -527,23 +518,71 @@ fn push_rectification_info(xml: &mut String, invoice: &InvoicePdfData) -> Result
     Ok(())
 }
 
-/// Bloque SistemaInformatico (SIF local CumpleFactura).
+/// Bloque Destinatarios. La simplificada (F2) no lo lleva: RD 1619/2012 art. 7.1 no exige
+/// identificar al destinatario y la AEAT rechaza el bloque en F2 (validaciones de `TipoFactura`).
+/// Cliente español: `NIF`; extranjero: `IDOtro` (CodigoPais, IDType L7, ID).
+fn push_recipient(
+    xml: &mut String,
+    invoice: &InvoicePdfData,
+    invoice_type: &str,
+) -> Result<(), String> {
+    if invoice_type == "F2" {
+        return Ok(());
+    }
+    xml.push_str("      <sf:Destinatarios>\n");
+    xml.push_str("        <sf:IDDestinatario>\n");
+    push_text(xml, 10, "sf:NombreRazon", &invoice.customer_display_name);
+    match invoice
+        .customer_id_type
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        None if invoice.customer_country_code == "ES" => {
+            push_text(xml, 10, "sf:NIF", &invoice.customer_tax_id)
+        }
+        // Cliente extranjero guardado antes de N2, sin tipo de identificación.
+        None => return Err("foreign_customer_id_type_required".to_string()),
+        Some(id_type) => {
+            xml.push_str("          <sf:IDOtro>\n");
+            push_text(xml, 12, "sf:CodigoPais", &invoice.customer_country_code);
+            push_text(xml, 12, "sf:IDType", id_type);
+            push_text(xml, 12, "sf:ID", &invoice.customer_tax_id);
+            xml.push_str("          </sf:IDOtro>\n");
+        }
+    }
+    xml.push_str("        </sf:IDDestinatario>\n");
+    xml.push_str("      </sf:Destinatarios>\n");
+    Ok(())
+}
+
+/// Bloque SistemaInformatico: datos del productor del SIF, no del emisor (Orden HAC/1177/2024,
+/// «Diseño de registro», bloque `SistemaInformatico` y su nota).
 fn push_system_info(xml: &mut String, invoice: &InvoicePdfData) {
     xml.push_str("      <sf:SistemaInformatico>\n");
-    push_text(xml, 8, "sf:NombreRazon", &invoice.company_legal_name);
-    push_text(xml, 8, "sf:NIF", &invoice.company_tax_id);
-    push_text(xml, 8, "sf:NombreSistemaInformatico", "CumpleFactura");
-    push_text(xml, 8, "sf:IdSistemaInformatico", "CF");
-    push_text(xml, 8, "sf:Version", env!("CARGO_PKG_VERSION"));
+    push_text(xml, 8, "sf:NombreRazon", fabricante::RAZON_SOCIAL);
+    push_text(xml, 8, "sf:NIF", fabricante::NIF);
+    push_text(
+        xml,
+        8,
+        "sf:NombreSistemaInformatico",
+        fabricante::NOMBRE_SISTEMA,
+    );
+    push_text(xml, 8, "sf:IdSistemaInformatico", fabricante::ID_SISTEMA);
+    push_text(xml, 8, "sf:Version", fabricante::VERSION);
     push_text(
         xml,
         8,
         "sf:NumeroInstalacion",
         &format!("LOCAL-{}", invoice.company_tax_id),
     );
-    push_text(xml, 8, "sf:TipoUsoPosibleSoloVerifactu", "N");
+    // Solo VERI*FACTU: la app no firma registros (RD 1007/2023 art. 16.3), así que no puede
+    // funcionar como «NO VERI*FACTU», que exige firma electrónica.
+    push_text(xml, 8, "sf:TipoUsoPosibleSoloVerifactu", "S");
+    // La app admite varias empresas (obligados tributarios) con facturación independiente.
     push_text(xml, 8, "sf:TipoUsoPosibleMultiOT", "S");
-    push_text(xml, 8, "sf:IndicadorMultiplesOT", "S");
+    // Sale de las empresas que hay en la base; el usuario no lo elige («Diseño de registro»).
+    let multiple_ot = if invoice.multiple_ot { "S" } else { "N" };
+    push_text(xml, 8, "sf:IndicadorMultiplesOT", multiple_ot);
     xml.push_str("      </sf:SistemaInformatico>\n");
 }
 
@@ -685,6 +724,7 @@ mod tests {
             company_tax_id: "B00000000".to_string(),
             customer_display_name: "Cliente <Uno>".to_string(),
             customer_tax_id: "00000000T".to_string(),
+            customer_country_code: "ES".to_string(),
             fiscal_year: 2026,
             series: "A".to_string(),
             number: Some(7),
@@ -1015,6 +1055,70 @@ mod tests {
             "2026-10-25T02:10:00+01:00"
         )
         .is_err());
+    }
+
+    fn simplified_invoice() -> InvoicePdfData {
+        let mut invoice = invoice();
+        invoice.kind = "Simplified".to_string();
+        invoice
+    }
+
+    /// Cliente francés con NIF-IVA (ficticio).
+    fn foreign_invoice() -> InvoicePdfData {
+        let mut invoice = invoice();
+        invoice.customer_country_code = "FR".to_string();
+        invoice.customer_id_type = Some("02".to_string());
+        invoice.customer_tax_id = "FR12345678901".to_string();
+        invoice
+    }
+
+    #[test]
+    fn n2_recipient_and_system_blocks() {
+        let simplified = build_verifactu_xml_draft(&simplified_invoice(), None).expect("F2");
+        assert!(simplified.contains("<sf:TipoFactura>F2</sf:TipoFactura>"));
+        assert!(!simplified.contains("Destinatarios"));
+
+        let foreign = build_verifactu_xml_draft(&foreign_invoice(), None).expect("foreign");
+        assert!(foreign.contains(
+            "          <sf:IDOtro>\n            <sf:CodigoPais>FR</sf:CodigoPais>\n            <sf:IDType>02</sf:IDType>\n            <sf:ID>FR12345678901</sf:ID>\n          </sf:IDOtro>\n"
+        ));
+        assert!(!foreign.contains("<sf:NIF>FR12345678901</sf:NIF>"));
+
+        let mut legacy = foreign_invoice();
+        legacy.customer_id_type = None;
+        assert_eq!(
+            build_verifactu_xml_draft(&legacy, None).expect_err("sin tipo"),
+            "foreign_customer_id_type_required"
+        );
+
+        let mut multi = invoice();
+        multi.multiple_ot = true;
+        let xml = build_verifactu_xml_draft(&multi, None).expect("multi");
+        assert!(xml.contains("<sf:IndicadorMultiplesOT>S</sf:IndicadorMultiplesOT>"));
+        assert!(xml.contains("<sf:NIF>B98945173</sf:NIF>"));
+        assert!(xml.contains("<sf:TipoUsoPosibleSoloVerifactu>S</sf:TipoUsoPosibleSoloVerifactu>"));
+        let anulacion =
+            build_verifactu_anulacion_xml_draft(&multi, &previous_link(), "2026-05-28T12:05:00Z")
+                .expect("anulacion");
+        assert!(anulacion.contains("<sf:IndicadorMultiplesOT>S</sf:IndicadorMultiplesOT>"));
+    }
+
+    /// F2 y cliente extranjero contra el XSD (F1, rectificativa y anulación: tests de abajo).
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn simplified_and_foreign_xml_pass_local_xsd_contract() {
+        let assets = dev_verifactu_xsd_assets().expect("dev xsd assets");
+        for (name, source) in [("f2", simplified_invoice()), ("idotro", foreign_invoice())] {
+            let target = std::env::temp_dir().join(format!(
+                "cumplefactura-n2-{name}-{}.xml",
+                uuid::Uuid::new_v4()
+            ));
+            let xml = build_verifactu_xml_draft(&source, None).expect("xml");
+            std::fs::write(&target, xml).expect("write");
+            let result = validate_verifactu_xml_file(&target, &assets);
+            let _ = std::fs::remove_file(&target);
+            result.unwrap_or_else(|err| panic!("{name}: {err}"));
+        }
     }
 
     #[cfg(target_os = "windows")]

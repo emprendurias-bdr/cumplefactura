@@ -63,6 +63,7 @@ export function emptyCustomerForm(): CustomerForm {
     municipality: "",
     province: "",
     country_code: "ES",
+    id_type: "",
   };
 }
 
@@ -106,6 +107,7 @@ export function customerToForm(value: Customer): CustomerForm {
     municipality: value.municipality,
     province: value.province,
     country_code: value.country_code,
+    id_type: value.id_type ?? "",
   };
 }
 

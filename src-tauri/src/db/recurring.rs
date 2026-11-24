@@ -577,6 +577,7 @@ mod tests {
             municipality: "Madrid".to_string(),
             province: "Madrid".to_string(),
             country_code: "ES".to_string(),
+            id_type: None,
         });
         insert_company(&conn, &company).expect("company");
         upsert_customer(&conn, &customer).expect("customer");

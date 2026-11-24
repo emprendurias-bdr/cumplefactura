@@ -39,6 +39,8 @@ export type Customer = {
   municipality: string;
   province: string;
   country_code: string;
+  /** N2: clave L7 de `IDOtro` (02 NIF-IVA … 07 No censado); vacío o null = NIF español. */
+  id_type?: string | null;
   updated_at?: string;
 };
 export type Product = {

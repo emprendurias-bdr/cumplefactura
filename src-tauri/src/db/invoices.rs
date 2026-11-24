@@ -643,6 +643,11 @@ pub struct InvoicePdfData {
     pub company_tax_id: String,
     pub customer_display_name: String,
     pub customer_tax_id: String,
+    /// País del cliente (ISO 3166-1 alfa-2) y clave L7 de `IDOtro`; sin clave: `NIF`.
+    pub customer_country_code: String,
+    pub customer_id_type: Option<String>,
+    /// `IndicadorMultiplesOT`: la base tiene más de una empresa (obligado tributario).
+    pub multiple_ot: bool,
     pub fiscal_year: i32,
     pub series: String,
     pub number: Option<i64>,
@@ -696,7 +701,8 @@ pub fn invoice_pdf_data(conn: &Connection, invoice_id: &str) -> Result<InvoicePd
                     c.address, c.postal_code, c.municipality, c.province,
                     cu.address, cu.postal_code, cu.municipality, cu.province, i.num_serie,
                     (SELECT fr.generated_at FROM fiscal_records fr
-                     WHERE fr.invoice_id = i.id AND fr.record_type = 'Alta' LIMIT 1)
+                     WHERE fr.invoice_id = i.id AND fr.record_type = 'Alta' LIMIT 1),
+                    cu.country_code, cu.id_type, (SELECT COUNT(*) FROM companies) > 1
              FROM invoices i
              JOIN companies c ON c.id = i.company_id
              JOIN customers cu ON cu.id = i.customer_id
@@ -755,6 +761,9 @@ pub fn invoice_pdf_data(conn: &Connection, invoice_id: &str) -> Result<InvoicePd
                     customer_address: address(31)?,
                     num_serie: row.get(35)?,
                     record_generated_at: row.get(36)?,
+                    customer_country_code: row.get(37)?,
+                    customer_id_type: row.get(38)?,
+                    multiple_ot: row.get(39)?,
                 })
             },
         )

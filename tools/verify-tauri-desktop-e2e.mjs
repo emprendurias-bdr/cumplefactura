@@ -22,7 +22,7 @@ const resolvedEdgeDriverPath = windows ? await downloadEdgeDriver().catch(() => 
 const steps = [
   // El botón de datos de ejemplo solo existe en desarrollo (D4); el build de release se rellena a mano.
   {
-    fill: { "Nombre legal": "Empresa E2E SL", NIF: "B12345678", "Dirección": "Calle Fiscal 1", "Código postal": "28001", Municipio: "Madrid", Provincia: "Madrid", "País": "ES" },
+    fill: { "Nombre legal": "Empresa E2E SL", NIF: "B12345674", "Dirección": "Calle Fiscal 1", "Código postal": "28001", Municipio: "Madrid", Provincia: "Madrid", "País": "ES" },
     click: "Guardar y seguir",
     expect: ["Empresa creada."],
   },

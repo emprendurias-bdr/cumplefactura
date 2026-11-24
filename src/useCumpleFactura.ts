@@ -319,10 +319,12 @@ export function useCumpleFactura() {
   /** Rellena los formularios con datos de ejemplo (no guarda nada hasta que pulses Guardar). Solo en desarrollo (D4). */
   function fillDemoData() {
     const stamp = String(Date.now() % 100_000_000).padStart(8, "0");
+    // NIF ficticios con su letra de control (Rust la comprueba).
+    const dniLetter = (digits: string) => "TRWAGMYFPDXBNJZSQVHLCKE"[Number(digits) % 23];
     setDemoSeedEnabled(true);
     setCompanyForm({
       legal_name: "Demo CumpleFactura SL",
-      tax_id: `B${stamp}`,
+      tax_id: `${stamp}${dniLetter(stamp)}`,
       address: "Calle Fiscal 1",
       postal_code: "28001",
       municipality: "Madrid",
@@ -332,13 +334,14 @@ export function useCumpleFactura() {
     });
     setCustomerForm({
       display_name: "Cliente Demo",
-      tax_id: `${stamp}T`,
+      tax_id: `${stamp.slice(1)}1${dniLetter(`${stamp.slice(1)}1`)}`,
       kind: "Business",
       address: "Calle Cliente 2",
       postal_code: "28002",
       municipality: "Madrid",
       province: "Madrid",
       country_code: "ES",
+      id_type: "",
     });
     setProductForm({
       sku: "SVC-DEMO",

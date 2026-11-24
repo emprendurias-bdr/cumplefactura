@@ -143,6 +143,11 @@ pub fn migrations() -> Vec<Migration> {
             name: "num_serie",
             sql: include_str!("migrations/013_num_serie.sql"),
         },
+        Migration {
+            version: 14,
+            name: "cliente_id_otro",
+            sql: include_str!("migrations/014_cliente_id_otro.sql"),
+        },
     ]
 }
 

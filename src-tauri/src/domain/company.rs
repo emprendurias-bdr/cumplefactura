@@ -1,6 +1,7 @@
 //! Empresa emisora y series de numeración (resolución de código / preview).
 
 use super::require;
+use super::tax_id::validate_spanish_tax_id;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -79,6 +80,8 @@ impl CompanyInput {
     pub fn validate(&self) -> Result<(), String> {
         require("legal_name", &self.legal_name)?;
         require("tax_id", &self.tax_id)?;
+        // El emisor (obligado tributario) siempre se identifica con NIF español en VERI*FACTU.
+        validate_spanish_tax_id(&self.tax_id)?;
         require("address", &self.address)?;
         require("postal_code", &self.postal_code)?;
         require("municipality", &self.municipality)?;
@@ -93,6 +96,8 @@ impl CompanyUpdateInput {
         require("id", &self.id)?;
         require("legal_name", &self.legal_name)?;
         require("tax_id", &self.tax_id)?;
+        // El emisor (obligado tributario) siempre se identifica con NIF español en VERI*FACTU.
+        validate_spanish_tax_id(&self.tax_id)?;
         require("address", &self.address)?;
         require("postal_code", &self.postal_code)?;
         require("municipality", &self.municipality)?;

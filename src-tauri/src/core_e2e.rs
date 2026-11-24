@@ -40,6 +40,7 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
         municipality: "Madrid".to_string(),
         province: "Madrid".to_string(),
         country_code: "ES".to_string(),
+        id_type: None,
     });
     db::insert_company(&conn, &company).expect("company insert");
     db::upsert_customer(&conn, &customer).expect("customer insert");

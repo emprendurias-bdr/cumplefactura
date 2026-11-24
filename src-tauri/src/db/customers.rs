@@ -4,8 +4,8 @@ use super::*;
 
 pub fn upsert_customer(conn: &Connection, customer: &Customer) -> Result<(), String> {
     conn.execute(
-        "INSERT INTO customers (id, display_name, tax_id, kind, address, postal_code, municipality, province, country_code, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+        "INSERT INTO customers (id, display_name, tax_id, kind, address, postal_code, municipality, province, country_code, updated_at, id_type)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
          ON CONFLICT(id) DO UPDATE SET
            display_name = excluded.display_name,
            tax_id = excluded.tax_id,
@@ -15,7 +15,8 @@ pub fn upsert_customer(conn: &Connection, customer: &Customer) -> Result<(), Str
            municipality = excluded.municipality,
            province = excluded.province,
            country_code = excluded.country_code,
-           updated_at = excluded.updated_at",
+           updated_at = excluded.updated_at,
+           id_type = excluded.id_type",
         params![
             customer.id,
             customer.display_name,
@@ -27,6 +28,7 @@ pub fn upsert_customer(conn: &Connection, customer: &Customer) -> Result<(), Str
             customer.province,
             customer.country_code,
             customer.updated_at,
+            customer.id_type,
         ],
     )
     .map(|_| ())
@@ -44,13 +46,14 @@ pub struct CustomerSummary {
     pub municipality: String,
     pub province: String,
     pub country_code: String,
+    pub id_type: Option<String>,
     pub updated_at: String,
 }
 
 pub fn list_customers(conn: &Connection) -> Result<Vec<CustomerSummary>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, display_name, tax_id, kind, address, postal_code, municipality, province, country_code, updated_at
+            "SELECT id, display_name, tax_id, kind, address, postal_code, municipality, province, country_code, updated_at, id_type
              FROM customers ORDER BY updated_at DESC",
         )
         .map_err(db_error)?;
@@ -67,6 +70,7 @@ pub fn list_customers(conn: &Connection) -> Result<Vec<CustomerSummary>, String>
                 province: row.get(7)?,
                 country_code: row.get(8)?,
                 updated_at: row.get(9)?,
+                id_type: row.get(10)?,
             })
         })
         .map_err(db_error)?;

@@ -138,10 +138,13 @@ mod tests {
     }
 
     fn add_company(conn: &Connection, name: &str) {
+        // NIF ficticio distinto por nombre, con su letra de control.
+        let n = name.len() * 7 + name.as_bytes()[0] as usize;
+        let letter = b"TRWAGMYFPDXBNJZSQVHLCKE"[n % 23] as char;
         let company =
             crate::domain::company::Company::from_input(crate::domain::company::CompanyInput {
                 legal_name: name.to_string(),
-                tax_id: format!("B{:08}", name.len() * 7 + name.as_bytes()[0] as usize),
+                tax_id: format!("{n:08}{letter}"),
                 address: "Calle 1".to_string(),
                 postal_code: "28001".to_string(),
                 municipality: "Madrid".to_string(),
@@ -172,7 +175,8 @@ mod tests {
         drop(live);
         let reopened = open_database(&dir.join("live.sqlite3")).unwrap();
         assert_eq!(company_count(&reopened), 2);
-        fs::remove_dir_all(dir).unwrap();
+        // En Windows el fichero puede seguir abierto: limpiar el temporal no es parte del test.
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -196,7 +200,8 @@ mod tests {
             .query_row("SELECT legal_name FROM companies", [], |row| row.get(0))
             .unwrap();
         assert_eq!(name, "Actual SL");
-        fs::remove_dir_all(dir).unwrap();
+        // En Windows el fichero puede seguir abierto: limpiar el temporal no es parte del test.
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -240,6 +245,7 @@ mod tests {
             restore_database(&mut memory, &newer).unwrap_err(),
             "restore_requires_file_database"
         );
-        fs::remove_dir_all(dir).unwrap();
+        // En Windows el fichero puede seguir abierto: limpiar el temporal no es parte del test.
+        let _ = fs::remove_dir_all(dir);
     }
 }

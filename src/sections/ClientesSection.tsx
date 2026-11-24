@@ -16,7 +16,7 @@ import { Field, Input, Select } from "../ui/Field";
 import { Accent, Hero } from "../ui/Hero";
 import type { Ctx } from "./ctx";
 
-type TextKey = Exclude<keyof CustomerForm, "kind">;
+type TextKey = Exclude<keyof CustomerForm, "kind" | "id_type">;
 const FIELDS: { key: TextKey; mono?: boolean; wide?: boolean; upper?: boolean }[] = [
   { key: "display_name" },
   { key: "tax_id", mono: true, upper: true },
@@ -27,6 +27,8 @@ const FIELDS: { key: TextKey; mono?: boolean; wide?: boolean; upper?: boolean }[
   { key: "country_code", mono: true, upper: true },
 ];
 const KINDS = ["Business", "Individual", "PublicAdministration"] as const;
+/** N2: "" = NIF español; el resto, claves L7 de `IDOtro` para clientes extranjeros. */
+const ID_TYPES = ["", "02", "03", "04", "05", "06", "07"] as const;
 const fold = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 
 export function ClientesSection({ m, route }: Ctx) {
@@ -96,6 +98,11 @@ export function ClientesSection({ m, route }: Ctx) {
                   <Input required mono={field.mono} value={m.customerForm[field.key]} onChange={(e) => m.updateCustomerForm(field.key, field.upper ? e.target.value.toUpperCase() : e.target.value)} />
                 </Field>
               ))}
+              <Field label={t("clientes.f.id_type")} help={t("clientes.idTypeAyuda")} wide>
+                <Select value={m.customerForm.id_type ?? ""} onChange={(e) => m.updateCustomerForm("id_type", e.target.value)}>
+                  {ID_TYPES.map((code) => <option key={code} value={code}>{t(`clientes.idType.${code || "nif"}`)}</option>)}
+                </Select>
+              </Field>
               <div className="cf-row cf-end cf-wide">
                 <a className="bdr-btn bdr-btn--ghost" href="#/clientes">{t("comun.cancelar")}</a>
                 <Button type="submit" variant="primary">{t("clientes.guardar")}</Button>

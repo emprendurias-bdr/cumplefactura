@@ -479,6 +479,15 @@ export const es = {
   "clientes.f.municipality": "Municipio",
   "clientes.f.province": "Provincia",
   "clientes.f.country_code": "País",
+  "clientes.f.id_type": "Tipo de identificación",
+  "clientes.idTypeAyuda": "Clientes de España: NIF. Del extranjero: elige el documento y escribe su número en el campo NIF.",
+  "clientes.idType.nif": "NIF español",
+  "clientes.idType.02": "NIF-IVA (número de IVA europeo)",
+  "clientes.idType.03": "Pasaporte",
+  "clientes.idType.04": "Documento oficial del país de residencia",
+  "clientes.idType.05": "Certificado de residencia",
+  "clientes.idType.06": "Otro documento probatorio",
+  "clientes.idType.07": "No censado",
 
   "productos.productos": "productos",
   "productos.vacio": "Aún no hay productos ni servicios. Crea el primero para no teclearlo en cada factura.",
@@ -859,6 +868,13 @@ const ERRORS: Record<string, string> = {
   logo_too_large: "El logo pesa más de 1 MB. Elige una imagen más ligera.",
   logo_read_error: "No hemos podido leer la imagen. Elige otra.",
   logo_write_error: "No hemos podido guardar el logo en este equipo.",
+  // N2: identificación fiscal
+  invalid_tax_id: "El NIF {d} no es válido. Revisa las cifras y la letra de control (sin espacios ni guiones).",
+  invalid_country_code: "El país «{d}» no es válido. Usa el código de dos letras en mayúsculas (ES, FR, PT…).",
+  foreign_customer_id_type_required: "El cliente no es de España: elige su tipo de identificación en la ficha del cliente.",
+  spanish_customer_use_nif: "Para un cliente de España usa «NIF español» como tipo de identificación.",
+  invalid_id_type: "Ese tipo de identificación no existe ({d}).",
+  foreign_id_too_long: "La identificación del cliente extranjero no puede pasar de 20 caracteres.",
 };
 
 const FIELDS: Record<string, string> = {

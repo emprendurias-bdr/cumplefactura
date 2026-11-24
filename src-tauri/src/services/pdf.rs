@@ -820,6 +820,7 @@ pub(crate) mod tests {
             company_tax_id: "B00000000".to_string(),
             customer_display_name: "Cliente".to_string(),
             customer_tax_id: "00000000T".to_string(),
+            customer_country_code: "ES".to_string(),
             fiscal_year: 2026,
             series: "A".to_string(),
             number: Some(1),

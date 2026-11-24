@@ -38,6 +38,7 @@ fn customer() -> Customer {
         municipality: "Madrid".to_string(),
         province: "Madrid".to_string(),
         country_code: "ES".to_string(),
+        id_type: None,
     })
 }
 
@@ -132,6 +133,7 @@ fn filters_invoices_by_series_kind_status_and_search() {
         municipality: "Madrid".to_string(),
         province: "Madrid".to_string(),
         country_code: "ES".to_string(),
+        id_type: None,
     });
     insert_company(&conn, &company).expect("company insert");
     upsert_customer(&conn, &customer).expect("customer upsert");
@@ -282,7 +284,7 @@ fn updates_company_without_recreating_it() {
         &CompanyUpdateInput {
             id: company.id.clone(),
             legal_name: "Demo Actualizada SL".to_string(),
-            tax_id: "B11111111".to_string(),
+            tax_id: "B11111119".to_string(),
             address: "Calle Nueva 9".to_string(),
             postal_code: "50001".to_string(),
             municipality: "Zaragoza".to_string(),
@@ -440,6 +442,7 @@ fn upserts_customer_by_id_without_replace_delete() {
         municipality: "Madrid".to_string(),
         province: "Madrid".to_string(),
         country_code: "ES".to_string(),
+        id_type: None,
     });
     upsert_customer(&conn, &updated).expect("customer update");
 

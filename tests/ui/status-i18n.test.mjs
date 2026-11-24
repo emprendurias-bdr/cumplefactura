@@ -43,7 +43,16 @@ test("certificate expiry: warn at 30 days or less, err when expired", () => {
   assert.equal(expiryStatus(-1).tone, "err");
 });
 test("backend error codes are translated, with their detail", () => {
-  assert.equal(errorText("aeat_wait_time_pending:60"), "La AEAT pide esperar 60 s antes del siguiente envío.");
+  // S1: el detalle es la hora UTC; se enseña como hora local.
+  const at = "2026-11-20T10:00:05Z";
+  const local = new Date(at).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  assert.equal(errorText(`aeat_wait_time_pending:${at}`), `La AEAT pide esperar antes del siguiente envío. Podrás enviar a partir de las ${local}.`);
+  assert.equal(invoiceStatus("VoidPending").tone, "warn");
+  assert.equal(t(invoiceStatus("VoidPending").label), "Anulación pendiente");
+  // S1b (decisión 12.1): estado visible de anulación rechazada, tono error.
+  assert.equal(invoiceStatus("VoidRejected").tone, "err");
+  assert.equal(t(invoiceStatus("VoidRejected").label), "Anulación rechazada");
+  assert.equal(errorText("sin_registro_previo_not_proposed"), "Solo se reenvía sin registro previo cuando la AEAT dice que el alta no consta.");
   assert.equal(errorText(new Error("validation_error:day_of_period")), "Revisa el día del periodo (1 a 28).");
   assert.match(errorText("transition_not_allowed:draft→paid"), /draft→paid/);
   assert.match(errorText("restore_rollback_failed:disk full"), /No se pudo restaurar/);

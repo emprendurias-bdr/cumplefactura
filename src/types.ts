@@ -303,8 +303,13 @@ export type VerifactuSubmission = {
   descripcion_error: string | null;
   tiempo_espera_envio_seconds: number | null;
   soap_fault: string | null;
+  /** S1: todos los errores de la respuesta (`codigo_error` es el primero). */
+  errores?: AeatError[];
   external_call_performed: boolean;
 };
+
+/** S1: un `CodigoErrorRegistro` con su descripción. */
+export type AeatError = { codigo: string | null; descripcion: string | null };
 
 /** F3: fila de `verifactu_submissions` (`verifactu_submission_list`), también `transport_error`. */
 export type VerifactuSubmissionSummary = {
@@ -321,6 +326,20 @@ export type VerifactuSubmissionSummary = {
   descripcion_error: string | null;
   tiempo_espera_envio_seconds: number | null;
   submitted_at: string;
+  http_status?: number | null;
+  soap_fault?: string | null;
+  errores?: AeatError[];
+};
+
+/** S1b: rechazo de la última anulación (`invoice_anulacion_rejection`). */
+export type AnulacionRejection = {
+  submission_id: string;
+  submitted_at: string;
+  codigo_error: string | null;
+  descripcion_error: string | null;
+  errores: AeatError[];
+  /** La AEAT dice que el alta no consta: se propone `SinRegistroPrevio=S` (decisión 12.2). */
+  propose_sin_registro_previo: boolean;
 };
 
 /** Puertos SOAP del WSDL VERI*FACTU (ids técnicos; los nombres visibles están en i18n). */

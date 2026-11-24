@@ -100,9 +100,10 @@ pub fn write_verifactu_anulacion_xml_draft_validated(
     invoice: &InvoicePdfData,
     previous: &PreviousInvoiceLink,
     generated_at: &str,
+    flags: AnulacionFlags,
     assets: &VerifactuXsdAssets,
 ) -> Result<(), String> {
-    let xml = build_verifactu_anulacion_xml_draft(invoice, previous, generated_at)?;
+    let xml = build_verifactu_anulacion_xml_draft(invoice, previous, generated_at, flags)?;
     write_xml(target_path, xml)?;
     let path = PathBuf::from(target_path);
     if let Err(err) = validate_verifactu_xml_file(&path, assets) {
@@ -254,11 +255,26 @@ pub fn build_verifactu_xml_draft(
     Ok(xml)
 }
 
-/// Serializa un `RegistroAnulacion` enlazado a la cadena previa.
+/// Indicadores opcionales del `RegistroAnulacion` (Diseño de registro VERI*FACTU,
+/// hoja 3 y cuadro B «Cuadro Operativa Anulación»). Ninguno entra en la huella.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AnulacionFlags {
+    /// La anulación anterior de esta factura fue rechazada: `RechazoPrevio=S`
+    /// («Anulación por rechazo»).
+    pub rechazo_previo: bool,
+    /// El alta no consta en la AEAT: `SinRegistroPrevio=S` («Anulación sin registro
+    /// previo»; con `rechazo_previo`, «Anulación por rechazo sin registro previo»).
+    pub sin_registro_previo: bool,
+}
+
+/// Serializa un `RegistroAnulacion` enlazado a la cadena previa. Orden del XSD
+/// (`RegistroFacturacionAnulacionType`): `IDFactura`, `SinRegistroPrevio`,
+/// `RechazoPrevio`, `Encadenamiento`.
 pub fn build_verifactu_anulacion_xml_draft(
     invoice: &InvoicePdfData,
     previous: &PreviousInvoiceLink,
     generated_at: &str,
+    flags: AnulacionFlags,
 ) -> Result<String, String> {
     let number = invoice
         .number
@@ -304,6 +320,12 @@ pub fn build_verifactu_anulacion_xml_draft(
         &expedition_date,
     );
     xml.push_str("      </sf:IDFactura>\n");
+    if flags.sin_registro_previo {
+        push_text(&mut xml, 6, "sf:SinRegistroPrevio", "S");
+    }
+    if flags.rechazo_previo {
+        push_text(&mut xml, 6, "sf:RechazoPrevio", "S");
+    }
     xml.push_str("      <sf:Encadenamiento>\n");
     xml.push_str("        <sf:RegistroAnterior>\n");
     push_text(&mut xml, 10, "sf:IDEmisorFactura", &previous.company_tax_id);
@@ -887,8 +909,40 @@ mod tests {
             &invoice(),
             &previous_link(),
             "2026-05-28T12:05:00Z",
+            AnulacionFlags::default(),
         )
         .expect("xml");
+        assert!(!xml.contains("RechazoPrevio"));
+        assert!(!xml.contains("SinRegistroPrevio"));
+        let retry = build_verifactu_anulacion_xml_draft(
+            &invoice(),
+            &previous_link(),
+            "2026-05-28T12:05:00Z",
+            AnulacionFlags {
+                rechazo_previo: true,
+                sin_registro_previo: false,
+            },
+        )
+        .expect("xml");
+        // Va tras IDFactura y antes de Encadenamiento, como pide el XSD.
+        assert!(retry.contains(
+            "</sf:IDFactura>\n      <sf:RechazoPrevio>S</sf:RechazoPrevio>\n      <sf:Encadenamiento>"
+        ));
+        // Cuadro B «Anulación por rechazo sin registro previo»: SinRegistroPrevio antes
+        // que RechazoPrevio (orden de `RegistroFacturacionAnulacionType`).
+        let sin_registro = build_verifactu_anulacion_xml_draft(
+            &invoice(),
+            &previous_link(),
+            "2026-05-28T12:05:00Z",
+            AnulacionFlags {
+                rechazo_previo: true,
+                sin_registro_previo: true,
+            },
+        )
+        .expect("xml");
+        assert!(sin_registro.contains(
+            "</sf:IDFactura>\n      <sf:SinRegistroPrevio>S</sf:SinRegistroPrevio>\n      <sf:RechazoPrevio>S</sf:RechazoPrevio>\n      <sf:Encadenamiento>"
+        ));
 
         assert!(xml.contains("<sf:RegistroAnulacion>"));
         assert!(xml.contains("<sf:IDEmisorFacturaAnulada>B00000000</sf:IDEmisorFacturaAnulada>"));
@@ -1007,11 +1061,43 @@ mod tests {
             &invoice(),
             &previous_link(),
             "2026-05-28T12:05:00Z",
+            AnulacionFlags {
+                rechazo_previo: true,
+                sin_registro_previo: false,
+            },
             &assets,
         )
         .expect("validated anulacion export");
 
         assert!(target.exists());
+        let _ = std::fs::remove_file(&target);
+    }
+
+    /// Decisión 12.2: el XML con `SinRegistroPrevio=S` y `RechazoPrevio=S` pasa el XSD real.
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn write_validated_anulacion_sin_registro_previo_passes_xsd() {
+        let target = std::env::temp_dir().join(format!(
+            "cumplefactura-verifactu-anulacion-srp-{}.xml",
+            uuid::Uuid::new_v4()
+        ));
+        let assets = dev_verifactu_xsd_assets().expect("dev xsd assets");
+
+        write_verifactu_anulacion_xml_draft_validated(
+            target.to_str().expect("temp path"),
+            &invoice(),
+            &previous_link(),
+            "2026-05-28T12:05:00Z",
+            AnulacionFlags {
+                rechazo_previo: true,
+                sin_registro_previo: true,
+            },
+            &assets,
+        )
+        .expect("validated anulacion export with SinRegistroPrevio=S");
+
+        let xml = std::fs::read_to_string(&target).expect("xml");
+        assert!(xml.contains("<sf:SinRegistroPrevio>S</sf:SinRegistroPrevio>"));
         let _ = std::fs::remove_file(&target);
     }
 

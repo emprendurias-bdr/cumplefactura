@@ -120,6 +120,13 @@ impl std::fmt::Debug for InvokeSubmitRequest {
     }
 }
 
+/// Un `CodigoErrorRegistro` con su `DescripcionErrorRegistro` (`RespuestaSuministro.xsd`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct ErrorRegistro {
+    pub codigo: Option<String>,
+    pub descripcion: Option<String>,
+}
+
 /// Resultado de un envío que llegó a salir hacia la AEAT.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InvokeSubmitResponse {
@@ -139,6 +146,9 @@ pub struct InvokeSubmitResponse {
     /// Segundos que la AEAT pide esperar antes del siguiente envío.
     pub tiempo_espera_envio_seconds: Option<u64>,
     pub soap_fault: Option<String>,
+    /// Todos los errores de la respuesta (`codigo_error`/`descripcion_error` son el primero).
+    #[serde(default)]
+    pub errores: Vec<ErrorRegistro>,
     /// `true`: la petición salió hacia la AEAT, aunque fallara después.
     pub external_call_performed: bool,
 }

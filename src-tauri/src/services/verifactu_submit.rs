@@ -7,11 +7,13 @@
 //!    su SHA-256 siga siendo el exportado. Así no hace falta volver a validar el XSD
 //!    y nadie puede cambiar el XML entre la exportación y el envío.
 //! 3. `check_wait_time`: si la última respuesta de la AEAT para esa empresa y ese
-//!    endpoint pidió esperar (`TiempoEsperaEnvio`) y no ha pasado el tiempo, no se envía.
+//!    endpoint pidió esperar (`TiempoEsperaEnvio`) y no ha pasado el tiempo, no se envía;
+//!    el error lleva la hora UTC a partir de la que se podrá.
 //! 4. `preflight` y `submit` hablan con el sidecar por el canal loopback firmado.
 //!    Toda respuesta del envío, también `transport_error`, se guarda en
-//!    `verifactu_submissions`. Reintentar es siempre una decisión manual: aquí no
-//!    hay reintentos automáticos.
+//!    `verifactu_submissions`. Si el fallo pudo ocurrir después de salir hacia la
+//!    AEAT, `unconfirmed_response` lo convierte en `transport_error` («sin confirmar»).
+//!    Reintentar es siempre una decisión manual: aquí no hay reintentos automáticos.
 //!
 //! Qué comprueba de la respuesta del sidecar (defensa en profundidad):
 //! - el preflight nunca dice haber llamado a la AEAT;
@@ -87,11 +89,13 @@ pub fn sha256_upper(bytes: &[u8]) -> String {
     fiscal_contract::sha256_hex(bytes).to_uppercase()
 }
 
-/// Registra en `fiscal_exports` el XML recién exportado.
+/// Registra en `fiscal_exports` el XML recién exportado. `payload_version` distingue
+/// alta (`PAYLOAD_VERSION`) de anulación (`db::ANULACION_PAYLOAD_VERSION`).
 pub fn record_xml_export(
     conn: &Connection,
     invoice_id: &str,
     xml_path: &str,
+    payload_version: &str,
 ) -> Result<XmlExport, String> {
     let bytes = std::fs::read(xml_path).map_err(|err| format!("XML read error: {err}"))?;
     let xml_sha256 = sha256_upper(&bytes);
@@ -100,7 +104,7 @@ pub fn record_xml_export(
         invoice_id,
         PROVIDER,
         "local",
-        PAYLOAD_VERSION,
+        payload_version,
         &xml_sha256,
         "xml_exported",
     )?;
@@ -178,7 +182,47 @@ pub fn submit(
     Ok(response)
 }
 
-/// Rechaza con `aeat_wait_time_pending:<segundos>` si la AEAT pidió esperar y no ha pasado el tiempo.
+/// `true` si el error ocurrió seguro antes de que el registro saliera hacia la AEAT:
+/// no se pudo hablar con el sidecar o este rechazó la petición (sus `Err` son siempre
+/// previos a cualquier conexión, ver `handlers::invoke_submit`). El resto de fallos
+/// (respuesta perdida, ilegible o incoherente) pudieron llegar a la AEAT.
+pub fn failed_before_aeat(error: &str) -> bool {
+    [
+        "sidecar_connection_error",
+        "sidecar_timeout_setup_error",
+        "sidecar_request_error",
+        "sidecar_http_",
+    ]
+    .iter()
+    .any(|prefix| error.starts_with(prefix))
+}
+
+/// Intento «sin confirmar»: puede que la AEAT lo recibiera, pero no hay respuesta válida.
+pub fn unconfirmed_response(
+    input: &SubmitInput,
+    endpoint_name: &str,
+    error: &str,
+) -> InvokeSubmitResponse {
+    InvokeSubmitResponse {
+        xml_sha256: input.xml_sha256.trim().to_uppercase(),
+        endpoint_name: endpoint_name.to_string(),
+        operation: "RegFactuSistemaFacturacion".to_string(),
+        status: "transport_error".to_string(),
+        http_status: None,
+        csv: None,
+        estado_envio: None,
+        estado_registro: None,
+        codigo_error: None,
+        descripcion_error: Some(error.to_string()),
+        tiempo_espera_envio_seconds: None,
+        soap_fault: None,
+        errores: Vec::new(),
+        external_call_performed: true,
+    }
+}
+
+/// Rechaza con `aeat_wait_time_pending:<hora UTC RFC 3339>` si la AEAT pidió esperar
+/// y no ha pasado el tiempo. La hora es el primer momento en que se podrá enviar.
 pub fn check_wait_time(
     conn: &Connection,
     invoice_id: &str,
@@ -192,13 +236,18 @@ pub fn check_wait_time(
     };
     let submitted_at = DateTime::parse_from_rfc3339(&submitted_at)
         .map_err(|err| format!("submitted_at invalido: {err}"))?;
-    let elapsed_ms = (now - submitted_at.with_timezone(&Utc)).num_milliseconds();
-    let pending_ms = wait_seconds * 1_000 - elapsed_ms;
-    if pending_ms > 0 {
-        // Redondeo hacia arriba: nunca decir «0 segundos» si aún falta algo.
+    let allowed_at = submitted_at.with_timezone(&Utc) + chrono::Duration::seconds(wait_seconds);
+    if now < allowed_at {
+        // Redondeo hacia arriba al segundo: nunca anunciar una hora ya pasada.
+        let nanos = i64::from(allowed_at.timestamp_subsec_nanos());
+        let allowed_at = if nanos > 0 {
+            allowed_at + chrono::Duration::nanoseconds(1_000_000_000 - nanos)
+        } else {
+            allowed_at
+        };
         return Err(format!(
             "aeat_wait_time_pending:{}",
-            (pending_ms + 999) / 1_000
+            allowed_at.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
         ));
     }
     Ok(())
@@ -312,7 +361,7 @@ mod tests {
             "operation": "RegFactuSistemaFacturacion", "status": "accepted", "http_status": 200,
             "csv": "A-CSV", "estado_envio": "Correcto", "estado_registro": "Correcto",
             "codigo_error": null, "descripcion_error": null, "tiempo_espera_envio_seconds": 60,
-            "soap_fault": null, "external_call_performed": true
+            "soap_fault": null, "errores": [], "external_call_performed": true
         })
     }
 
@@ -473,11 +522,46 @@ mod tests {
     }
 
     #[test]
+    fn failures_after_leaving_for_aeat_are_unconfirmed_not_rejected() {
+        for before in [
+            "sidecar_connection_error: refused",
+            "sidecar_http_409: aeat_calls_disabled",
+            "sidecar_request_error: broken pipe",
+        ] {
+            assert!(failed_before_aeat(before), "{before}");
+        }
+        for after in [
+            "http_read_error: timed out",
+            "sidecar_json_error: EOF",
+            "sidecar_xml_sha256_mismatch",
+            "sidecar_response_leaked_certificate_ref",
+        ] {
+            assert!(!failed_before_aeat(after), "{after}");
+        }
+        let response = unconfirmed_response(
+            &input("x.xml", &"a".repeat(64)),
+            "SistemaVerifactuPruebas",
+            "http_read_error: timed out",
+        );
+        assert_eq!(response.status, "transport_error");
+        assert_eq!(response.xml_sha256, "A".repeat(64));
+        assert!(response.csv.is_none() && response.external_call_performed);
+        assert_eq!(
+            response.descripcion_error.as_deref(),
+            Some("http_read_error: timed out")
+        );
+    }
+
+    #[test]
     fn wait_time_blocks_until_elapsed_per_company_and_endpoint() {
         use crate::db::tests::issued_invoice_with_export;
         let mut conn = crate::db::test_conn();
         let (invoice_id, export_id) = issued_invoice_with_export(&mut conn);
         let now = Utc::now();
+        let allowed_at = |submitted_at: &str| {
+            (DateTime::parse_from_rfc3339(submitted_at).unwrap() + chrono::Duration::seconds(60))
+                .with_timezone(&Utc)
+        };
         check_wait_time(&conn, &invoice_id, "SistemaVerifactuPruebas", now).unwrap();
 
         let mut response: InvokeSubmitResponse =
@@ -492,10 +576,17 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(
-            check_wait_time(&conn, &invoice_id, "SistemaVerifactuPruebas", now).unwrap_err(),
-            "aeat_wait_time_pending:60"
-        );
+        let submitted_at = crate::db::list_verifactu_submissions(&conn, None).unwrap()[0]
+            .submitted_at
+            .clone();
+        let err = check_wait_time(&conn, &invoice_id, "SistemaVerifactuPruebas", now).unwrap_err();
+        let hour =
+            DateTime::parse_from_rfc3339(err.strip_prefix("aeat_wait_time_pending:").unwrap())
+                .unwrap()
+                .with_timezone(&Utc);
+        // La hora anunciada es la de la respuesta + 60 s, redondeada al segundo siguiente.
+        assert!(hour >= allowed_at(&submitted_at));
+        assert!(hour - allowed_at(&submitted_at) < chrono::Duration::seconds(1));
         let later = now + chrono::Duration::seconds(59);
         assert!(
             check_wait_time(&conn, &invoice_id, "SistemaVerifactuPruebas", later)

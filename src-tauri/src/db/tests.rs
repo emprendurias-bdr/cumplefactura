@@ -624,7 +624,7 @@ fn fiscal_records_track_issued_and_voided_chain() {
         .expect("invoice status");
     assert_eq!(
         (status.as_str(), reason.as_str()),
-        ("Void", "Error en el importe")
+        ("VoidPending", "Error en el importe")
     );
     // El motivo queda en un evento propio detrás de `invoice_voided`, que no cambia.
     let actions: Vec<(String, String)> = conn
@@ -828,6 +828,7 @@ fn fiscal_export_and_aeat_submission_are_recorded_once() {
         descripcion_error: None,
         tiempo_espera_envio_seconds: Some(60),
         soap_fault: None,
+        errores: Vec::new(),
         external_call_performed: true,
     };
     fn record<'a>(
@@ -903,6 +904,7 @@ fn transport_errors_are_stored_listed_newest_first_and_allow_retry() {
         descripcion_error: Some("timeout".to_string()),
         tiempo_espera_envio_seconds: None,
         soap_fault: None,
+        errores: Vec::new(),
         external_call_performed: true,
     };
     let record = |response| VerifactuSubmissionRecord {
@@ -1032,4 +1034,342 @@ fn company_logo_is_copied_validated_and_cleared() {
     assert!(list_companies(&conn).expect("list")[0].logo_path.is_none());
     assert!(!std::path::Path::new(&stored).exists());
     std::fs::remove_dir_all(dir).expect("cleanup");
+}
+
+/// S1: registra una anulación pendiente de la factura y su exportación XML. Devuelve la exportación.
+fn pending_anulacion(conn: &mut Connection, invoice_id: &str, generated_at: &str) -> String {
+    let hash = fiscal_contract::sha256_hex(generated_at.as_bytes()).to_uppercase();
+    let event = AuditEvent::invoice_voided(
+        invoice_id.to_string(),
+        "tester".to_string(),
+        hash.clone(),
+        latest_audit_hash(conn).unwrap(),
+    );
+    insert_anulacion_record(
+        conn,
+        invoice_id,
+        &hash,
+        Some(&"F".repeat(64)),
+        generated_at,
+        "anulacion.xml",
+        &event,
+        "Error en el importe",
+    )
+    .expect("anulacion record");
+    insert_fiscal_export(
+        conn,
+        invoice_id,
+        "AEAT-VERIFACTU",
+        "local",
+        ANULACION_PAYLOAD_VERSION,
+        &hash,
+        "xml_exported",
+    )
+    .expect("anulacion export")
+}
+
+fn aeat_response(status: &str) -> fiscal_contract::messages::InvokeSubmitResponse {
+    fiscal_contract::messages::InvokeSubmitResponse {
+        xml_sha256: "C".repeat(64),
+        endpoint_name: "SistemaVerifactuPruebas".to_string(),
+        operation: "RegFactuSistemaFacturacion".to_string(),
+        status: status.to_string(),
+        http_status: Some(200),
+        csv: None,
+        estado_envio: None,
+        estado_registro: None,
+        codigo_error: None,
+        descripcion_error: None,
+        tiempo_espera_envio_seconds: None,
+        soap_fault: None,
+        errores: Vec::new(),
+        external_call_performed: true,
+    }
+}
+
+fn invoice_and_anulacion_status(conn: &Connection, invoice_id: &str) -> (String, String) {
+    conn.query_row(
+        "SELECT i.status, COALESCE(ao.status, fr.status) FROM invoices i
+         JOIN fiscal_records fr ON fr.invoice_id = i.id AND fr.record_type = 'Anulacion'
+         LEFT JOIN anulacion_outcomes ao ON ao.fiscal_record_id = fr.id
+         WHERE i.id = ?1 ORDER BY fr.rowid DESC LIMIT 1",
+        params![invoice_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )
+    .expect("statuses")
+}
+
+fn submit_anulacion(conn: &mut Connection, invoice_id: &str, export_id: &str, status: &str) {
+    let response = aeat_response(status);
+    record_verifactu_submission(
+        conn,
+        VerifactuSubmissionRecord {
+            invoice_id,
+            fiscal_export_id: export_id,
+            response: &response,
+        },
+    )
+    .expect("submission recorded");
+}
+
+#[test]
+fn anulacion_stays_pending_until_aeat_accepts_it() {
+    let mut conn = memory_conn();
+    let (invoice_id, _) = issued_invoice_with_export(&mut conn);
+    let export_id = pending_anulacion(&mut conn, &invoice_id, "2026-05-28T10:05:00Z");
+    assert_eq!(
+        invoice_and_anulacion_status(&conn, &invoice_id),
+        ("VoidPending".to_string(), "created".to_string())
+    );
+
+    // Sin confirmar: nada cambia.
+    submit_anulacion(&mut conn, &invoice_id, &export_id, "transport_error");
+    assert_eq!(
+        invoice_and_anulacion_status(&conn, &invoice_id).0,
+        "VoidPending"
+    );
+
+    submit_anulacion(&mut conn, &invoice_id, &export_id, "accepted_with_errors");
+    assert_eq!(
+        invoice_and_anulacion_status(&conn, &invoice_id),
+        ("Void".to_string(), "accepted".to_string())
+    );
+    let last_action: String = conn
+        .query_row(
+            "SELECT action FROM audit_events WHERE entity_id = ?1 ORDER BY rowid DESC LIMIT 1",
+            params![&invoice_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(last_action, "invoice_void_accepted");
+    assert!(!latest_anulacion_rejected(&conn, &invoice_id).unwrap());
+    assert_eq!(list_verifactu_submissions(&conn, None).unwrap().len(), 2);
+}
+
+fn last_audit_action(conn: &Connection, invoice_id: &str) -> String {
+    conn.query_row(
+        "SELECT action FROM audit_events WHERE entity_id = ?1 ORDER BY rowid DESC LIMIT 1",
+        params![invoice_id],
+        |row| row.get(0),
+    )
+    .unwrap()
+}
+
+#[test]
+fn rejected_anulacion_stays_in_chain_and_invoice_is_void_rejected() {
+    let mut conn = memory_conn();
+    let (invoice_id, _) = issued_invoice_with_export(&mut conn);
+    let export_id = pending_anulacion(&mut conn, &invoice_id, "2026-05-28T10:05:00Z");
+
+    submit_anulacion(&mut conn, &invoice_id, &export_id, "rejected");
+    // Decisión 12.1: estado visible «Anulación rechazada», no vuelve a «Emitida».
+    assert_eq!(
+        invoice_and_anulacion_status(&conn, &invoice_id),
+        ("VoidRejected".to_string(), "rejected".to_string())
+    );
+    assert_eq!(
+        last_audit_action(&conn, &invoice_id),
+        "invoice_void_rejected"
+    );
+    let reason: Option<String> = conn
+        .query_row(
+            "SELECT void_reason FROM invoices WHERE id = ?1",
+            params![&invoice_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(reason.as_deref(), Some("Error en el importe"));
+    assert!(latest_anulacion_rejected(&conn, &invoice_id).unwrap());
+    // Sin el código de alta inexistente no se propone SinRegistroPrevio.
+    let rejection = latest_anulacion_rejection(&conn, &invoice_id)
+        .unwrap()
+        .expect("rejection");
+    assert!(!rejection.propose_sin_registro_previo);
+    // Sigue vigente: entra en el filtro por su estado y en la exportación sin filtros.
+    let filtered = list_invoices_filtered(
+        &conn,
+        InvoiceListFilters {
+            status: Some("VoidRejected".to_string()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(filtered.len(), 1);
+    // El registro rechazado sigue siendo el último de la cadena: la siguiente anulación
+    // se encadena a él.
+    let anulacion = &list_fiscal_records(&conn).unwrap()[0];
+    assert_eq!(
+        (anulacion.record_type.as_str(), anulacion.status.as_str()),
+        ("Anulacion", "rejected")
+    );
+    let chain = crate::services::fiscal_chain::verify(&conn).unwrap();
+    assert!(
+        !chain
+            .issues
+            .iter()
+            .any(|issue| issue.code == "ANULACION_STATUS_MISMATCH"),
+        "{:?}",
+        chain.issues
+    );
+
+    // Reintento desde «Anulación rechazada»: nueva anulación pendiente; al aceptarse,
+    // la factura queda anulada.
+    assert_eq!(
+        check_anulacion_export_is_current(&conn, &export_id, &invoice_id).unwrap_err(),
+        "anulacion_not_pending"
+    );
+    assert_eq!(pending_anulacion_export(&conn, &invoice_id).unwrap(), None);
+    let retry = pending_anulacion(&mut conn, &invoice_id, "2026-05-28T10:10:00Z");
+    assert_eq!(
+        invoice_and_anulacion_status(&conn, &invoice_id),
+        ("VoidPending".to_string(), "created".to_string())
+    );
+    assert!(!latest_anulacion_rejected(&conn, &invoice_id).unwrap());
+    // Solo la anulación pendiente se puede enviar; el XML rechazado, no.
+    check_anulacion_export_is_current(&conn, &retry, &invoice_id).unwrap();
+    assert!(check_anulacion_export_is_current(&conn, &export_id, &invoice_id).is_err());
+    assert_eq!(
+        pending_anulacion_export(&conn, &invoice_id)
+            .unwrap()
+            .unwrap()
+            .0,
+        retry
+    );
+    submit_anulacion(&mut conn, &invoice_id, &retry, "accepted");
+    assert_eq!(
+        invoice_and_anulacion_status(&conn, &invoice_id),
+        ("Void".to_string(), "accepted".to_string())
+    );
+}
+
+#[test]
+fn desisting_rejected_anulacion_returns_invoice_to_issued() {
+    let mut conn = memory_conn();
+    let (invoice_id, _) = issued_invoice_with_export(&mut conn);
+    // Solo se desiste de una anulación rechazada.
+    assert_eq!(
+        desist_rejected_anulacion(&mut conn, &invoice_id).unwrap_err(),
+        "anulacion_not_rejected"
+    );
+    let export_id = pending_anulacion(&mut conn, &invoice_id, "2026-05-28T10:05:00Z");
+    assert_eq!(
+        desist_rejected_anulacion(&mut conn, &invoice_id).unwrap_err(),
+        "anulacion_not_rejected"
+    );
+    submit_anulacion(&mut conn, &invoice_id, &export_id, "rejected");
+
+    desist_rejected_anulacion(&mut conn, &invoice_id).unwrap();
+    // Vuelve a «Emitida»; el registro rechazado y su resultado no cambian.
+    assert_eq!(
+        invoice_and_anulacion_status(&conn, &invoice_id),
+        ("Issued".to_string(), "rejected".to_string())
+    );
+    assert_eq!(
+        last_audit_action(&conn, &invoice_id),
+        "invoice_void_desisted"
+    );
+    let reason: Option<String> = conn
+        .query_row(
+            "SELECT void_reason FROM invoices WHERE id = ?1",
+            params![&invoice_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(reason, None);
+}
+
+#[test]
+fn anulacion_rejected_because_alta_is_missing_proposes_sin_registro_previo() {
+    let mut conn = memory_conn();
+    let (invoice_id, _) = issued_invoice_with_export(&mut conn);
+    assert!(latest_anulacion_rejection(&conn, &invoice_id)
+        .unwrap()
+        .is_none());
+    let export_id = pending_anulacion(&mut conn, &invoice_id, "2026-05-28T10:05:00Z");
+    let mut response = aeat_response("rejected");
+    response.codigo_error = Some(AEAT_ERROR_REGISTRO_NO_EXISTE.to_string());
+    response.descripcion_error = Some("No existe el registro de facturación".to_string());
+    response.errores = vec![fiscal_contract::messages::ErrorRegistro {
+        codigo: Some(AEAT_ERROR_REGISTRO_NO_EXISTE.to_string()),
+        descripcion: Some("No existe el registro de facturación".to_string()),
+    }];
+    record_verifactu_submission(
+        &mut conn,
+        VerifactuSubmissionRecord {
+            invoice_id: &invoice_id,
+            fiscal_export_id: &export_id,
+            response: &response,
+        },
+    )
+    .unwrap();
+
+    let rejection = latest_anulacion_rejection(&conn, &invoice_id)
+        .unwrap()
+        .expect("rejection");
+    assert!(rejection.propose_sin_registro_previo);
+    assert_eq!(
+        rejection.codigo_error.as_deref(),
+        Some(AEAT_ERROR_REGISTRO_NO_EXISTE)
+    );
+    assert_eq!(rejection.errores.len(), 1);
+
+    // Tras un nuevo intento pendiente ya no hay rechazo vigente que proponer.
+    pending_anulacion(&mut conn, &invoice_id, "2026-05-28T10:10:00Z");
+    assert!(latest_anulacion_rejection(&conn, &invoice_id)
+        .unwrap()
+        .is_none());
+}
+
+#[test]
+fn alta_submissions_never_change_invoice_status() {
+    let mut conn = memory_conn();
+    let (invoice_id, alta_export) = issued_invoice_with_export(&mut conn);
+    let mut response = aeat_response("rejected");
+    response.xml_sha256 = "A".repeat(64);
+    response.http_status = Some(500);
+    response.soap_fault = Some("env:Client: Codigo[4102]".to_string());
+    response.errores = vec![
+        fiscal_contract::messages::ErrorRegistro {
+            codigo: Some("1100".to_string()),
+            descripcion: Some("Valor no permitido".to_string()),
+        },
+        fiscal_contract::messages::ErrorRegistro {
+            codigo: Some("3000".to_string()),
+            descripcion: None,
+        },
+    ];
+    record_verifactu_submission(
+        &mut conn,
+        VerifactuSubmissionRecord {
+            invoice_id: &invoice_id,
+            fiscal_export_id: &alta_export,
+            response: &response,
+        },
+    )
+    .unwrap();
+    let status: String = conn
+        .query_row(
+            "SELECT status FROM invoices WHERE id = ?1",
+            params![&invoice_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(status, "Issued");
+    let row = &list_verifactu_submissions(&conn, Some(&invoice_id)).unwrap()[0];
+    assert_eq!(row.http_status, Some(500));
+    assert_eq!(row.soap_fault.as_deref(), Some("env:Client: Codigo[4102]"));
+    assert_eq!(row.errores, response.errores);
+}
+
+#[test]
+fn collect_all_pages_reads_past_one_page() {
+    let rows: Vec<i64> = (0..1_234).collect();
+    let all = collect_all_pages(|page| {
+        let page = page.normalized()?;
+        let start = page.offset.unwrap() as usize;
+        let end = (start + page.limit.unwrap() as usize).min(rows.len());
+        Ok(rows[start..end].to_vec())
+    })
+    .unwrap();
+    assert_eq!(all, rows);
 }

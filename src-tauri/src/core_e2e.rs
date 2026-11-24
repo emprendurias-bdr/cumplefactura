@@ -212,6 +212,7 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
         &conn,
         &issued.id,
         xml_path.to_str().expect("xml utf8"),
+        verifactu_submit::PAYLOAD_VERSION,
     )
     .expect("fiscal export");
     let export_id = xml_export.export_id.clone();

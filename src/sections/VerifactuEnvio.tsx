@@ -6,7 +6,7 @@
  * AEAT (aceptada con CSV, con errores, rechazada o «Sin confirmar» con Reintentar).
  * Si la AEAT pidió esperar, «Enviar» queda deshabilitado con los segundos que faltan.
  */
-import { blockerText, envLabel, t } from "../i18n/es";
+import { blockerText, clockTime, envLabel, t } from "../i18n/es";
 import { invoiceNumber } from "../lib/numberProposal";
 import { Button } from "../ui/Button";
 import { Callout } from "../ui/Callout";
@@ -25,7 +25,7 @@ export function VerifactuEnvio({ m, vf }: Ctx) {
     : pre?.status !== "ready"
       ? t("envio.motivoComprobacion")
       : vf.waitLeft > 0
-        ? t("envio.motivoEspera", { s: vf.waitLeft })
+        ? t("envio.motivoEspera", { h: clockTime(vf.waitUntil) })
         : null;
 
   return (

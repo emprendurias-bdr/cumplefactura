@@ -14,10 +14,12 @@ import { invoiceNumber } from "../lib/numberProposal";
 import { recurringOrigin } from "../lib/periods";
 import { href } from "../lib/routes";
 import { go } from "../shell/useRoute";
-import type { InvoiceSummary } from "../types";
+import type { AnulacionRejection, InvoiceSummary } from "../types";
 import { type Activity, ActivityLog } from "../ui/ActivityLog";
 import { Button } from "../ui/Button";
+import { Callout } from "../ui/Callout";
 import { Card } from "../ui/Card";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { DocPreview, partyOf } from "../ui/DocPreview";
 import { EmptyState } from "../ui/EmptyState";
 import { Hero } from "../ui/Hero";
@@ -34,10 +36,20 @@ import { customerName, invoiceProgress, type Ctx } from "./ctx";
 export function FacturaDetalle(c: Ctx) {
   const { m, vf, route } = c;
   const [toVoid, setToVoid] = useState(false);
+  const [toVoidSinRegistro, setToVoidSinRegistro] = useState(false);
+  const [toDesist, setToDesist] = useState(false);
+  const [rejection, setRejection] = useState<AnulacionRejection | null>(null);
   const id = route.id ?? "";
   useEffect(() => {
     void m.loadDetail(id);
   }, [id]);
+  // S1b: códigos del rechazo de la anulación, solo con «Anulación rechazada».
+  // El estado de la ficha manda: la factura puede no estar en la página o filtro de la lista.
+  const listedStatus = (m.detail?.id === id ? m.detail.status : undefined) ?? m.invoices.find((item) => item.id === id)?.status;
+  useEffect(() => {
+    setRejection(null);
+    if (listedStatus === "VoidRejected") void vf.loadAnulacionRejection(id).then(setRejection, () => undefined);
+  }, [id, listedStatus]);
   const pay = usePayments({ invoiceId: id }, async () => {
     await m.loadDetail(id);
     await m.refreshData();
@@ -59,6 +71,7 @@ export function FacturaDetalle(c: Ctx) {
   const customer = m.customers.find((item) => item.id === invoice.customer_id);
   const issuer = m.companies.find((item) => item.id === invoice.company_id);
   const issued = invoice.status === "Issued";
+  const voidRejected = invoice.status === "VoidRejected";
   const draft = invoice.status === "Draft";
   const kind = invoiceKind(invoice.kind);
   const origin = recurringOrigin(invoice.recurring_label, invoice.recurring_period_key);
@@ -106,7 +119,9 @@ export function FacturaDetalle(c: Ctx) {
                 <Button disabled={!issued || invoice.kind === "Rectifying"} onClick={() => go(href({ section: "facturas", id: invoice.id, action: "rectificar" }))}>
                   {t("facturas.rectificar")}
                 </Button>
-                <Button variant="danger" disabled={!issued} onClick={() => setToVoid(true)}>{t("facturas.anular")}</Button>
+                <Button variant="danger" disabled={!issued && !voidRejected} onClick={() => setToVoid(true)}>
+                  {voidRejected ? t("anular.verboReintento") : t("facturas.anular")}
+                </Button>
               </>
             )}
           </>
@@ -121,6 +136,34 @@ export function FacturaDetalle(c: Ctx) {
           ) : undefined
         }
       />
+
+      {voidRejected ? (
+        <Callout
+          tone="err"
+          title={t("ficha.anulacionRechazada")}
+          actions={
+            <>
+              {rejection?.propose_sin_registro_previo ? (
+                <Button variant="danger" onClick={() => setToVoidSinRegistro(true)}>{t("anular.verboSinRegistro")}</Button>
+              ) : null}
+              <Button onClick={() => setToDesist(true)}>{t("anular.verboDesistir")}</Button>
+            </>
+          }
+        >
+          {t("ficha.anulacionRechazadaTexto")}
+          {(rejection?.errores.length ? rejection.errores : rejection ? [{ codigo: rejection.codigo_error, descripcion: rejection.descripcion_error }] : []).map((error, index) => (
+            <span key={index}>
+              <br />
+              {error.codigo ? <span className="m">{t("ficha.codigoError", { c: error.codigo })}</span> : null}
+              {error.descripcion ? ` · ${error.descripcion}` : null}
+            </span>
+          ))}
+          {rejection?.propose_sin_registro_previo ? <>
+              <br />
+              {t("ficha.proponerSinRegistro")}
+            </> : null}
+        </Callout>
+      ) : null}
 
       <Card title={t("ficha.estadoFiscal")}>
         <Stepper steps={progress.labeled} label={t("ficha.estadoFiscal")} />
@@ -171,6 +214,18 @@ export function FacturaDetalle(c: Ctx) {
         />
       </div>
       <AnularDialog c={c} invoice={toVoid ? invoice : null} onClose={() => setToVoid(false)} />
+      <AnularDialog c={c} invoice={toVoidSinRegistro ? invoice : null} sinRegistro onClose={() => setToVoidSinRegistro(false)} />
+      <ConfirmDialog
+        open={toDesist}
+        title={t("anular.tituloDesistir", { n: number ?? "" })}
+        consequences={[t("anular.desistir1"), t("anular.desistir2")]}
+        verb={t("anular.verboDesistir")}
+        loadingText={t("anular.desistirCargando")}
+        onCancel={() => setToDesist(false)}
+        onConfirm={async () => {
+          if (await vf.desistVoid(invoice.id)) setToDesist(false);
+        }}
+      />
     </>
   );
 }

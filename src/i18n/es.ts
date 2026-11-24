@@ -81,6 +81,8 @@ export const es = {
   "estado.emitida": "Emitida",
   "estado.rectificada": "Rectificada",
   "estado.anulada": "Anulada",
+  "estado.anulacionPendiente": "Anulación pendiente",
+  "estado.anulacionRechazada": "Anulación rechazada",
   "estado.rectificativa": "Rectificativa",
   "estado.aceptada": "Aceptada",
   "estado.aceptadaConErrores": "Aceptada con errores",
@@ -270,11 +272,24 @@ export const es = {
 
   "anular.titulo": "¿Anular la factura {n}?",
   "anular.c1": "Se genera el registro de anulación encadenado y su XML.",
-  "anular.c2": "La factura pasa a Anulada y no se podrá rectificar.",
+  "anular.c2": "La factura queda en «Anulación pendiente» y pasa a Anulada cuando la AEAT acepte la anulación. Si la rechaza, queda en «Anulación rechazada»: podrás reintentarla o desistir.",
   "anular.c3": "La anulación se envía a la AEAT desde Verifactu, como el alta.",
   "anular.irreversible": "Una anulación no se puede deshacer.",
   "anular.verbo": "Anular factura",
   "anular.cargando": "Anulando…",
+  "anular.tituloReintento": "¿Reintentar la anulación de la factura {n}?",
+  "anular.reintento1": "Se genera un registro de anulación nuevo, marcado como «Rechazo previo» y encadenado al rechazado.",
+  "anular.verboReintento": "Reintentar anulación",
+  "anular.tituloSinRegistro": "¿Reenviar la anulación de la factura {n} sin registro previo?",
+  "anular.sinRegistro1": "La AEAT dice que el alta de esta factura no consta allí.",
+  "anular.sinRegistro2": "Se genera un registro de anulación nuevo, marcado como «Sin registro previo» y «Rechazo previo».",
+  "anular.sinRegistro3": "Úsalo solo si el alta no llegó a enviarse a la AEAT.",
+  "anular.verboSinRegistro": "Reenviar sin registro previo",
+  "anular.tituloDesistir": "¿Desistir de anular la factura {n}?",
+  "anular.desistir1": "La factura vuelve a «Emitida» y sigue vigente.",
+  "anular.desistir2": "La anulación rechazada queda en la cadena de registros y en la auditoría.",
+  "anular.verboDesistir": "Desistir de la anulación",
+  "anular.desistirCargando": "Desistiendo…",
 
   "ficha.etiqueta": "Factura",
   "ficha.noEncontrada": "No encontramos esta factura. Vuelve a la lista y búscala.",
@@ -292,6 +307,10 @@ export const es = {
   "ficha.tipoFactura": "Factura",
   "ficha.tipoRegistro": "Registro",
   "ficha.tipoEnvio": "Envío",
+  "ficha.anulacionRechazada": "La AEAT rechazó la anulación.",
+  "ficha.anulacionRechazadaTexto": "La factura sigue vigente mientras la AEAT no acepte su anulación. Reintenta la anulación o desiste.",
+  "ficha.codigoError": "Código {c}",
+  "ficha.proponerSinRegistro": "La AEAT no tiene el alta de esta factura: puedes reenviar la anulación sin registro previo.",
 
   "cobros.titulo": "Cobros",
   "cobros.cobrado": "Cobrado {pagado} de {total}",
@@ -373,6 +392,7 @@ export const es = {
   "vf.sinEnvios": "Todavía no hay envíos.",
   "vf.entorno": "Entorno",
   "vf.csv": "CSV",
+  "vf.errores": "Errores",
   "vf.reintentarMotivo": "Exporta el XML de nuevo",
   "vf.cadena": "Cadena de registros",
   "vf.sinRegistros": "Aún no hay registros. Aparecen al emitir.",
@@ -406,7 +426,7 @@ export const es = {
   "envio.motivoXml": "Exporta el XML primero",
   "envio.motivoPassword": "Escribe la contraseña",
   "envio.motivoComprobacion": "Haz la comprobación previa",
-  "envio.motivoEspera": "La AEAT pide esperar {s} s",
+  "envio.motivoEspera": "La AEAT pide esperar: podrás enviar a partir de las {h}",
   "envio.listoTitulo": "Todo listo para enviar.",
   "envio.listo": "Se enviará al entorno {entorno}.",
   "envio.bloqueadoTitulo": "No se puede enviar todavía.",
@@ -764,7 +784,8 @@ export const es = {
   "ok.auditoria": "Auditoría exportada.",
   "ok.ajustes": "Ajustes guardados.",
   "ok.xml": "XML preparado y validado.",
-  "ok.anulacion": "Factura anulada. Envía la anulación desde Verifactu.",
+  "ok.anulacion": "Anulación registrada. Envíala desde Verifactu: la factura queda anulada cuando la AEAT la acepte.",
+  "ok.desistir": "La factura vuelve a Emitida.",
   "ok.documentoGuardado": "Borrador guardado.",
   "ok.documentoEnviado": "Documento numerado.",
   "ok.documentoEstado": "Estado actualizado.",
@@ -812,8 +833,11 @@ const ERRORS: Record<string, string> = {
   certificate_pkcs12_invalid: "No se puede abrir el certificado. Revisa la contraseña o el archivo.",
   certificate_ref_invalid: "La referencia del certificado no es válida.",
   certificate_vault_dir_missing: "Falta la carpeta segura de certificados en este equipo.",
-  aeat_wait_time_pending: "La AEAT pide esperar {d} s antes del siguiente envío.",
+  aeat_wait_time_pending: "La AEAT pide esperar antes del siguiente envío. Podrás enviar a partir de las {d}.",
   xml_already_accepted_by_aeat: "La AEAT ya aceptó este XML. No hace falta reenviarlo.",
+  anulacion_not_pending: "Ese XML de anulación ya no es el pendiente. Envía la anulación actual de la factura.",
+  anulacion_not_rejected: "Esta factura no tiene una anulación rechazada.",
+  sin_registro_previo_not_proposed: "Solo se reenvía sin registro previo cuando la AEAT dice que el alta no consta.",
   aeat_calls_disabled: "El envío a la AEAT está desactivado en este equipo.",
   endpoint_name_not_allowed: "Ese entorno de envío no está permitido.",
   production_endpoint_disabled: "El envío a producción está bloqueado en esta versión.",
@@ -823,7 +847,7 @@ const ERRORS: Record<string, string> = {
   xml_not_well_formed: "El XML no es válido. Expórtalo de nuevo.",
   xml_root_not_regfactu: "El archivo no es un registro VERI*FACTU. Expórtalo de nuevo.",
   tls_handshake_error: "No hemos podido conectar con la AEAT de forma segura. Revisa el certificado y la conexión.",
-  transport_error: "No hemos podido hablar con la AEAT. Reintenta cuando quieras.",
+  transport_error: "Envío sin confirmar: no sabemos si la AEAT lo recibió. No es ni aceptado ni rechazado. Reintenta cuando quieras.",
   sidecar_spawn_error: "No se pudo arrancar el servicio local de envío. Reinicia la app.",
   sidecar_start_timeout: "El servicio local de envío tardó demasiado en arrancar. Reintenta.",
   hmac_invalid: "El servicio local de envío rechazó la petición. Reinicia la app.",
@@ -893,9 +917,16 @@ export function errorText(error: unknown): string {
   // El detalle son céntimos: se enseña como importe.
   if (code === "payment_exceeds_total" && /^-?\d+$/.test(detail)) return ERRORS[code].replace("{d}", formatCents(Number(detail)));
   if (/^company not found/.test(raw)) return "No encontramos la empresa. Elígela o créala en Ajustes.";
+  // El detalle es la hora UTC a partir de la que la AEAT deja enviar: se enseña en hora local.
+  if (code === "aeat_wait_time_pending" && !Number.isNaN(Date.parse(detail))) return ERRORS[code].replace("{d}", clockTime(Date.parse(detail)));
   if (ERRORS[code]) return ERRORS[code].replace("{d}", detail);
   if (!code && raw.length < 140 && !/[a-z]_[a-z]/.test(raw)) return raw;
   return `${t("error.generico")} ${t("error.detalle", { d: raw })}`;
+}
+
+/** Hora local «HH:MM:SS» de un instante (ms desde epoch). */
+export function clockTime(ms: number): string {
+  return new Date(ms).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 /** Bloqueos y avisos de la comprobación previa (lista de códigos) → frases. */

@@ -28,7 +28,7 @@ import { Stepper } from "../ui/Stepper";
 import { AnularDialog } from "./AnularDialog";
 import { customerName, invoiceProgress, type Ctx } from "./ctx";
 
-const STATUSES = ["Draft", "Issued", "Rectified", "Void"] as const;
+const STATUSES = ["Draft", "Issued", "Rectified", "VoidPending", "VoidRejected", "Void"] as const;
 const KINDS = ["Complete", "Simplified", "Rectifying"] as const;
 const SENDING = ["sinEnviar", "sinConfirmar", "aceptada", "conErrores", "rechazada"] as const;
 
@@ -87,10 +87,17 @@ export function FacturasSection(c: Ctx) {
       header: t("facturas.estado"),
       cell: ({ invoice }) => {
         const kind = invoiceKind(invoice.kind);
+        // S1b: con la anulación rechazada se ve el código de la AEAT (descripción al pasar el ratón).
+        const rejected = invoice.status === "VoidRejected" ? c.vf.submissions.find((row) => row.invoice_id === invoice.id && row.status === "rejected") : undefined;
         return (
           <span className="cf-row cf-row--tight">
             <StatusChip status={invoiceStatus(invoice.status)} />
             {kind ? <StatusChip status={kind} /> : null}
+            {rejected?.codigo_error ? (
+              <span className="m bdr-small" title={rejected.descripcion_error ?? undefined}>
+                {t("ficha.codigoError", { c: rejected.codigo_error })}
+              </span>
+            ) : null}
           </span>
         );
       },
@@ -203,7 +210,7 @@ export function FacturasSection(c: Ctx) {
               { label: t("facturas.json"), onSelect: () => void m.exportJson(invoice.id) },
               { label: t("facturas.enviar"), disabled: !issued, onSelect: () => { c.vf.selectInvoice(invoice.id); go("#/verifactu"); } },
               { label: t("facturas.rectificar"), disabled: !issued || invoice.kind === "Rectifying", onSelect: () => go(href({ section: "facturas", id: invoice.id, action: "rectificar" })) },
-              { label: t("facturas.anular"), danger: true, disabled: !issued, onSelect: () => setToVoid(invoice) },
+              { label: t("facturas.anular"), danger: true, disabled: !issued && invoice.status !== "VoidRejected", onSelect: () => setToVoid(invoice) },
             ];
           }}
           footer={

@@ -13,13 +13,14 @@ import { useEffect, useState } from "react";
 import { t } from "./i18n/es";
 import { isMissingCommand } from "./lib/tauri";
 import type {
+  AnulacionRejection,
   SubmissionPackage,
   SubmitPreflight,
   VerifactuSubmission,
   VerifactuSubmissionSummary,
   VerifactuXmlResult,
 } from "./types";
-import { action, need, type Model } from "./useCumpleFactura";
+import { action, need, run, type Model } from "./useCumpleFactura";
 
 /** Fila «como en la tabla» a partir de la respuesta del envío de esta sesión. */
 function asSummary(result: VerifactuSubmission): VerifactuSubmissionSummary {
@@ -40,12 +41,18 @@ function asSummary(result: VerifactuSubmission): VerifactuSubmissionSummary {
   };
 }
 
-/** Segundos que aún pide esperar la AEAT según el último envío con respuesta. */
-export function waitSecondsLeft(rows: VerifactuSubmissionSummary[], now = Date.now()): number {
+/** Momento (ms) a partir del que la AEAT deja enviar según el último envío con respuesta; 0 si no pide esperar. */
+export function waitUntil(rows: VerifactuSubmissionSummary[]): number {
   const last = rows.find((row) => row.tiempo_espera_envio_seconds != null && row.status !== "transport_error");
   if (!last?.tiempo_espera_envio_seconds) return 0;
   const until = Date.parse(last.submitted_at) + last.tiempo_espera_envio_seconds * 1000;
-  return Number.isFinite(until) ? Math.max(0, Math.ceil((until - now) / 1000)) : 0;
+  return Number.isFinite(until) ? until : 0;
+}
+
+/** Segundos que aún pide esperar la AEAT según el último envío con respuesta. */
+export function waitSecondsLeft(rows: VerifactuSubmissionSummary[], now = Date.now()): number {
+  const until = waitUntil(rows);
+  return until ? Math.max(0, Math.ceil((until - now) / 1000)) : 0;
 }
 
 export function useVerifactu(m: Model) {
@@ -62,7 +69,7 @@ export function useVerifactu(m: Model) {
   const [submissionsAvailable, setSubmissionsAvailable] = useState(true);
   const [now, setNow] = useState(Date.now());
 
-  const issuedInvoices = m.invoices.filter((item) => item.status === "Issued" || item.status === "Void" || item.status === "Rectified");
+  const issuedInvoices = m.invoices.filter((item) => ["Issued", "VoidPending", "VoidRejected", "Void", "Rectified"].includes(item.status));
   const selected = m.invoices.find((item) => item.id === selectedId) ?? issuedInvoices[0] ?? null;
   const needsPassword = m.passwordMode !== "env";
   const waitLeft = waitSecondsLeft(submissions, now);
@@ -95,6 +102,22 @@ export function useVerifactu(m: Model) {
     setSubmission(pkg);
     setSubmitPreflight(null);
     setSubmitResult(null);
+    if (!pkg) void recoverPendingAnulacion(id);
+  }
+
+  /** S1: tras reiniciar, la anulación pendiente se recupera de la base (no se puede volver a exportar). */
+  async function recoverPendingAnulacion(invoiceId: string): Promise<SubmissionPackage | null> {
+    if (m.invoices.find((item) => item.id === invoiceId)?.status !== "VoidPending") return null;
+    try {
+      const pkg = await invoke<SubmissionPackage | null>("verifactu_pending_anulacion", { invoiceId });
+      if (pkg) {
+        setSubmission(pkg);
+        setExports((current) => [pkg, ...current.filter((item) => item.invoice_id !== invoiceId)]);
+      }
+      return pkg;
+    } catch {
+      return null;
+    }
   }
 
   /** El último XML exportado pasa a ser el que se envía; reinicia comprobación y envío. */
@@ -119,11 +142,19 @@ export function useVerifactu(m: Model) {
     },
   );
 
-  /** Anular: XML de anulación encadenado; la factura pasa a Anulada en Rust. */
+  /**
+   * Anular: XML de anulación encadenado; la factura queda «Anulación pendiente» en Rust.
+   * `sinRegistroPrevio` solo tras confirmarlo la persona (decisión 12.2); Rust lo vuelve a comprobar.
+   */
   const exportCancelXml = action(
     t("ok.anulacion"),
-    async (invoiceId: string, reason: string) => {
-      const result = await invoke<VerifactuXmlResult>("verifactu_xml_anulacion_draft_export", { invoiceId, targetPath: m.paths.cancelXml, reason });
+    async (invoiceId: string, reason: string, sinRegistroPrevio = false) => {
+      const result = await invoke<VerifactuXmlResult>("verifactu_xml_anulacion_draft_export", {
+        invoiceId,
+        targetPath: m.paths.cancelXml,
+        reason,
+        sinRegistroPrevio,
+      });
       return { invoiceId, result };
     },
     async ({ invoiceId, result }) => {
@@ -131,6 +162,23 @@ export function useVerifactu(m: Model) {
       useForSubmission(invoiceId, result);
       await m.refreshData();
     },
+  );
+
+  /** S1b: códigos del rechazo de la última anulación; `null` si no la hay o si el comando no existe. Otro error sale en el toast. */
+  async function loadAnulacionRejection(invoiceId: string): Promise<AnulacionRejection | null> {
+    try {
+      return await invoke<AnulacionRejection | null>("invoice_anulacion_rejection", { invoiceId });
+    } catch (error) {
+      if (isMissingCommand(error)) return null;
+      return run(() => Promise.reject(error));
+    }
+  }
+
+  /** S1b: desistir de la anulación rechazada; la factura vuelve a Emitida en Rust. */
+  const desistVoid = action(
+    t("ok.desistir"),
+    (invoiceId: string) => invoke<void>("invoice_void_desist", { invoiceId }),
+    () => m.refreshData(),
   );
 
   /** Entrada común de comprobación y envío: paquete exportado, certificado y contraseña en memoria. */
@@ -149,6 +197,8 @@ export function useVerifactu(m: Model) {
     setSubmitResult(result);
     if (!submissionsAvailable) setSubmissions((current) => [asSummary(result), ...current]);
     else await loadSubmissions();
+    // S1: la respuesta a una anulación cambia el estado de la factura en Rust.
+    await m.refreshData();
   }
 
   const preflightSubmit = action(null, () => doPreflight(need(submission, t("error.sinXml"))), setSubmitPreflight);
@@ -158,7 +208,11 @@ export function useVerifactu(m: Model) {
   const retry = action(
     null,
     async (row: Pick<VerifactuSubmissionSummary, "fiscal_export_id" | "invoice_id">) => {
-      const pkg = need(exportsThisSession.find((item) => item.export_id === row.fiscal_export_id), t("error.sinXml"));
+      const pkg = need(
+        exportsThisSession.find((item) => item.export_id === row.fiscal_export_id) ??
+          (await recoverPendingAnulacion(row.invoice_id).then((found) => (found?.export_id === row.fiscal_export_id ? found : null))),
+        t("error.sinXml"),
+      );
       setSelectedId(row.invoice_id);
       setSubmission(pkg);
       const check = await doPreflight(pkg);
@@ -187,14 +241,19 @@ export function useVerifactu(m: Model) {
     submissions,
     submissionsAvailable,
     waitLeft,
+    waitUntil: waitUntil(submissions),
     canPreflight,
     canSubmit,
     exportXml,
     exportCancelXml,
+    loadAnulacionRejection,
+    desistVoid,
     preflightSubmit,
     submitToAeat,
     retry,
-    canRetry: (row: VerifactuSubmissionSummary) => exportsThisSession.some((item) => item.export_id === row.fiscal_export_id),
+    canRetry: (row: VerifactuSubmissionSummary) =>
+      exportsThisSession.some((item) => item.export_id === row.fiscal_export_id) ||
+      m.invoices.some((item) => item.id === row.invoice_id && item.status === "VoidPending"),
     loadSubmissions,
   };
 }

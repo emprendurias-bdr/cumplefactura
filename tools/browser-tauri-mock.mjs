@@ -390,6 +390,13 @@ export function installTauriMock(page, seed = null) {
         state.invoices = state.invoices.map((inv) => (inv.id === args.invoiceId ? { ...inv, status: "Void" } : inv));
         return { target_path: args.targetPath, status: "draft-created-xsd-valid", xsd_validated: true, export_id: id("export"), xml_sha256: hex(98), xml_bytes: 1024, notes: ["browser smoke mock"] };
       },
+      invoice_anulacion_rejection: () => null,
+      invoice_void_desist: (args) => {
+        const inv = state.invoices.find((item) => item.id === args.invoiceId);
+        if (inv?.status !== "VoidRejected") throw "anulacion_not_rejected";
+        state.invoices = state.invoices.map((item) => (item.id === args.invoiceId ? { ...item, status: "Issued" } : item));
+        return null;
+      },
       verifactu_submit_preflight: (args) => {
         const needsPassword = state.settings.certificate_password_mode !== "env" && !args.input.certificate_password;
         return {

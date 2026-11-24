@@ -765,6 +765,26 @@ export function useCumpleFactura() {
     setJsonResult,
   );
   const exportCsv = action(t("ok.csv"), () => invoke<ExportResult>("invoice_export_csv", { filters: null, targetPath: paths.csv }), setCsvResult);
+  /** X1: libro registro de expedidas de la empresa activa entre `from` y `to` (ISO); con
+   *  `includeVoid`, las anuladas salen a cero y se añade la columna `estado`. Ruta con el
+   *  diálogo nativo; si se cancela no hace nada. Rust no sobrescribe un fichero existente. */
+  const exportLibroExpedidas = action(
+    null,
+    async (from: string, to: string, includeVoid = false) => {
+      const companyId = need(company?.id, t("error.sinEmpresa"));
+      const targetPath = await saveDialog({
+        title: t("libro.titulo"),
+        defaultPath: exportDir || appDefaults?.export_dir,
+        filters: [{ name: "CSV", extensions: ["csv"] }],
+        canCreateDirectories: true,
+      });
+      if (typeof targetPath !== "string") return null;
+      return invoke<ExportResult>("libro_expedidas_export", { companyId, from, to, targetPath, includeVoid });
+    },
+    (result) => {
+      if (result) toast(t("ok.libro", { ruta: result.target_path }), "ok");
+    },
+  );
   const exportFiscalAudit = action(
     t("ok.auditoria"),
     () => invoke<ExportResult>("fiscal_audit_export", { filters: null, targetPath: paths.audit }),
@@ -908,6 +928,7 @@ export function useCumpleFactura() {
     exportPdf,
     exportJson,
     exportCsv,
+    exportLibroExpedidas,
   };
 }
 

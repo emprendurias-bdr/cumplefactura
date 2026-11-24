@@ -39,3 +39,11 @@ export function recurringOrigin(label: string | null | undefined, key: string | 
 export function isValidDay(day: number): boolean {
   return Number.isInteger(day) && day >= 1 && day <= 28;
 }
+
+/** Libro registro (X1): trimestre `1`–`4` del año → rango ISO `[desde, hasta]`, ambos incluidos. */
+export function quarterRange(year: number, quarter: number): [string, string] {
+  const first = (quarter - 1) * 3 + 1;
+  const lastDay = new Date(Date.UTC(year, first + 2, 0)).getUTCDate();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return [`${year}-${pad(first)}-01`, `${year}-${pad(first + 2)}-${pad(lastDay)}`];
+}

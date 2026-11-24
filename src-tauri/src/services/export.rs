@@ -108,7 +108,7 @@ pub fn validate_restore_source(path: &str) -> Result<(), String> {
 }
 
 /// Escribe solo si el destino no existe; crea directorios padre si hace falta.
-fn write_new_file(path: &str, contents: &str) -> Result<(), String> {
+pub(crate) fn write_new_file(path: &str, contents: &str) -> Result<(), String> {
     let target = Path::new(path);
     if target.exists() {
         return Err("target file already exists".to_string());
@@ -120,7 +120,7 @@ fn write_new_file(path: &str, contents: &str) -> Result<(), String> {
 }
 
 /// Escapa celdas CSV (comillas si hay coma/comilla/salto).
-fn cell(value: &str) -> String {
+pub(crate) fn cell(value: &str) -> String {
     let escaped = value.replace('"', "\"\"");
     format!("\"{escaped}\"")
 }

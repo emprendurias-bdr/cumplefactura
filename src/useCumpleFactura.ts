@@ -177,7 +177,6 @@ export function useCumpleFactura() {
   const [defaultTerritoryFlags, setDefaultTerritoryFlags] = useState<string[]>(["CommonTerritory", "VeriFactu"]);
   const [endpointName, setEndpointName] = useState("SistemaVerifactuPruebas");
   const [passwordMode, setPasswordMode] = useState<CertificatePasswordMode>("session");
-  const [qrEnvironment, setQrEnvironment] = useState<"test" | "production">("test");
   const [paths, setPaths] = useState<Record<PathKey, string>>(exportPaths(""));
 
   // Resultados de exportaciones y copias
@@ -586,7 +585,6 @@ export function useCumpleFactura() {
       setDefaultTerritoryFlags(settings.default_territory_flags);
       setEndpointName(settings.verifactu_endpoint_name);
       setPasswordMode(settings.certificate_password_mode ?? "session");
-      setQrEnvironment(settings.qr_environment ?? "test");
       const dir = settings.export_dir || defaults.export_dir;
       setExportDir(dir);
       applyExportDir(dir);
@@ -782,7 +780,6 @@ export function useCumpleFactura() {
           onboarding_completed: complete === true ? onboardingReady : (appSettings?.onboarding_completed ?? false) || onboardingReady,
           verifactu_endpoint_name: endpointName,
           certificate_password_mode: passwordMode,
-          qr_environment: qrEnvironment,
         },
       }),
     (saved) => {
@@ -846,8 +843,6 @@ export function useCumpleFactura() {
     setEndpointName,
     passwordMode,
     setPasswordMode,
-    qrEnvironment,
-    setQrEnvironment,
     paths,
     backup,
     restore,

@@ -4,8 +4,10 @@
 //! cantidad, precio, descuento, IVA, IRPF, importe) con saltos de página, totales con desglose
 //! por tipo, observaciones y pie con página. Salida local para el usuario: no es el artefacto
 //! fiscal (huella y XML viven aparte) y las observaciones nunca salen de aquí hacia el registro.
-//! Las facturas emitidas llevan arriba a la derecha el QR tributario VERI*FACTU (35 mm, módulos
-//! vectoriales) y la leyenda `qr::VERIFACTU_LEGEND`; los borradores no llevan QR. Presupuestos,
+//! Las facturas emitidas llevan, solo en la primera página y arriba a la izquierda, el texto
+//! «QR tributario:», el QR VERI*FACTU (módulos vectoriales, 30–40 mm: Orden HAC/1177/2024
+//! art. 21.1) y debajo la leyenda `qr::VERIFACTU_LEGEND` al tamaño de los datos (Orden art.
+//! 20.1.b); el logo pasa a la derecha. Los borradores no llevan QR. Presupuestos,
 //! proformas y albaranes salen sin QR ni huella y con «Documento sin valor fiscal».
 //! El logo (JPEG o PNG sin alpha, `services::logo`) se incrusta como XObject sin recodificar.
 
@@ -17,11 +19,20 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
-/// Lado del QR: 35 mm en puntos PDF.
-const QR_SIZE: f64 = 99.2;
-/// Margen derecho y superior del QR (A4 = 595 x 842 pt).
-const QR_RIGHT: f64 = 545.0;
-const QR_TOP: f64 = 800.0;
+/// Milímetro en puntos PDF.
+const MM: f64 = 72.0 / 25.4;
+/// Lado del símbolo QR sin zona de silencio (Orden art. 21.1: entre 30 y 40 mm).
+const QR_SYMBOL: f64 = 32.0 * MM;
+/// Tope del QR con su zona de silencio, por si la AEAT mide el conjunto (sin confirmar).
+const QR_MAX: f64 = 40.0 * MM;
+/// Zona de silencio en módulos (ISO/IEC 18004).
+const QR_QUIET: f64 = 4.0;
+/// Blanco mínimo alrededor del símbolo (documento técnico del QR, apdo. 3: ≥ 2 mm).
+const QR_MIN_BLANK: f64 = 2.5 * MM;
+/// Texto sobre el QR (documento técnico del QR de la AEAT, apdo. 3; sin copia local).
+const QR_LABEL: &str = "QR tributario:";
+/// Leyenda al mismo tamaño que los datos de emisor, cliente y detalles (9 pt).
+const QR_TEXT_SIZE: f64 = 9.0;
 const LEFT: f64 = 40.0;
 const RIGHT: f64 = 555.0;
 const TOP: f64 = 802.0;
@@ -368,46 +379,37 @@ fn render(sheet: &Sheet) -> Vec<u8> {
         y: TOP,
     };
 
-    // Cabecera: logo a la izquierda y QR (emitidas) a la derecha.
+    // Cabecera. Con QR (emitidas): QR arriba a la izquierda y logo a la derecha, como en
+    // `DocPreview`; título y datos debajo de ambos. Sin QR: logo a la izquierda.
     let mut header_bottom = TOP;
     if let Some(logo) = &sheet.logo {
         let scale = (LOGO_MAX_W / logo.width as f64).min(LOGO_MAX_H / logo.height as f64);
         let (w, h) = (logo.width as f64 * scale, logo.height as f64 * scale);
-        let draw = format!(
-            "q {w:.2} 0 0 {h:.2} {LEFT:.2} {:.2} cm /Im1 Do Q\n",
-            TOP - h
-        );
+        let x = if sheet.qr.is_some() { RIGHT - w } else { LEFT };
+        let draw = format!("q {w:.2} 0 0 {h:.2} {x:.2} {:.2} cm /Im1 Do Q\n", TOP - h);
         pages.current().push_str(&draw);
         header_bottom = TOP - h - 14.0;
     }
-    let mut right_bottom = TOP;
     if let Some((matrix, env)) = &sheet.qr {
-        let (x, y) = (QR_RIGHT - QR_SIZE, QR_TOP - QR_SIZE);
-        push_qr(pages.current(), x, y, matrix);
-        pages.text(QR_RIGHT - 172.0, y - 8.0, 6.5, false, VERIFACTU_LEGEND);
-        right_bottom = y - 8.0;
+        pages.text(LEFT, TOP - QR_TEXT_SIZE, QR_TEXT_SIZE, true, QR_LABEL);
+        let side = qr_side(matrix.len()).2;
+        let y = TOP - QR_TEXT_SIZE - 4.0 - side;
+        push_qr(pages.current(), LEFT, y, matrix);
+        let mut bottom = y - 11.0;
+        pages.text(LEFT, bottom, QR_TEXT_SIZE, false, VERIFACTU_LEGEND);
         if *env == QrEnvironment::Test {
-            pages.text(
-                QR_RIGHT - 172.0,
-                y - 17.0,
-                6.5,
-                false,
-                "Entorno de pruebas AEAT",
-            );
-            right_bottom = y - 17.0;
+            bottom -= 11.0;
+            pages.text(LEFT, bottom, 7.5, false, "Entorno de pruebas AEAT");
         }
+        header_bottom = header_bottom.min(bottom - 14.0);
     }
     let mut y = header_bottom - sheet.heading_size;
-    // Sin QR el título va a la derecha, como en `DocPreview`; con QR, bajo el logo.
+    // Sin QR y con logo el título va a la derecha, como en `DocPreview`; si no, debajo.
     let title_right = sheet.qr.is_none() && sheet.logo.is_some();
     if title_right {
         y = TOP - sheet.heading_size;
     }
-    let max_title = if sheet.qr.is_some() {
-        380.0
-    } else {
-        RIGHT - LEFT
-    };
+    let max_title = RIGHT - LEFT;
     let mut size = sheet.heading_size;
     while text_width(&sheet.heading, size) > max_title && size > 10.0 {
         size -= 1.0;
@@ -427,7 +429,7 @@ fn render(sheet: &Sheet) -> Vec<u8> {
     }
 
     // Emisor y cliente en dos columnas.
-    let top = y.min(header_bottom).min(right_bottom) - 30.0;
+    let top = y.min(header_bottom) - 30.0;
     let mut lowest = top;
     for (index, party) in sheet.parties.iter().enumerate() {
         let x = LEFT + index as f64 * 262.0;
@@ -600,16 +602,26 @@ fn render(sheet: &Sheet) -> Vec<u8> {
     build_pdf(&pages.pages, sheet.logo.as_ref())
 }
 
-/// Módulos oscuros del QR como rectángulos negros; (x, y) es la esquina inferior izquierda.
+/// (lado del módulo, margen en blanco, lado total) en puntos para `modules` por lado:
+/// símbolo de 32 mm salvo que el conjunto pasara de 40 mm; margen de 4 módulos y nunca
+/// menos de `QR_MIN_BLANK`.
+fn qr_side(modules: usize) -> (f64, f64, f64) {
+    let n = modules as f64;
+    let cell = (QR_SYMBOL / n).min(QR_MAX / (n + 2.0 * QR_QUIET));
+    let quiet = (QR_QUIET * cell).max(QR_MIN_BLANK);
+    (cell, quiet, cell * n + 2.0 * quiet)
+}
+
+/// Módulos oscuros del QR como rectángulos negros con su zona de silencio; (x, y) es la
+/// esquina inferior izquierda del conjunto.
 fn push_qr(content: &mut String, x: f64, y: f64, matrix: &[Vec<bool>]) {
-    // Zona de silencio de 4 módulos por lado (ISO/IEC 18004).
-    let cell = QR_SIZE / (matrix.len() as f64 + 8.0);
+    let (cell, quiet, side) = qr_side(matrix.len());
     content.push_str("0 g\n");
     for (row, modules) in matrix.iter().enumerate() {
         for (col, dark) in modules.iter().enumerate() {
             if *dark {
-                let cx = x + (col as f64 + 4.0) * cell;
-                let cy = y + QR_SIZE - (row as f64 + 5.0) * cell;
+                let cx = x + quiet + col as f64 * cell;
+                let cy = y + side - quiet - (row as f64 + 1.0) * cell;
                 content.push_str(&format!("{cx:.3} {cy:.3} {cell:.3} {cell:.3} re\n"));
             }
         }
@@ -850,6 +862,85 @@ pub(crate) mod tests {
             std::env::temp_dir().join(format!("cumplefactura-test-{}.pdf", uuid::Uuid::new_v4()));
         let target_str = target.to_str().expect("utf8 target").to_string();
         (target, target_str)
+    }
+
+    /// Contenido de la primera página de una factura emitida.
+    fn first_page(invoice: &InvoicePdfData, env: QrEnvironment) -> String {
+        let bytes = render(&invoice_sheet(invoice, env).expect("sheet"));
+        String::from_utf8(bytes).expect("ASCII PDF")
+    }
+
+    /// (x mínima, y máxima, lado del símbolo, lado del módulo) de los módulos del QR, en pt.
+    fn qr_box(page: &str) -> (f64, f64, f64, f64) {
+        let start = page
+            .find("(QR tributario:) Tj\nET\n0 g\n")
+            .expect("QR label")
+            + 27;
+        let end = start + page[start..].find("f\n").expect("QR fill");
+        let rects: Vec<Vec<f64>> = page[start..end]
+            .lines()
+            .map(|l| l.split(' ').take(4).map(|n| n.parse().unwrap()).collect())
+            .collect();
+        let cell = rects[0][2];
+        let min_x = rects.iter().map(|r| r[0]).fold(f64::MAX, f64::min);
+        let max_x = rects.iter().map(|r| r[0] + cell).fold(f64::MIN, f64::max);
+        let max_y = rects.iter().map(|r| r[1] + cell).fold(f64::MIN, f64::max);
+        (min_x, max_y, max_x - min_x, cell)
+    }
+
+    #[test]
+    fn qr_is_top_left_with_label_legend_and_size_in_range() {
+        let mut long = sample_invoice();
+        long.series = "S".repeat(55); // numserie de 60 caracteres, el máximo del registro.
+        for invoice in [sample_invoice(), long] {
+            for env in [QrEnvironment::Test, QrEnvironment::Production] {
+                let page = first_page(&invoice, env);
+                let (x, top, symbol, cell) = qr_box(&page);
+                let mm = |pt: f64| pt / MM;
+                let quiet = x - LEFT;
+                // Orden 21.1: 30–40 mm; también el conjunto con zona de silencio.
+                assert!((30.0..=40.0).contains(&mm(symbol)), "symbol {}", mm(symbol));
+                assert!(mm(symbol + 2.0 * quiet) <= 40.0 + 1e-6);
+                // Zona en blanco ≥ 2 mm y ≥ 4 módulos alrededor.
+                assert!(
+                    mm(quiet) >= 2.0 && quiet >= 4.0 * cell - 0.01,
+                    "quiet {quiet}"
+                );
+                // Arriba a la izquierda: en el margen izquierdo y bajo «QR tributario:».
+                assert!(x < LEFT + 15.0, "x {x}");
+                assert!(top < TOP - QR_TEXT_SIZE && top > TOP - 30.0, "top {top}");
+                assert!(page.contains("BT\n/F2 9 Tf\n40.00 793.00 Td\n(QR tributario:) Tj"));
+                // Orden 20.1.b: leyenda bajo el QR, al tamaño de los datos (9 pt).
+                let legend = "/F1 9 Tf\n40.00 ";
+                let at = page.find("(Factura verificable en la sede electr\\363nica de la AEAT)");
+                let legend_at = page[..at.expect("legend")].rfind(legend).expect("9 pt");
+                let legend_y: f64 = page[legend_at + legend.len()..]
+                    .split(' ')
+                    .next()
+                    .unwrap()
+                    .parse()
+                    .unwrap();
+                assert!(legend_y < top - symbol, "legend below QR");
+                assert_eq!(page.matches("(QR tributario:) Tj").count(), 1);
+            }
+        }
+    }
+
+    #[test]
+    fn qr_side_stays_within_30_and_40_mm_for_every_url_sized_version() {
+        // La URL más corta posible ya pasa de 42 bytes (máximo de la versión 3, nivel M).
+        assert!(
+            "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=&numserie=&fecha=&importe=".len()
+                > 42
+        );
+        for version in 4..=40 {
+            let modules = 17 + 4 * version;
+            let (cell, quiet, side) = qr_side(modules);
+            let symbol = cell * modules as f64 / MM;
+            assert!((30.0..=40.0).contains(&symbol), "v{version}: {symbol}");
+            assert!(side / MM <= 40.0 + 1e-9);
+            assert!(quiet / MM >= 2.0 && quiet >= 4.0 * cell - 1e-9);
+        }
     }
 
     #[test]

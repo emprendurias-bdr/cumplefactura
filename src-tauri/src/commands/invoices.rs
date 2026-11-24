@@ -191,7 +191,23 @@ pub fn invoice_export_pdf(
     require("target_path", &target_path)?;
     let conn = state.lock()?;
     let invoice = db::invoice_pdf_data(&conn, &invoice_id)?;
-    let qr_environment = QrEnvironment::parse(&db::get_app_settings(&conn)?.qr_environment)?;
+    let qr_environment = pdf_qr_environment(&conn, &invoice_id)?;
     pdf::write_invoice_pdf(&target_path, &invoice, qr_environment)?;
     Ok(target_path)
+}
+
+/// Entorno del QR (D9): el del último envío de la factura, para que un PDF reexportado
+/// apunte a donde está su registro; sin envíos, el puerto SOAP configurado.
+pub(crate) fn pdf_qr_environment(
+    conn: &rusqlite::Connection,
+    invoice_id: &str,
+) -> Result<QrEnvironment, String> {
+    let endpoint = match db::list_verifactu_submissions(conn, Some(invoice_id))?
+        .into_iter()
+        .next()
+    {
+        Some(last) => last.endpoint_name,
+        None => db::get_app_settings(conn)?.verifactu_endpoint_name,
+    };
+    QrEnvironment::for_endpoint_name(&endpoint)
 }

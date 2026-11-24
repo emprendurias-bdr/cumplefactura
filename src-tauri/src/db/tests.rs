@@ -945,6 +945,30 @@ fn transport_errors_are_stored_listed_newest_first_and_allow_retry() {
             .unwrap()
             .expect("wait");
     assert_eq!((submitted_at, seconds), (all[0].submitted_at.clone(), 60));
+
+    // D9: el QR del PDF sigue al envío de la factura aunque luego cambie el endpoint.
+    use crate::commands::invoices::pdf_qr_environment;
+    use crate::services::qr::QrEnvironment;
+    update_app_settings(
+        &conn,
+        AppSettingsInput {
+            export_dir: None,
+            default_territory_flags: vec!["CommonTerritory".to_string()],
+            onboarding_completed: true,
+            verifactu_endpoint_name: "SistemaVerifactu".to_string(),
+            certificate_password_mode: "session".to_string(),
+            qr_environment: "test".to_string(),
+        },
+    )
+    .expect("switch to production endpoint");
+    assert_eq!(
+        pdf_qr_environment(&conn, &invoice_id).unwrap(),
+        QrEnvironment::Test
+    );
+    assert_eq!(
+        pdf_qr_environment(&conn, "sin-envios").unwrap(),
+        QrEnvironment::Production
+    );
 }
 
 #[test]

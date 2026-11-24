@@ -1,7 +1,7 @@
 /**
  * DocPreview (design.md §7.9): panel gris cálido con la hoja SIEMPRE blanca, en cualquier modo.
  * Es un render HTML del documento (no un PDF) con la misma maqueta que el PDF de Rust (D1,
- * docs/ux/pdf/): logo arriba a la izquierda, QR arriba a la derecha en las emitidas, título y número,
+ * docs/ux/pdf/): QR arriba a la izquierda en las emitidas (D9) y logo a la derecha, título y número,
  * emisor y cliente, vencimiento, tabla (Descripción · Cant. · Precio · Dto. · IVA · IRPF · Importe),
  * totales a la derecha y «Observaciones». La hoja lleva `data-apariencia="claro"`.
  * QR: `pending` = hueco «se genera al emitir» (borrador), `pdf` = «va en el PDF» (emitida),
@@ -61,16 +61,18 @@ export function DocPreview({ caption, title, number, date, issuer, customer, lin
       <div className="bdr-label">{caption}</div>
       <div className="bdr-sheet cf-sheet" data-apariencia="claro" data-color="suave">
         <header className="cf-sheet__head">
+          {/* D9: como en el PDF, el QR va arriba a la izquierda con «QR tributario:» encima y la leyenda debajo. */}
+          {qr !== "none" ? (
+            <div className="cf-sheet__qr">
+              <span className="cf-sheet__qrlabel">{t("preview.qrTributario")}</span>
+              <span className="cf-sheet__qrbox m">QR</span>
+              <span className="cf-sheet__qrtext">{qr === "pending" ? t("preview.qrAlEmitir") : t("preview.qrEnPdf")}</span>
+            </div>
+          ) : null}
           <div className="cf-sheet__brand">
             {logoName ? <span className="cf-sheet__logo m" title={logoName}>{t("preview.logo")}<br />{logoName}</span> : null}
             <strong className="cf-sheet__issuer">{issuer?.name ?? t("preview.sinEmisor")}</strong>
           </div>
-          {qr !== "none" ? (
-            <div className="cf-sheet__qr">
-              <span className="cf-sheet__qrbox m">QR</span>
-              <span className="cf-sheet__muted cf-sheet__tiny">{qr === "pending" ? t("preview.qrAlEmitir") : t("preview.qrEnPdf")}</span>
-            </div>
-          ) : null}
         </header>
         <div>
           <div className="cf-sheet__title">{title}</div>

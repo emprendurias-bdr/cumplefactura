@@ -1,12 +1,11 @@
 /**
- * Ajustes › Fiscalidad: territorio y régimen por defecto de las facturas nuevas, entorno de envío
- * a la AEAT (pruebas o producción; producción está bloqueada por el sidecar en v1) y entorno del
- * QR tributario del PDF (F3, `qr_environment`). `FiscalFields` se reutiliza en FirstRun.
+ * Ajustes › Fiscalidad: territorio y régimen por defecto de las facturas nuevas y entorno de envío
+ * a la AEAT (pruebas o producción; producción está bloqueada por el sidecar en v1). El QR
+ * tributario del PDF sigue a este mismo entorno (D9). `FiscalFields` se reutiliza en FirstRun.
  */
 import { envLabel, t } from "../../i18n/es";
 import { VERIFACTU_ENDPOINTS } from "../../types";
 import { Button } from "../../ui/Button";
-import { Callout } from "../../ui/Callout";
 import { Card } from "../../ui/Card";
 import { Checkbox, Field, Select } from "../../ui/Field";
 import type { Model } from "../../useCumpleFactura";
@@ -37,17 +36,6 @@ export function AjustesFiscalidad({ m }: Ctx) {
             ))}
           </Select>
         </Field>
-        <Field label={t("fiscal.qr")} help={t("fiscal.qrAyuda")}>
-          <Select value={m.qrEnvironment} onChange={(e) => m.setQrEnvironment(e.target.value === "production" ? "production" : "test")}>
-            <option value="test">{t("fiscal.qrPruebas")}</option>
-            <option value="production">{t("fiscal.qrProduccion")}</option>
-          </Select>
-        </Field>
-        {m.qrEnvironment === "production" ? (
-          <div className="cf-wide">
-            <Callout tone="warn" title={t("fiscal.qrProduccionTitulo")}>{t("fiscal.qrProduccionAviso")}</Callout>
-          </div>
-        ) : null}
         <div className="cf-row cf-end cf-wide">
           <Button type="submit" variant="primary">{t("ajustes.guardar")}</Button>
         </div>

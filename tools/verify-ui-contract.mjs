@@ -170,7 +170,7 @@ const checks = [
     "Crear copia de seguridad",
     "Validar copia",
     "Restaurar",
-    "Entorno del QR de la factura",
+    "QR tributario:",
     "Factura verificable en la sede electrónica de la AEAT.",
     "Presupuestos, proformas y albaranes.",
     "Facturas que se repiten.",

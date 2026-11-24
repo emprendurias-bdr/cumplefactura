@@ -7,8 +7,9 @@
 //!   llavero se comporta como `session`;
 //! - `env`: la app no manda contraseña y el sidecar usa su variable de entorno.
 //!
-//! `qr_environment` (`test` por defecto, `production`) elige el host de cotejo del QR
-//! tributario del PDF; se cambia a producción al homologar.
+//! `qr_environment` ya no decide nada (D9): el host de cotejo del QR sigue a
+//! `verifactu_endpoint_name` (`QrEnvironment::for_endpoint_name`). Se conserva y se valida
+//! para no romper ajustes guardados ni editar migraciones.
 
 use fiscal_contract::endpoints::{EndpointName, DEFAULT_ENDPOINT};
 use serde::{Deserialize, Serialize};
@@ -24,7 +25,7 @@ pub struct AppSettings {
     /// `session` · `keychain` · `env`. Ajustes guardados antes de este campo cargan `session`.
     #[serde(default = "default_password_mode")]
     pub certificate_password_mode: String,
-    /// `test` · `production`. Ajustes guardados antes de este campo cargan `test`.
+    /// Obsoleto desde D9 (el QR sigue al endpoint). `test` · `production`.
     #[serde(default = "default_qr_environment")]
     pub qr_environment: String,
     pub updated_at: String,

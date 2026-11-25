@@ -560,7 +560,7 @@ pub fn verifactu_submission_list(
     db::list_verifactu_submissions(&conn, invoice_id.as_deref())
 }
 
-/// Comprobaciones comunes a preflight y envío. Devuelve el XML y el endpoint configurado.
+/// Comprobaciones comunes a preflight y envío. Devuelve el XML y el endpoint del entorno elegido.
 /// En modo `env` descarta la contraseña que llegue de la interfaz: manda el entorno del sidecar.
 fn checked_submission(
     state: &AppState,
@@ -584,7 +584,7 @@ fn checked_submission(
     if !settings.sends_certificate_password() {
         input.certificate_password = None;
     }
-    Ok((xml, settings.verifactu_endpoint_name))
+    Ok((xml, settings.effective_endpoint().as_str().to_string()))
 }
 
 fn resolve_verifactu_xsd_assets(app: &AppHandle) -> Result<verifactu::VerifactuXsdAssets, String> {

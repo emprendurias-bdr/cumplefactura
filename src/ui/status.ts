@@ -13,6 +13,12 @@ export const TONE_ICON: Record<Tone, string> = { ok: "✓", info: "◷", warn: "
 const s = (tone: Tone, label: Key): Status => ({ tone, label });
 const UNKNOWN = s("neu", "estado.desconocido");
 
+/** S3: entorno de envío a la AEAT. Producción encendida avisa; apagado es neutro. */
+export function sendingStatus(environment: "test" | "production", enabled: boolean): Status {
+  if (environment === "production") return s(enabled ? "warn" : "neu", "envioEstado.produccion");
+  return s(enabled ? "info" : "neu", "envioEstado.pruebas");
+}
+
 const INVOICE: Record<string, Status> = {
   Draft: s("warn", "estado.borrador"),
   Issued: s("ok", "estado.emitida"),

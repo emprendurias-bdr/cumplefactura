@@ -11,14 +11,18 @@
 //! Qué no hace nunca: pasar el secreto por argumentos o entorno, ni abrir certificados.
 //! La app solo conoce la carpeta del vault para indicársela al sidecar.
 //!
-//! Interruptores (variables de entorno de la app):
-//! - `CUMPLEFACTURA_SIDECAR_ALLOW_AEAT=1` arranca el sidecar con `--allow-aeat`.
-//!   Sin ella, el sidecar responde pero no puede llamar a la AEAT.
+//! Interruptores:
+//! - Ajustes › Fiscalidad (`app_settings`): «Envío real a la AEAT» da `--allow-aeat`;
+//!   el entorno de producción, confirmado allí, da además `--allow-production`.
+//!   Sin ellos, el sidecar responde pero no puede llamar a la AEAT ni a producción.
+//! - `CUMPLEFACTURA_SIDECAR_ALLOW_AEAT=1` también da `--allow-aeat` (gate regulatorio y
+//!   `tools/homolog-verifactu.mjs`); nunca da `--allow-production`.
 //! - `CUMPLEFACTURA_CERT_VAULT_DIR` cambia la carpeta de certificados
 //!   (por defecto `<datos de la app>/certs`).
 //! - `CUMPLEFACTURA_SIDECAR_PATH` (solo compilaciones de desarrollo) fuerza la ruta del binario.
 
 use fiscal_contract::messages::Handshake;
+use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -45,11 +49,19 @@ pub struct LaunchConfig {
     pub binary: PathBuf,
     pub vault_dir: PathBuf,
     pub allow_aeat: bool,
+    pub allow_production: bool,
 }
 
 impl LaunchConfig {
-    /// Resuelve binario, vault e interruptores para esta instalación.
+    /// Resuelve binario, vault e interruptores (Ajustes y entorno) para esta instalación.
     pub fn resolve(app: &AppHandle) -> Result<Self, String> {
+        let settings = {
+            let state = app.state::<crate::db::AppState>();
+            let conn = state.lock()?;
+            crate::db::get_app_settings(&conn)?
+        };
+        let (allow_aeat, allow_production) =
+            settings.sidecar_flags(std::env::var(ALLOW_AEAT_ENV).as_deref() == Ok("1"));
         let exe_dir = std::env::current_exe()
             .ok()
             .and_then(|exe| exe.parent().map(Path::to_path_buf))
@@ -73,8 +85,21 @@ impl LaunchConfig {
         Ok(Self {
             binary,
             vault_dir,
-            allow_aeat: std::env::var(ALLOW_AEAT_ENV).as_deref() == Ok("1"),
+            allow_aeat,
+            allow_production,
         })
+    }
+
+    /// Argumentos del sidecar. `--allow-production` solo acompaña a `--allow-aeat`.
+    pub fn args(&self) -> Vec<OsString> {
+        let mut args = vec![OsString::from("--vault-dir"), self.vault_dir.clone().into()];
+        if self.allow_aeat {
+            args.push("--allow-aeat".into());
+            if self.allow_production {
+                args.push("--allow-production".into());
+            }
+        }
+        args
     }
 }
 
@@ -151,10 +176,7 @@ fn spawn(launch: &LaunchConfig) -> Result<Running, String> {
         .collect();
 
     let mut command = Command::new(&launch.binary);
-    command.arg("--vault-dir").arg(&launch.vault_dir);
-    if launch.allow_aeat {
-        command.arg("--allow-aeat");
-    }
+    command.args(launch.args());
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -231,6 +253,71 @@ mod tests {
         find_binary(&target)
     }
 
+    fn flags(launch: &LaunchConfig) -> Vec<String> {
+        launch
+            .args()
+            .into_iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .filter(|arg| arg.starts_with("--allow"))
+            .collect()
+    }
+
+    /// S3: las banderas salen de Ajustes; sin confirmar producción no hay `--allow-production`
+    /// y con el envío real apagado no hay `--allow-aeat`.
+    #[test]
+    fn sidecar_flags_follow_settings() {
+        use crate::domain::settings::AppSettings;
+        let launch = |settings: &AppSettings, env: bool| {
+            let (allow_aeat, allow_production) = settings.sidecar_flags(env);
+            LaunchConfig {
+                binary: PathBuf::new(),
+                vault_dir: PathBuf::from("certs"),
+                allow_aeat,
+                allow_production,
+            }
+        };
+        let mut settings = AppSettings::default();
+        assert!(
+            flags(&launch(&settings, false)).is_empty(),
+            "apagado por defecto"
+        );
+
+        settings.verifactu_environment = "production".to_string();
+        assert!(
+            flags(&launch(&settings, false)).is_empty(),
+            "producción con el envío real apagado: ni --allow-aeat ni --allow-production"
+        );
+        settings.verifactu_environment = "test".to_string();
+        settings.aeat_sending_enabled = true;
+        assert_eq!(flags(&launch(&settings, false)), ["--allow-aeat"]);
+        settings.verifactu_environment = "production".to_string();
+        assert_eq!(
+            flags(&launch(&settings, false)),
+            ["--allow-aeat", "--allow-production"]
+        );
+
+        let gate = AppSettings::default();
+        assert_eq!(
+            flags(&launch(&gate, true)),
+            ["--allow-aeat"],
+            "la variable del gate nunca abre producción"
+        );
+        let manual = LaunchConfig {
+            allow_aeat: false,
+            allow_production: true,
+            ..launch(&gate, false)
+        };
+        assert!(flags(&manual).is_empty());
+
+        let mut off_in_production = AppSettings::default();
+        off_in_production.verifactu_environment = "production".to_string();
+        assert_eq!(
+            flags(&launch(&off_in_production, true)),
+            ["--allow-aeat"],
+            "producción con el envío real apagado y la variable puesta: sin --allow-production"
+        );
+    }
+
     #[test]
     fn missing_binary_is_reported() {
         assert!(find_binary(Path::new("/ruta/que/no/existe")).is_none());
@@ -241,6 +328,7 @@ mod tests {
                     binary: PathBuf::from("/ruta/que/no/existe/cumplefactura-sidecar"),
                     vault_dir: std::env::temp_dir(),
                     allow_aeat: false,
+                    allow_production: false,
                 })
             })
             .unwrap_err();
@@ -260,6 +348,7 @@ mod tests {
                 binary: binary.clone(),
                 vault_dir: std::env::temp_dir(),
                 allow_aeat: false,
+                allow_production: false,
             })
         };
         let manager = SidecarManager::default();

@@ -63,8 +63,8 @@ Interruptores de arranque:
 
 | Interruptor | Por defecto | Efecto |
 |---|---|---|
-| `--allow-aeat` | apagado | Sin él, ninguna conexión saliente. La app lo pasa solo si `CUMPLEFACTURA_SIDECAR_ALLOW_AEAT=1`. |
-| `--allow-production` | apagado | Sin él, solo endpoints de pruebas. v1 no lo pasa nunca. |
+| `--allow-aeat` | apagado | Sin él, ninguna conexión saliente. La app lo pasa si «Envío real a la AEAT» está encendido en Ajustes › Fiscalidad, o con `CUMPLEFACTURA_SIDECAR_ALLOW_AEAT=1` (gate y homologación). |
+| `--allow-production` | apagado | Sin él, solo endpoints de pruebas. La app lo pasa solo con el envío real encendido y el entorno de producción elegido en Ajustes tras confirmarlo; la variable de entorno nunca lo activa. Al cambiar estos ajustes, la app para el sidecar y lo relanza con las banderas nuevas en el siguiente uso. |
 | `--vault-dir <carpeta>` | ninguno | Única carpeta de certificados. La app pasa `<datos de la app>/certs` o `CUMPLEFACTURA_CERT_VAULT_DIR`. |
 
 ## Contrato HTTP

@@ -67,6 +67,7 @@ import type {
   RectificationAdvice,
   SeriesForm,
 } from "./types";
+import { effectiveEndpoint } from "./types";
 import { toast } from "./ui/Toast";
 
 type Pages = { invoice: number; audit: number; fiscal: number };
@@ -178,6 +179,7 @@ export function useCumpleFactura() {
   const [endpointName, setEndpointName] = useState("SistemaVerifactuPruebas");
   const [passwordMode, setPasswordMode] = useState<CertificatePasswordMode>("session");
   const [qrEnvironment, setQrEnvironment] = useState<"test" | "production">("test");
+  const [aeatSendingEnabled, setAeatSendingEnabled] = useState(false);
   const [paths, setPaths] = useState<Record<PathKey, string>>(exportPaths(""));
 
   // Resultados de exportaciones y copias
@@ -584,7 +586,8 @@ export function useCumpleFactura() {
       setAppDefaults(defaults);
       setAppSettings(settings);
       setDefaultTerritoryFlags(settings.default_territory_flags);
-      setEndpointName(settings.verifactu_endpoint_name);
+      setEndpointName(effectiveEndpoint(settings.verifactu_endpoint_name, "test"));
+      setAeatSendingEnabled(settings.aeat_sending_enabled ?? false);
       setPasswordMode(settings.certificate_password_mode ?? "session");
       setQrEnvironment(settings.qr_environment ?? "test");
       const dir = settings.export_dir || defaults.export_dir;
@@ -771,24 +774,41 @@ export function useCumpleFactura() {
     setAuditExportResult,
   );
 
-  /** Ajustes y primer arranque comparten el mismo guardado (`app_settings_update`). */
+  /** Entorno de envío guardado (S3): lo que muestran Verifactu y el chip, no el formulario. */
+  const sendingEnvironment = appSettings?.verifactu_environment ?? "test";
+  const sendingEnabled = appSettings?.aeat_sending_enabled ?? false;
+
+  /**
+   * Ajustes y primer arranque comparten el mismo guardado (`app_settings_update`).
+   * El entorno se conserva; solo `setSendingEnvironment` lo cambia (producción tras confirmar).
+   */
+  const settingsInput = (complete?: boolean) => ({
+    export_dir: exportDir,
+    default_territory_flags: defaultTerritoryFlags,
+    onboarding_completed: complete === true ? onboardingReady : (appSettings?.onboarding_completed ?? false) || onboardingReady,
+    verifactu_endpoint_name: endpointName,
+    certificate_password_mode: passwordMode,
+    qr_environment: qrEnvironment,
+    aeat_sending_enabled: aeatSendingEnabled,
+    verifactu_environment: sendingEnvironment,
+  });
+  const onSettingsSaved = (saved: AppSettings) => {
+    setAppSettings(saved);
+    if (saved.export_dir) applyExportDir(saved.export_dir);
+  };
   const saveSettings = action(
     t("ok.ajustes"),
-    (complete?: boolean) =>
+    (complete?: boolean) => invoke<AppSettings>("app_settings_update", { input: settingsInput(complete) }),
+    onSettingsSaved,
+  );
+  /** Cambia el entorno de envío y guarda. Producción solo llega aquí desde el diálogo de confirmación. */
+  const setSendingEnvironment = action(
+    t("ok.entorno"),
+    (environment: "test" | "production") =>
       invoke<AppSettings>("app_settings_update", {
-        input: {
-          export_dir: exportDir,
-          default_territory_flags: defaultTerritoryFlags,
-          onboarding_completed: complete === true ? onboardingReady : (appSettings?.onboarding_completed ?? false) || onboardingReady,
-          verifactu_endpoint_name: endpointName,
-          certificate_password_mode: passwordMode,
-          qr_environment: qrEnvironment,
-        },
+        input: { ...settingsInput(), verifactu_environment: environment, production_confirmed: environment === "production" },
       }),
-    (saved) => {
-      setAppSettings(saved);
-      if (saved.export_dir) applyExportDir(saved.export_dir);
-    },
+    onSettingsSaved,
   );
 
   return {
@@ -848,6 +868,11 @@ export function useCumpleFactura() {
     setPasswordMode,
     qrEnvironment,
     setQrEnvironment,
+    aeatSendingEnabled,
+    setAeatSendingEnabled,
+    sendingEnvironment,
+    sendingEnabled,
+    sendingEndpoint: effectiveEndpoint(endpointName, sendingEnvironment),
     paths,
     backup,
     restore,
@@ -862,6 +887,7 @@ export function useCumpleFactura() {
     // acciones
     fillDemoData,
     saveSettings,
+    setSendingEnvironment,
     pickExportDirectory,
     toggleTerritoryFlag,
     saveCompany,

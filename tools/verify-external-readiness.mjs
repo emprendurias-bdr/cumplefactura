@@ -158,7 +158,7 @@ const result = {
     "Blocked is an expected safe status until a real certificate, vault, flag and acceptance evidence exist.",
     "This audit proves readiness state only; it is not AEAT transmission, CSV retrieval or homologation.",
     "VERI*FACTU records are sent unsigned by design (RD 1007/2023 art. 16.3); AEAT authenticates the TLS client certificate.",
-    "Production endpoints stay blocked: the app never starts the sidecar with --allow-production in v1.",
+    "Production endpoints stay blocked unless the user enables real sending and confirms production in Ajustes; the environment variable never adds --allow-production.",
   ],
 };
 

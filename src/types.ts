@@ -217,6 +217,9 @@ export type AppSettings = {
   certificate_password_mode?: CertificatePasswordMode;
   /** F3: entorno del QR tributario del PDF. */
   qr_environment?: "test" | "production";
+  /** S3: envío real a la AEAT (apagado por defecto) y entorno de envío. */
+  aeat_sending_enabled?: boolean;
+  verifactu_environment?: "test" | "production";
   updated_at: string;
 };
 export type CertificatePasswordMode = "session" | "keychain" | "env";
@@ -345,12 +348,15 @@ export type AnulacionRejection = {
 };
 
 /** Puertos SOAP del WSDL VERI*FACTU (ids técnicos; los nombres visibles están en i18n). */
-export const VERIFACTU_ENDPOINTS = [
-  "SistemaVerifactuPruebas",
-  "SistemaVerifactuSelloPruebas",
-  "SistemaVerifactu",
-  "SistemaVerifactuSello",
-] as const;
+/** Tipo de certificado (persona o sello). El entorno se elige aparte (S3). */
+export const VERIFACTU_ENDPOINTS = ["SistemaVerifactuPruebas", "SistemaVerifactuSelloPruebas"] as const;
+
+/** Puerto real según el entorno; espejo de `AppSettings::effective_endpoint` en Rust. */
+export function effectiveEndpoint(name: string, environment: "test" | "production"): string {
+  const sello = name.includes("Sello");
+  if (environment === "production") return sello ? "SistemaVerifactuSello" : "SistemaVerifactu";
+  return sello ? "SistemaVerifactuSelloPruebas" : "SistemaVerifactuPruebas";
+}
 
 /* --- F4: documentos comerciales (docs/ESPEC_DOCUMENTOS_Y_RECURRENTES.md §3–§4) --- */
 export type CommercialKind = "quote" | "proforma" | "delivery_note";

@@ -24,7 +24,7 @@ export function VerifactuTecnico({ m, vf }: Ctx) {
             <Input mono value={vf.certificateRef} onChange={(e) => vf.setCertificateRef(e.target.value)} />
           </Field>
           <Field label={t("tecnico.endpoint")}>
-            <Input mono value={m.endpointName} readOnly />
+            <Input mono value={m.sendingEndpoint} readOnly />
           </Field>
           <Field label={t("tecnico.rutaXml")}>
             <span className="cf-row">

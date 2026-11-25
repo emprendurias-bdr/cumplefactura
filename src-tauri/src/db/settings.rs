@@ -26,6 +26,15 @@ pub fn update_app_settings(
     input: AppSettingsInput,
 ) -> Result<AppSettings, String> {
     input.validate()?;
+    if input.verifactu_environment == "production"
+        && !get_app_settings(conn)?.is_production()
+        && !input.production_confirmed
+    {
+        return Err(
+            "production_confirmation_required: confirma el paso a producción en Ajustes"
+                .to_string(),
+        );
+    }
     let settings = AppSettings {
         export_dir: input
             .export_dir
@@ -36,6 +45,8 @@ pub fn update_app_settings(
         verifactu_endpoint_name: input.verifactu_endpoint_name,
         certificate_password_mode: input.certificate_password_mode,
         qr_environment: input.qr_environment,
+        aeat_sending_enabled: input.aeat_sending_enabled,
+        verifactu_environment: input.verifactu_environment,
         updated_at: chrono::Utc::now().to_rfc3339(),
     };
     let value =

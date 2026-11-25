@@ -322,6 +322,9 @@ fn persists_app_settings_for_onboarding() {
             verifactu_endpoint_name: "SistemaVerifactuSelloPruebas".to_string(),
             certificate_password_mode: "env".to_string(),
             qr_environment: "production".to_string(),
+            aeat_sending_enabled: false,
+            verifactu_environment: "test".to_string(),
+            production_confirmed: false,
         },
     )
     .expect("save settings");
@@ -385,6 +388,88 @@ fn persists_app_settings_for_onboarding() {
         ..old_input
     };
     assert!(update_app_settings(&conn, invalid_qr).is_err());
+}
+
+/// S3: envío real apagado y pruebas por defecto; producción solo con confirmación;
+/// en pruebas nunca se usa un endpoint de producción.
+#[test]
+fn aeat_sending_settings_require_confirmation_for_production() {
+    use fiscal_contract::endpoints::EndpointName;
+    let conn = memory_conn();
+    let defaults = get_app_settings(&conn).unwrap();
+    assert!(!defaults.aeat_sending_enabled);
+    assert_eq!(defaults.verifactu_environment, "test");
+    let legacy: AppSettings = serde_json::from_str(
+        r#"{"export_dir":null,"default_territory_flags":["VeriFactu"],"onboarding_completed":true,"verifactu_endpoint_name":"SistemaVerifactu","updated_at":"x"}"#,
+    )
+    .unwrap();
+    assert!(!legacy.aeat_sending_enabled);
+    assert_eq!(legacy.verifactu_environment, "test");
+    assert_eq!(
+        legacy.effective_endpoint(),
+        EndpointName::SistemaVerifactuPruebas,
+        "un puerto de producción guardado no sale de pruebas"
+    );
+
+    let base: AppSettingsInput = serde_json::from_str(
+        r#"{"export_dir":null,"default_territory_flags":["VeriFactu"],"onboarding_completed":true}"#,
+    )
+    .unwrap();
+    assert!(!base.aeat_sending_enabled && !base.production_confirmed);
+    let production = AppSettingsInput {
+        aeat_sending_enabled: true,
+        verifactu_environment: "production".to_string(),
+        ..base.clone()
+    };
+    let err = update_app_settings(&conn, production.clone()).unwrap_err();
+    assert!(err.starts_with("production_confirmation_required"), "{err}");
+    let still = get_app_settings(&conn).unwrap();
+    assert!(!still.is_production());
+    assert_eq!(still.sidecar_flags(false), (false, false));
+
+    let saved = update_app_settings(
+        &conn,
+        AppSettingsInput {
+            production_confirmed: true,
+            ..production.clone()
+        },
+    )
+    .unwrap();
+    assert!(saved.is_production());
+    assert_eq!(saved.effective_endpoint(), EndpointName::SistemaVerifactu);
+    assert_eq!(saved.sidecar_flags(false), (true, true));
+    // Ya en producción, guardar otros ajustes no vuelve a pedir confirmación.
+    update_app_settings(&conn, production).unwrap();
+
+    for name in EndpointName::ALL {
+        for sending in [false, true] {
+            let test_settings = AppSettings {
+                verifactu_endpoint_name: name.as_str().to_string(),
+                aeat_sending_enabled: sending,
+                ..AppSettings::default()
+            };
+            assert!(
+                !test_settings.effective_endpoint().is_production(),
+                "{name:?}"
+            );
+            assert!(!test_settings.sidecar_flags(true).1);
+        }
+    }
+    let sello = AppSettings {
+        verifactu_endpoint_name: "SistemaVerifactuSelloPruebas".to_string(),
+        verifactu_environment: "production".to_string(),
+        ..AppSettings::default()
+    };
+    assert_eq!(
+        sello.effective_endpoint(),
+        EndpointName::SistemaVerifactuSello
+    );
+
+    let invalid = AppSettingsInput {
+        verifactu_environment: "prod".to_string(),
+        ..base
+    };
+    assert!(update_app_settings(&conn, invalid).is_err());
 }
 
 #[test]

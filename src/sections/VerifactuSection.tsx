@@ -15,7 +15,7 @@ import { Card } from "../ui/Card";
 import { DataTable } from "../ui/DataTable";
 import { Field, Select } from "../ui/Field";
 import { Accent, Hero } from "../ui/Hero";
-import { chainSize, chainStatus, expiryStatus, preflightStatus, recordType, submissionStatus } from "../ui/status";
+import { chainSize, chainStatus, expiryStatus, preflightStatus, recordType, sendingStatus, submissionStatus } from "../ui/status";
 import { StatusChip } from "../ui/StatusChip";
 import { Stepper } from "../ui/Stepper";
 import type { VerifactuSubmissionSummary } from "../types";
@@ -155,7 +155,7 @@ export function VerifactuSection(c: Ctx) {
               />}
             </dd>
             <dt>{t("vf.entorno")}</dt>
-            <dd><span className="bdr-chip bdr-chip--neu">{envLabel(m.endpointName)}</span></dd>
+            <dd><StatusChip status={sendingStatus(m.sendingEnvironment, m.sendingEnabled)} detail={m.sendingEnabled ? envLabel(m.sendingEndpoint) : t("envioEstado.apagado")} /></dd>
             <dt>{t("vf.cola")}</dt>
             <dd><span className="bdr-chip bdr-chip--neu">— {t("vf.sinCola")}</span></dd>
             <dt>{t("vf.otros")}</dt>

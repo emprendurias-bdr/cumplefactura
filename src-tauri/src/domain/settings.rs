@@ -9,6 +9,13 @@
 //!
 //! `qr_environment` (`test` por defecto, `production`) elige el host de cotejo del QR
 //! tributario del PDF; se cambia a producción al homologar.
+//!
+//! Envío a la AEAT (S3): `aeat_sending_enabled` (apagado por defecto) decide si el sidecar
+//! arranca con `--allow-aeat`; `verifactu_environment` (`test` por defecto, `production`)
+//! decide el entorno y si arranca con `--allow-production`. Pasar a producción exige
+//! `production_confirmed` en la petición (el diálogo de confirmación de Ajustes).
+//! `verifactu_endpoint_name` solo aporta el tipo de certificado (persona o sello): el puerto
+//! real lo da `effective_endpoint`, así que en pruebas nunca se usa uno de producción.
 
 use fiscal_contract::endpoints::{EndpointName, DEFAULT_ENDPOINT};
 use serde::{Deserialize, Serialize};
@@ -27,6 +34,12 @@ pub struct AppSettings {
     /// `test` · `production`. Ajustes guardados antes de este campo cargan `test`.
     #[serde(default = "default_qr_environment")]
     pub qr_environment: String,
+    /// Envío real a la AEAT. Ajustes guardados antes de este campo cargan `false`.
+    #[serde(default)]
+    pub aeat_sending_enabled: bool,
+    /// `test` · `production`. Ajustes guardados antes de este campo cargan `test`.
+    #[serde(default = "default_qr_environment")]
+    pub verifactu_environment: String,
     pub updated_at: String,
 }
 
@@ -41,6 +54,13 @@ pub struct AppSettingsInput {
     pub certificate_password_mode: String,
     #[serde(default = "default_qr_environment")]
     pub qr_environment: String,
+    #[serde(default)]
+    pub aeat_sending_enabled: bool,
+    #[serde(default = "default_qr_environment")]
+    pub verifactu_environment: String,
+    /// Solo en la petición: el usuario confirmó el paso a producción en el diálogo.
+    #[serde(default)]
+    pub production_confirmed: bool,
 }
 
 impl Default for AppSettings {
@@ -52,6 +72,8 @@ impl Default for AppSettings {
             verifactu_endpoint_name: default_endpoint_name(),
             certificate_password_mode: default_password_mode(),
             qr_environment: default_qr_environment(),
+            aeat_sending_enabled: false,
+            verifactu_environment: default_qr_environment(),
             updated_at: chrono::Utc::now().to_rfc3339(),
         }
     }
@@ -97,6 +119,12 @@ impl AppSettingsInput {
             ));
         }
         crate::services::qr::QrEnvironment::parse(&self.qr_environment)?;
+        if !matches!(self.verifactu_environment.as_str(), "test" | "production") {
+            return Err(format!(
+                "unsupported verifactu_environment: {}",
+                self.verifactu_environment
+            ));
+        }
         Ok(())
     }
 }
@@ -106,6 +134,33 @@ impl AppSettings {
     /// `keychain` cuenta como `session` hasta que haya llavero.
     pub fn sends_certificate_password(&self) -> bool {
         self.certificate_password_mode != "env"
+    }
+
+    pub fn is_production(&self) -> bool {
+        self.verifactu_environment == "production"
+    }
+
+    /// Puerto SOAP al que se envía: el tipo de certificado guardado, en el entorno elegido.
+    /// En pruebas nunca devuelve un puerto de producción, aunque se guardara uno.
+    pub fn effective_endpoint(&self) -> EndpointName {
+        let sello = matches!(
+            EndpointName::parse(&self.verifactu_endpoint_name),
+            Some(EndpointName::SistemaVerifactuSello | EndpointName::SistemaVerifactuSelloPruebas)
+        );
+        match (self.is_production(), sello) {
+            (true, true) => EndpointName::SistemaVerifactuSello,
+            (true, false) => EndpointName::SistemaVerifactu,
+            (false, true) => EndpointName::SistemaVerifactuSelloPruebas,
+            (false, false) => EndpointName::SistemaVerifactuPruebas,
+        }
+    }
+
+    /// Banderas del sidecar: `(--allow-aeat, --allow-production)`.
+    /// `env_allow_aeat` es `CUMPLEFACTURA_SIDECAR_ALLOW_AEAT=1` (gate y homologación).
+    /// Producción solo con el envío real encendido en Ajustes: la variable nunca la abre.
+    pub fn sidecar_flags(&self, env_allow_aeat: bool) -> (bool, bool) {
+        let production = self.aeat_sending_enabled && self.is_production();
+        (self.aeat_sending_enabled || env_allow_aeat, production)
     }
 }
 

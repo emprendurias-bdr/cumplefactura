@@ -85,8 +85,11 @@ export function VerifactuEnvio({ m, vf }: Ctx) {
       ) : null}
 
       {sent ? <Respuesta status={sent.status} csv={sent.csv} detail={sent.descripcion_error} onRetry={() => vf.submission && void vf.retry({ fiscal_export_id: vf.submission.export_id, invoice_id: vf.submission.invoice_id })} n={invoice ? invoiceNumber(invoice) : null} /> : null}
-      {!m.endpointName.includes("Pruebas") ? (
+      {m.sendingEnvironment === "production" ? (
         <Callout tone="warn" title={t("envio.produccionTitulo")}>{t("envio.produccion")}</Callout>
+      ) : null}
+      {!m.sendingEnabled ? (
+        <Callout tone="neu" title={t("envio.apagadoTitulo")}>{t("envio.apagado")}</Callout>
       ) : null}
     </Card>
   );

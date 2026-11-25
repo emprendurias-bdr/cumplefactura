@@ -449,7 +449,10 @@ pub struct RectifiedInvoiceLink {
     pub num_serie: String,
     pub issued_at: String,
     pub taxable_base_cents: i64,
+    /// `CuotaTotal` de la factura rectificada: IVA + recargo de equivalencia.
     pub tax_cents: i64,
+    /// Parte de `tax_cents` que es recargo de equivalencia (N3).
+    pub surcharge_cents: i64,
 }
 
 #[cfg(test)]
@@ -554,7 +557,8 @@ pub fn rectified_invoice_link(
     invoice_id: &str,
 ) -> Result<RectifiedInvoiceLink, String> {
     conn.query_row(
-        "SELECT c.tax_id, i.series, i.number, i.issued_at, i.taxable_base_cents, i.tax_cents, i.num_serie
+        "SELECT c.tax_id, i.series, i.number, i.issued_at, i.taxable_base_cents, i.tax_cents, i.num_serie,
+                (SELECT COALESCE(SUM(l.surcharge_cents), 0) FROM invoice_lines l WHERE l.invoice_id = i.id)
          FROM invoices i
          JOIN companies c ON c.id = i.company_id
          WHERE i.id = ?1
@@ -571,6 +575,7 @@ pub fn rectified_invoice_link(
                 issued_at: row.get(3)?,
                 taxable_base_cents: row.get(4)?,
                 tax_cents: row.get(5)?,
+                surcharge_cents: row.get(7)?,
             })
         },
     )

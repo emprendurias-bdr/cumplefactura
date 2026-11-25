@@ -80,6 +80,8 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
             tax_rate_basis_points: 2_100,
             withholding_rate_basis_points: None,
             price_pending: None,
+            vat_treatment: Default::default(),
+            surcharge_rate_basis_points: None,
         }],
     };
     let draft = Invoice::draft(draft_input.clone()).expect("draft invoice");

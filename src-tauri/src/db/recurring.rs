@@ -195,7 +195,17 @@ fn validated(conn: &Connection, input: RecurringInvoiceInput) -> Result<Recurrin
         last_period_key: None,
         total_cents: 0,
     };
-    item.total_cents = template_total_cents(&item).map_err(|_| "validation_error:lines")?;
+    // Los errores de IVA (N3) llevan su propio mensaje; el resto se queda en «revisa las líneas».
+    item.total_cents = template_total_cents(&item).map_err(|err| {
+        if err.starts_with("vat_")
+            || err.starts_with("surcharge_")
+            || err.starts_with("simplified_")
+        {
+            err
+        } else {
+            "validation_error:lines".to_string()
+        }
+    })?;
     Ok(item)
 }
 
@@ -600,6 +610,8 @@ mod tests {
                     tax_rate_basis_points: 2_100,
                     withholding_rate_basis_points: None,
                     price_pending: None,
+                    vat_treatment: Default::default(),
+                    surcharge_rate_basis_points: None,
                 }],
                 notes: "Pago por transferencia".to_string(),
             },

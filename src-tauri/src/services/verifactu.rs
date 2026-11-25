@@ -9,6 +9,7 @@
 
 use crate::db::{InvoicePdfData, PreviousInvoiceLink};
 use crate::domain::fabricante;
+use crate::domain::tax::VatTreatment;
 use chrono::{DateTime, Datelike};
 use std::collections::BTreeMap;
 use std::fs;
@@ -206,7 +207,7 @@ pub fn build_verifactu_xml_draft(
     }
     push_text(&mut xml, 6, "sf:DescripcionOperacion", &description);
     push_recipient(&mut xml, invoice, invoice_type)?;
-    push_tax_breakdown(&mut xml, invoice);
+    push_tax_breakdown(&mut xml, invoice)?;
     push_text(&mut xml, 6, "sf:CuotaTotal", &money(invoice.tax_cents));
     push_text(&mut xml, 6, "sf:ImporteTotal", &money(invoice.total_cents));
     xml.push_str("      <sf:Encadenamiento>\n");
@@ -458,27 +459,64 @@ fn aeat_hash(fields: &[(&str, &str)]) -> String {
     fiscal_contract::sha256_hex(material.as_bytes()).to_uppercase()
 }
 
-/// Bloque Desglose/Impuesto del XML Alta.
-fn push_tax_breakdown(xml: &mut String, invoice: &InvoicePdfData) {
-    let mut groups: BTreeMap<i64, (i64, i64)> = BTreeMap::new();
+/// Bloque Desglose del XML Alta: un `DetalleDesglose` por calificación, tipo y recargo, con
+/// las sumas guardadas en las líneas (las facturas ya emitidas dan el mismo XML).
+///
+/// - Impuesto `01` (IVA) y ClaveRegimen `01` (régimen general) siempre: IGIC, IPSI y los
+///   regímenes especiales no están implementados (listas L1 y L8A de la Orden HAC/1177/2024).
+/// - S1: tipo, cuota y, si lo hay, recargo de equivalencia.
+/// - S2: tipo y cuota a 0; la cuota la declara el destinatario (Ley 37/1992 art. 84.Uno.2º).
+/// - E1–E6 (`OperacionExenta`), N1 y N2: solo la base o el importe no sujeto.
+fn push_tax_breakdown(xml: &mut String, invoice: &InvoicePdfData) -> Result<(), String> {
+    let mut groups: BTreeMap<(VatTreatment, i64, i64), (i64, i64, i64)> = BTreeMap::new();
     for line in &invoice.lines {
-        let entry = groups.entry(line.tax_rate_basis_points).or_insert((0, 0));
+        let entry = groups
+            .entry((
+                line.vat_treatment,
+                line.tax_rate_basis_points,
+                line.surcharge_rate_basis_points,
+            ))
+            .or_insert((0, 0, 0));
         entry.0 += line.taxable_base_cents;
         entry.1 += line.tax_cents;
+        entry.2 += line.surcharge_cents;
+    }
+    // XSD: `DetalleDesglose` maxOccurs="12".
+    if groups.len() > 12 {
+        return Err(format!("desglose_too_many_groups:{}", groups.len()));
     }
 
     xml.push_str("      <sf:Desglose>\n");
-    for (rate, (base, tax)) in groups {
+    for ((treatment, rate, surcharge_rate), (base, tax, surcharge)) in groups {
         xml.push_str("        <sf:DetalleDesglose>\n");
         push_text(xml, 10, "sf:Impuesto", "01");
         push_text(xml, 10, "sf:ClaveRegimen", "01");
-        push_text(xml, 10, "sf:CalificacionOperacion", "S1");
-        push_text(xml, 10, "sf:TipoImpositivo", &rate_value(rate));
+        if treatment.is_exempt() {
+            push_text(xml, 10, "sf:OperacionExenta", treatment.code());
+        } else {
+            push_text(xml, 10, "sf:CalificacionOperacion", treatment.code());
+        }
+        let charges_vat = matches!(treatment, VatTreatment::S1 | VatTreatment::S2);
+        if charges_vat {
+            push_text(xml, 10, "sf:TipoImpositivo", &rate_value(rate));
+        }
         push_text(xml, 10, "sf:BaseImponibleOimporteNoSujeto", &money(base));
-        push_text(xml, 10, "sf:CuotaRepercutida", &money(tax));
+        if charges_vat {
+            push_text(xml, 10, "sf:CuotaRepercutida", &money(tax));
+        }
+        if surcharge_rate != 0 {
+            push_text(
+                xml,
+                10,
+                "sf:TipoRecargoEquivalencia",
+                &rate_value(surcharge_rate),
+            );
+            push_text(xml, 10, "sf:CuotaRecargoEquivalencia", &money(surcharge));
+        }
         xml.push_str("        </sf:DetalleDesglose>\n");
     }
     xml.push_str("      </sf:Desglose>\n");
+    Ok(())
 }
 
 /// Bloque FacturasRectificadas / TipoRectificativa si aplica.
@@ -512,7 +550,21 @@ fn push_rectification_info(xml: &mut String, invoice: &InvoicePdfData) -> Result
             "sf:BaseRectificada",
             &money(source.taxable_base_cents),
         );
-        push_text(xml, 8, "sf:CuotaRectificada", &money(source.tax_cents));
+        // CuotaRectificada es solo IVA; el recargo va aparte (`DesgloseRectificacionType`).
+        push_text(
+            xml,
+            8,
+            "sf:CuotaRectificada",
+            &money(source.tax_cents - source.surcharge_cents),
+        );
+        if source.surcharge_cents != 0 {
+            push_text(
+                xml,
+                8,
+                "sf:CuotaRecargoRectificado",
+                &money(source.surcharge_cents),
+            );
+        }
         xml.push_str("      </sf:ImporteRectificacion>\n");
     }
     Ok(())
@@ -786,6 +838,7 @@ mod tests {
             issued_at: "2026-05-28T12:00:00Z".to_string(),
             taxable_base_cents: 10_000,
             tax_cents: 2_100,
+            surcharge_cents: 0,
         });
         invoice
     }
@@ -1200,6 +1253,139 @@ mod tests {
         .expect("validated rectifying export");
 
         assert!(target.exists());
+        let _ = std::fs::remove_file(&target);
+    }
+
+    /// N3: una línea por calificación (L9/L10) y otra S1 con recargo de equivalencia.
+    fn breakdown_invoice() -> InvoicePdfData {
+        let mut invoice = invoice();
+        let zero_rate = [
+            VatTreatment::S2,
+            VatTreatment::E1,
+            VatTreatment::E2,
+            VatTreatment::E3,
+            VatTreatment::E4,
+            VatTreatment::E5,
+            VatTreatment::E6,
+            VatTreatment::N1,
+            VatTreatment::N2,
+        ];
+        let mut lines = vec![
+            InvoicePdfLine {
+                description: "General".to_string(),
+                quantity: 1,
+                unit_price_cents: 10_000,
+                taxable_base_cents: 10_000,
+                tax_rate_basis_points: 2_100,
+                tax_cents: 2_100,
+                ..Default::default()
+            },
+            InvoicePdfLine {
+                description: "Minorista con recargo".to_string(),
+                quantity: 1,
+                unit_price_cents: 10_000,
+                taxable_base_cents: 10_000,
+                tax_rate_basis_points: 2_100,
+                tax_cents: 2_100,
+                surcharge_rate_basis_points: 520,
+                surcharge_cents: 520,
+                ..Default::default()
+            },
+        ];
+        lines.extend(zero_rate.iter().map(|&treatment| InvoicePdfLine {
+            description: treatment.code().to_string(),
+            quantity: 1,
+            unit_price_cents: 1_000,
+            taxable_base_cents: 1_000,
+            vat_treatment: treatment,
+            ..Default::default()
+        }));
+        invoice.lines = lines;
+        invoice.taxable_base_cents = 29_000;
+        invoice.tax_cents = 4_720;
+        invoice.total_cents = 33_720;
+        invoice
+    }
+
+    #[test]
+    fn breakdown_groups_by_treatment_rate_and_surcharge() {
+        let xml = build_verifactu_xml_draft(&breakdown_invoice(), None).expect("xml");
+        assert_eq!(xml.matches("<sf:DetalleDesglose>").count(), 11);
+        assert!(xml.contains(
+            "          <sf:TipoRecargoEquivalencia>5.20</sf:TipoRecargoEquivalencia>\n          <sf:CuotaRecargoEquivalencia>5.20</sf:CuotaRecargoEquivalencia>\n"
+        ));
+        assert!(xml.contains(
+            "          <sf:CalificacionOperacion>S2</sf:CalificacionOperacion>\n          <sf:TipoImpositivo>0.00</sf:TipoImpositivo>\n          <sf:BaseImponibleOimporteNoSujeto>10.00</sf:BaseImponibleOimporteNoSujeto>\n          <sf:CuotaRepercutida>0.00</sf:CuotaRepercutida>\n"
+        ));
+        // Exentas y no sujetas: solo la base, sin tipo ni cuota.
+        assert!(xml.contains(
+            "          <sf:OperacionExenta>E5</sf:OperacionExenta>\n          <sf:BaseImponibleOimporteNoSujeto>10.00</sf:BaseImponibleOimporteNoSujeto>\n        </sf:DetalleDesglose>\n"
+        ));
+        assert!(xml.contains(
+            "          <sf:CalificacionOperacion>N2</sf:CalificacionOperacion>\n          <sf:BaseImponibleOimporteNoSujeto>10.00</sf:BaseImponibleOimporteNoSujeto>\n        </sf:DetalleDesglose>\n"
+        ));
+        assert!(xml.contains("<sf:CuotaTotal>47.20</sf:CuotaTotal>"));
+    }
+
+    #[test]
+    fn substitutive_rectification_splits_vat_and_surcharge() {
+        let mut invoice = rectifying_invoice();
+        invoice.rectification_method = Some("S".to_string());
+        let source = invoice.rectified_invoice.as_mut().expect("source");
+        source.tax_cents = 2_620;
+        source.surcharge_cents = 520;
+        let xml = build_verifactu_xml_draft(&invoice, Some(&previous_link())).expect("xml");
+        assert!(xml.contains(
+            "        <sf:CuotaRectificada>21.00</sf:CuotaRectificada>
+        <sf:CuotaRecargoRectificado>5.20</sf:CuotaRecargoRectificado>
+"
+        ));
+    }
+
+    #[test]
+    fn breakdown_over_twelve_groups_is_an_error() {
+        let mut invoice = invoice();
+        invoice.lines = (0..13)
+            .map(|i| InvoicePdfLine {
+                description: format!("L{i}"),
+                taxable_base_cents: 100,
+                tax_rate_basis_points: i,
+                ..Default::default()
+            })
+            .collect();
+        let err = build_verifactu_xml_draft(&invoice, None).expect_err("13 grupos");
+        assert_eq!(err, "desglose_too_many_groups:13");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn every_treatment_and_surcharge_pass_local_xsd_contract() {
+        let target = std::env::temp_dir().join(format!(
+            "cumplefactura-verifactu-desglose-{}.xml",
+            uuid::Uuid::new_v4()
+        ));
+        let assets = dev_verifactu_xsd_assets().expect("dev xsd assets");
+        write_verifactu_xml_draft_validated(
+            target.to_str().expect("temp path"),
+            &breakdown_invoice(),
+            None,
+            &assets,
+        )
+        .expect("XSD verde para S1, S2, E1–E6, N1, N2 y recargo");
+        let _ = std::fs::remove_file(&target);
+
+        let mut substitutive = rectifying_invoice();
+        substitutive.rectification_method = Some("S".to_string());
+        let source = substitutive.rectified_invoice.as_mut().expect("source");
+        source.tax_cents = 2_620;
+        source.surcharge_cents = 520;
+        write_verifactu_xml_draft_validated(
+            target.to_str().expect("temp path"),
+            &substitutive,
+            Some(&previous_link()),
+            &assets,
+        )
+        .expect("XSD verde con CuotaRecargoRectificado");
         let _ = std::fs::remove_file(&target);
     }
 }

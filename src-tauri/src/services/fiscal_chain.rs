@@ -365,6 +365,8 @@ mod tests {
                     tax_rate_basis_points: 2_100,
                     withholding_rate_basis_points: None,
                     price_pending: None,
+                    vat_treatment: Default::default(),
+                    surcharge_rate_basis_points: None,
                 }],
                 rectifies_invoice_id: None,
                 rectification_reason_code: None,

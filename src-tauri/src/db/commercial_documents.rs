@@ -22,7 +22,7 @@
 
 use super::*;
 use crate::domain::invoice::{
-    build_line, calculate_totals, InvoiceDraftInput, InvoiceKind, InvoiceLineInput, InvoiceTotals,
+    build_lines, calculate_totals, InvoiceDraftInput, InvoiceKind, InvoiceLineInput, InvoiceTotals,
 };
 use crate::domain::tax::TerritoryFlag;
 use chrono::{Datelike, Local, NaiveDate, Utc};
@@ -187,6 +187,8 @@ pub fn get_commercial_document(conn: &Connection, id: &str) -> Result<Commercial
                     tax_rate_basis_points: row.get(4)?,
                     withholding_rate_basis_points: row.get(5)?,
                     price_pending: None,
+                    vat_treatment: Default::default(),
+                    surcharge_rate_basis_points: None,
                 },
                 product_id: row.get(6)?,
                 position: row.get(7)?,
@@ -449,6 +451,8 @@ pub fn commercial_documents_to_invoice_draft(
                 tax_rate_basis_points,
                 withholding_rate_basis_points: None,
                 price_pending: None,
+                vat_treatment: Default::default(),
+                surcharge_rate_basis_points: None,
             });
             // D8: albarán sin precios → sus líneas quedan «pendiente de precio» (no la de texto).
             lines.extend(doc.lines.iter().map(|line| InvoiceLineInput {
@@ -983,10 +987,7 @@ fn summary_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CommercialDocum
 
 /// Totales con el mismo código que las facturas (`domain::invoice`).
 fn document_totals(lines: &[CommercialDocumentLine]) -> Result<InvoiceTotals, String> {
-    let built = lines
-        .iter()
-        .map(|line| build_line(line.line.clone(), false))
-        .collect::<Result<Vec<_>, _>>()
+    let built = build_lines(lines.iter().map(|line| line.line.clone()).collect(), false)
         // Los errores de `build_line` empiezan por el campo: "line.quantity must be positive".
         .map_err(|err| {
             format!(
@@ -1129,6 +1130,8 @@ mod tests {
                 tax_rate_basis_points: 2_100,
                 withholding_rate_basis_points: Some(1_500),
                 price_pending: None,
+                vat_treatment: Default::default(),
+                surcharge_rate_basis_points: None,
             },
             product_id: None,
             position: 0,
@@ -1842,6 +1845,8 @@ mod tests {
                     tax_rate_basis_points: line.tax_rate_basis_points,
                     withholding_rate_basis_points: Some(line.withholding_rate_basis_points),
                     price_pending: Some(line.price_pending),
+                    vat_treatment: Default::default(),
+                    surcharge_rate_basis_points: None,
                 })
                 .collect(),
             rectifies_invoice_id: None,
@@ -2054,6 +2059,8 @@ mod tests {
                     tax_rate_basis_points: line.tax_rate_basis_points,
                     withholding_rate_basis_points: Some(line.withholding_rate_basis_points),
                     price_pending: None,
+                    vat_treatment: Default::default(),
+                    surcharge_rate_basis_points: None,
                 })
                 .collect(),
             rectifies_invoice_id: None,

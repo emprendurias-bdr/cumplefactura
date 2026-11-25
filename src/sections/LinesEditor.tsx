@@ -1,6 +1,8 @@
 /**
  * Tabla de líneas editable, la misma en facturas, documentos y plantillas recurrentes:
- * Descripción · Cant. · Precio (MoneyInput) · Dto · IVA · IRPF · Importe · quitar.
+ * Descripción · Cant. · Precio (MoneyInput) · Dto · Operación · IVA · R. E. · IRPF · Importe · quitar.
+ * N3: «Operación» es la calificación L9/L10 (por defecto «Sujeta (IVA)», S1). Fuera de S1 el IVA y
+ * el recargo quedan a 0 % y no se editan. Debajo, aviso de lo que no se puede emitir.
  * Un importe mal escrito se marca en la fila con «Importe no válido. Usa coma decimal: 1.234,56».
  * Una línea «pendiente de precio» (D8, albarán sin precios) lleva barra warn y «Pendiente de precio»
  * bajo el precio mientras siga a 0 €.
@@ -10,16 +12,17 @@
 import { useState } from "react";
 import { Icon } from "../components/Icon";
 import { t } from "../i18n/es";
-import { decimal, editorTotals, eurosToCents, invoiceToLines, isInvoiceLineReady, lineToInput, newInvoiceLine, productToInvoiceLine } from "../lib/format";
+import { chargesVat, decimal, editorTotals, eurosToCents, invoiceToLines, isInvoiceLineReady, lineToInput, newInvoiceLine, productToInvoiceLine, VAT_TREATMENTS } from "../lib/format";
 import { formatCents } from "../lib/moneyFormat";
 import type { InvoiceLineForm, InvoiceLineInput, Product } from "../types";
 import { Button } from "../ui/Button";
 import { MoneyInput } from "../ui/Field";
 
 type Field = Exclude<keyof InvoiceLineForm, "id" | "price_pending">;
-const PERCENT: { key: Field; label: "lineas.dto" | "lineas.iva" | "lineas.irpf" }[] = [
+const PERCENT: { key: Field; label: "lineas.dto" | "lineas.iva" | "lineas.recargo" | "lineas.irpf"; vat?: boolean }[] = [
   { key: "discount_rate_percent", label: "lineas.dto" },
-  { key: "tax_rate_percent", label: "lineas.iva" },
+  { key: "tax_rate_percent", label: "lineas.iva", vat: true },
+  { key: "surcharge_rate_percent", label: "lineas.recargo", vat: true },
   { key: "withholding_rate_percent", label: "lineas.irpf" },
 ];
 
@@ -30,9 +33,12 @@ type Props = {
   onAdd: (line?: InvoiceLineForm) => void;
   onRemove: (id: string) => void;
   readOnly?: boolean;
+  /** N3: calificación y recargo. Los documentos comerciales no los guardan: van sin ellos. */
+  vatDetail?: boolean;
 };
 
-export function LinesEditor({ lines, products, onChange, onAdd, onRemove, readOnly }: Props) {
+export function LinesEditor({ lines, products, onChange, onAdd, onRemove, readOnly, vatDetail = true }: Props) {
+  const percents = vatDetail ? PERCENT : PERCENT.filter((p) => p.key !== "surcharge_rate_percent");
   return (
     <div className="bdr-table-wrap">
       <table className="bdr-table cf-lines" aria-label={t("lineas.titulo")}>
@@ -41,7 +47,8 @@ export function LinesEditor({ lines, products, onChange, onAdd, onRemove, readOn
             <th scope="col">{t("lineas.descripcion")}</th>
             <th scope="col" className="num">{t("lineas.cantidad")}</th>
             <th scope="col" className="num">{t("lineas.precio")}</th>
-            {PERCENT.map((p) => (
+            {vatDetail ? <th scope="col">{t("lineas.operacion")}</th> : null}
+            {percents.map((p) => (
               <th key={p.key} scope="col" className="num">{t(p.label)}</th>
             ))}
             <th scope="col" className="num">{t("lineas.importe")}</th>
@@ -66,11 +73,26 @@ export function LinesEditor({ lines, products, onChange, onAdd, onRemove, readOn
                   {badPrice ? <span className="bdr-help bdr-help--err cf-cell-err">✕ {t("lineas.importeNoValido")}</span> : null}
                   {pending ? <span className="cf-pending-help">! {t("lineas.pendientePrecio")}</span> : null}
                 </td>
-                {PERCENT.map((p) => (
-                  <td key={p.key} className="num">
-                    <input className="bdr-input bdr-input--money cf-cell cf-cell--xs" aria-label={t(`${p.label}Aria`, { n })} inputMode="decimal" value={line[p.key]} readOnly={readOnly} onChange={(e) => onChange(line.id, p.key, e.target.value)} />
+                {vatDetail ? (
+                  <td>
+                    <select className="bdr-input cf-cell" aria-label={t("lineas.operacionAria", { n })} value={line.vat_treatment ?? "S1"} disabled={readOnly} onChange={(e) => onChange(line.id, "vat_treatment", e.target.value)}>
+                      {VAT_TREATMENTS.map((code) => (
+                        <option key={code} value={code}>
+                          {t(`calificacion.${code}`)}
+                        </option>
+                      ))}
+                    </select>
                   </td>
-                ))}
+                ) : null}
+                {percents.map((p) => {
+                  // Fuera de S1 el tipo es 0 %: se enseña así y no se edita.
+                  const locked = p.vat && !chargesVat(line);
+                  return (
+                    <td key={p.key} className="num">
+                      <input className="bdr-input bdr-input--money cf-cell cf-cell--xs" aria-label={t(`${p.label}Aria`, { n })} inputMode="decimal" value={locked ? "0" : (line[p.key] ?? "")} readOnly={readOnly || locked} onChange={(e) => onChange(line.id, p.key, e.target.value)} />
+                    </td>
+                  );
+                })}
                 <td className="num">{isInvoiceLineReady(line) ? formatCents(editorTotals([line]).taxable_base_cents) : "—"}</td>
                 <td>
                   {readOnly ? null : (
@@ -84,6 +106,7 @@ export function LinesEditor({ lines, products, onChange, onAdd, onRemove, readOn
           })}
         </tbody>
       </table>
+      {readOnly || !vatDetail ? null : <p className="bdr-help">{t("lineas.soloRegimenGeneral")}</p>}
       {readOnly ? null : (
         <div className="cf-lines__foot cf-row">
           <Button variant="secondary" size="sm" icon="plus" onClick={() => onAdd()}>
@@ -125,6 +148,7 @@ export function previewOf(lines: InvoiceLineForm[]) {
     rows: [
       { label: t("totales.base"), cents: totals.taxable_base_cents },
       { label: t("totales.iva"), cents: totals.tax_cents },
+      ...(totals.surcharge_cents ? [{ label: t("totales.recargo"), cents: totals.surcharge_cents }] : []),
       { label: t("totales.irpf"), cents: -totals.withholding_cents },
     ],
   };

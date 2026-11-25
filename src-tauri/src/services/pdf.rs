@@ -11,6 +11,7 @@
 
 use crate::db::{CommercialDocumentPdfData, InvoicePdfData};
 use crate::domain::invoice::build_line;
+use crate::domain::tax::VatTreatment;
 use crate::services::logo::{self, LogoImage};
 use crate::services::qr::{self, QrEnvironment, VERIFACTU_LEGEND};
 use std::collections::BTreeMap;
@@ -81,6 +82,9 @@ struct Row {
     tax_cents: i64,
     withholding_cents: i64,
     pending: bool,
+    treatment: VatTreatment,
+    surcharge_bp: i64,
+    surcharge_cents: i64,
 }
 
 impl Row {
@@ -187,6 +191,9 @@ fn invoice_sheet(invoice: &InvoicePdfData, env: QrEnvironment) -> Result<Sheet, 
                 tax_cents: line.tax_cents,
                 withholding_cents: line.withholding_cents,
                 pending: line.price_pending,
+                treatment: line.vat_treatment,
+                surcharge_bp: line.surcharge_rate_basis_points,
+                surcharge_cents: line.surcharge_cents,
             })
             .collect(),
         show_prices: true,
@@ -239,6 +246,9 @@ fn commercial_sheet(data: &CommercialDocumentPdfData) -> Result<Sheet, String> {
                 tax_cents: built.tax_cents,
                 withholding_cents: built.withholding_cents,
                 pending: false,
+                treatment: built.vat_treatment,
+                surcharge_bp: built.surcharge_rate_basis_points.into(),
+                surcharge_cents: built.surcharge_cents,
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
@@ -511,10 +521,19 @@ fn render(sheet: &Sheet) -> Vec<u8> {
     // Totales con IVA e IRPF desglosados por tipo.
     if let Some((base, withholding, total)) = sheet.totals {
         let mut taxes: BTreeMap<i64, i64> = BTreeMap::new();
+        let mut surcharges: BTreeMap<i64, i64> = BTreeMap::new();
+        let mut not_taxed: BTreeMap<VatTreatment, i64> = BTreeMap::new();
         let mut withholdings: BTreeMap<i64, i64> = BTreeMap::new();
         for row in &sheet.rows {
             if !row.is_text() {
-                *taxes.entry(row.tax_bp).or_default() += row.tax_cents;
+                if row.treatment == VatTreatment::S1 {
+                    *taxes.entry(row.tax_bp).or_default() += row.tax_cents;
+                } else {
+                    *not_taxed.entry(row.treatment).or_default() += row.amount_cents;
+                }
+                if row.surcharge_cents != 0 {
+                    *surcharges.entry(row.surcharge_bp).or_default() += row.surcharge_cents;
+                }
                 if row.withholding_cents != 0 {
                     *withholdings.entry(row.withholding_bp).or_default() += row.withholding_cents;
                 }
@@ -526,6 +545,21 @@ fn render(sheet: &Sheet) -> Vec<u8> {
                 .iter()
                 .map(|(bp, cents)| (format!("IVA {}", rate(*bp)), money(*cents), false)),
         );
+        lines.extend(surcharges.iter().map(|(bp, cents)| {
+            (
+                format!("Recargo de equivalencia {}", rate(*bp)),
+                money(*cents),
+                false,
+            )
+        }));
+        // Base de cada operación sin cuota, con la mención que exige el RD 1619/2012 art. 6.1.j y m.
+        lines.extend(not_taxed.iter().map(|(treatment, base)| {
+            (
+                treatment_mention(*treatment).to_string(),
+                money(*base),
+                false,
+            )
+        }));
         lines.extend(
             withholdings
                 .iter()
@@ -786,6 +820,23 @@ fn money(cents: i64) -> String {
     format!("{sign}{grouped},{:02} €", abs % 100)
 }
 
+/// Mención en factura de las líneas sin cuota repercutida: «inversión del sujeto pasivo»
+/// (RD 1619/2012 art. 6.1.m) y referencia al precepto de exención (art. 6.1.j).
+fn treatment_mention(treatment: VatTreatment) -> &'static str {
+    match treatment {
+        VatTreatment::S1 => "IVA",
+        VatTreatment::S2 => "Inversión del sujeto pasivo",
+        VatTreatment::E1 => "Exenta art. 20 Ley IVA",
+        VatTreatment::E2 => "Exenta art. 21 Ley IVA",
+        VatTreatment::E3 => "Exenta art. 22 Ley IVA",
+        VatTreatment::E4 => "Exenta arts. 23 y 24 Ley IVA",
+        VatTreatment::E5 => "Exenta art. 25 Ley IVA",
+        VatTreatment::E6 => "Operación exenta",
+        VatTreatment::N1 => "No sujeta arts. 7 o 14 Ley IVA",
+        VatTreatment::N2 => "No sujeta (localización)",
+    }
+}
+
 /// `21 %`, `10,5 %`.
 fn rate(basis_points: i64) -> String {
     let text = format!("{:.2}", basis_points as f64 / 100.0).replace('.', ",");
@@ -851,6 +902,31 @@ pub(crate) mod tests {
             std::env::temp_dir().join(format!("cumplefactura-test-{}.pdf", uuid::Uuid::new_v4()));
         let target_str = target.to_str().expect("utf8 target").to_string();
         (target, target_str)
+    }
+
+    #[test]
+    fn prints_surcharge_and_legal_mentions_of_untaxed_lines() {
+        let (target, target_str) = temp_target();
+        let mut invoice = sample_invoice();
+        invoice.lines[0].surcharge_rate_basis_points = 520;
+        invoice.lines[0].surcharge_cents = 520;
+        invoice.lines.push(InvoicePdfLine {
+            description: "Obra".to_string(),
+            quantity: 1,
+            unit_price_cents: 5_000,
+            taxable_base_cents: 5_000,
+            vat_treatment: VatTreatment::S2,
+            ..Default::default()
+        });
+        write_invoice_pdf(&target_str, &invoice, QrEnvironment::Test).expect("pdf");
+        let text = String::from_utf8(std::fs::read(&target).expect("read")).expect("ASCII PDF");
+        assert!(text.contains("(Recargo de equivalencia 5,2 %) Tj"));
+        assert!(text.contains("(Inversi\\363n del sujeto pasivo) Tj"));
+        assert!(
+            !text.contains("(IVA 0 %) Tj"),
+            "S2 no suma una fila de IVA al 0 %"
+        );
+        std::fs::remove_file(target).expect("cleanup");
     }
 
     #[test]

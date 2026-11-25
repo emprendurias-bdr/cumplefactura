@@ -59,6 +59,8 @@ fn invoice(company_id: String, customer_id: String) -> Invoice {
             tax_rate_basis_points: 2_100,
             withholding_rate_basis_points: None,
             price_pending: None,
+            vat_treatment: Default::default(),
+            surcharge_rate_basis_points: None,
         }],
         rectifies_invoice_id: None,
         rectification_reason_code: None,
@@ -156,6 +158,8 @@ fn filters_invoices_by_series_kind_status_and_search() {
             tax_rate_basis_points: 2_100,
             withholding_rate_basis_points: None,
             price_pending: None,
+            vat_treatment: Default::default(),
+            surcharge_rate_basis_points: None,
         }],
         rectifies_invoice_id: None,
         rectification_reason_code: None,
@@ -806,6 +810,8 @@ fn rectifying_invoice_marks_source_rectified_and_keeps_link() {
                 tax_rate_basis_points: 2_100,
                 withholding_rate_basis_points: None,
                 price_pending: None,
+                vat_treatment: Default::default(),
+                surcharge_rate_basis_points: None,
             }],
             rectifies_invoice_id: Some(source.id.clone()),
             rectification_reason_code: Some(RectificationReasonCode::R4),
@@ -1125,6 +1131,8 @@ fn n1_issue_input(company_id: &str, customer_id: &str, series: &str) -> InvoiceI
                 tax_rate_basis_points: 2_100,
                 withholding_rate_basis_points: None,
                 price_pending: None,
+                vat_treatment: Default::default(),
+                surcharge_rate_basis_points: None,
             }],
             rectifies_invoice_id: None,
             rectification_reason_code: None,
@@ -1344,4 +1352,52 @@ fn migration_keeps_number_of_already_issued_invoices() {
         )
         .expect("pragma");
     assert_eq!(has_old_counter, 0);
+}
+
+#[test]
+fn line_treatment_and_surcharge_round_trip_and_old_lines_read_as_s1() {
+    let mut conn = memory_conn();
+    let company = company();
+    let customer = customer();
+    insert_company(&conn, &company).expect("company insert");
+    upsert_customer(&conn, &customer).expect("customer upsert");
+    let mut invoice = invoice(company.id.clone(), customer.id.clone());
+    invoice.lines[0].surcharge_rate_basis_points = 520;
+    invoice.lines[0].surcharge_cents = 520;
+    let mut exempt = invoice.lines[0].clone();
+    exempt.id = "exenta".to_string();
+    exempt.vat_treatment = crate::domain::tax::VatTreatment::E1;
+    exempt.tax_rate_basis_points = 0;
+    exempt.tax_cents = 0;
+    exempt.surcharge_rate_basis_points = 0;
+    exempt.surcharge_cents = 0;
+    invoice.lines.push(exempt);
+    insert_invoice_draft(&mut conn, &invoice).expect("invoice draft insert");
+
+    let detail = get_invoice_detail(&conn, &invoice.id).expect("detail");
+    assert_eq!(detail.invoice.lines[0].surcharge_cents, 520);
+    assert_eq!(
+        detail.invoice.lines[1].vat_treatment,
+        crate::domain::tax::VatTreatment::E1
+    );
+    let pdf = invoice_pdf_data(&conn, &invoice.id).expect("pdf data");
+    assert_eq!(pdf.lines[0].surcharge_rate_basis_points, 520);
+
+    // Las líneas anteriores a la migración 015 toman S1 y recargo 0 por defecto.
+    let stored: (String, i64) = conn
+        .query_row(
+            "SELECT dflt_value, (SELECT COUNT(*) FROM pragma_table_info('invoice_lines') WHERE name LIKE 'surcharge%')
+             FROM pragma_table_info('invoice_lines') WHERE name = 'vat_treatment'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("schema");
+    assert_eq!(stored, ("'S1'".to_string(), 2));
+
+    conn.execute(
+        "UPDATE invoice_lines SET vat_treatment = 'E9' WHERE id = 'exenta'",
+        [],
+    )
+    .expect("corrupt");
+    assert!(get_invoice_detail(&conn, &invoice.id).is_err());
 }

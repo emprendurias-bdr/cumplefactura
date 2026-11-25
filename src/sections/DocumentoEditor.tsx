@@ -166,7 +166,7 @@ export function DocumentoEditor({ c, tab }: { c: Ctx; tab: DocTab }) {
           )}
         </div>
         {kind === "delivery_note" ? <Checkbox label={t("docs.mostrarPrecios")} checked={showPrices} disabled={!editable} onChange={(e) => setShowPrices(e.target.checked)} /> : null}
-        <LinesEditor {...lines} products={m.products} readOnly={!editable} />
+        <LinesEditor {...lines} products={m.products} readOnly={!editable} vatDetail={false} />
         <Field label={t("docs.notas")}>
           <textarea className="bdr-input cf-textarea" value={notes} readOnly={!editable} onChange={(e) => setNotes(e.target.value)} />
         </Field>

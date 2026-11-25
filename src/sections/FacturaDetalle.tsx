@@ -62,10 +62,13 @@ export function FacturaDetalle(c: Ctx) {
   const draft = invoice.status === "Draft";
   const kind = invoiceKind(invoice.kind);
   const origin = recurringOrigin(invoice.recurring_label, invoice.recurring_period_key);
+  // `tax_cents` de Rust es IVA + recargo de equivalencia (CuotaTotal): se enseñan por separado.
+  const surcharge = (detail?.lines ?? []).reduce((sum, line) => sum + (line.surcharge_cents ?? 0), 0);
   const rows = totals
     ? [
         { label: t("totales.base"), cents: totals.taxable_base_cents },
-        { label: t("totales.iva"), cents: totals.tax_cents },
+        { label: t("totales.iva"), cents: totals.tax_cents - surcharge },
+        ...(surcharge ? [{ label: t("totales.recargo"), cents: surcharge }] : []),
         { label: t("totales.irpf"), cents: -totals.withholding_cents },
       ]
     : [];

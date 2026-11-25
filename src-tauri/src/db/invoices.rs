@@ -6,6 +6,7 @@
 
 use super::*;
 use crate::domain::invoice::{InvoiceDraftInput, InvoiceIssueInput, IssuedInvoice};
+use crate::domain::tax::VatTreatment;
 use crate::services::verifactu;
 
 pub fn insert_invoice_draft(conn: &mut Connection, invoice: &Invoice) -> Result<(), String> {
@@ -631,6 +632,10 @@ pub struct InvoicePdfLine {
     pub withholding_rate_basis_points: i64,
     pub withholding_cents: i64,
     pub price_pending: bool,
+    /// Calificación L9/L10 (`S1` en las líneas anteriores a N3).
+    pub vat_treatment: VatTreatment,
+    pub surcharge_rate_basis_points: i64,
+    pub surcharge_cents: i64,
 }
 
 /// Ficha de factura (`invoice_get`), PDF y XML. Los campos tras `rectified_invoice` son
@@ -772,7 +777,8 @@ pub fn invoice_pdf_data(conn: &Connection, invoice_id: &str) -> Result<InvoicePd
     let mut stmt = conn
         .prepare(
             "SELECT description, quantity, unit_price_cents, discount_rate_basis_points, taxable_base_cents, tax_rate_basis_points, tax_cents,
-                    withholding_rate_basis_points, withholding_cents, price_pending
+                    withholding_rate_basis_points, withholding_cents, price_pending,
+                    vat_treatment, surcharge_rate_basis_points, surcharge_cents
              FROM invoice_lines WHERE invoice_id = ?1 ORDER BY position ASC",
         )
         .map_err(db_error)?;
@@ -789,6 +795,9 @@ pub fn invoice_pdf_data(conn: &Connection, invoice_id: &str) -> Result<InvoicePd
                 withholding_rate_basis_points: row.get(7)?,
                 withholding_cents: row.get(8)?,
                 price_pending: row.get(9)?,
+                vat_treatment: vat_treatment_column(row, 10)?,
+                surcharge_rate_basis_points: row.get(11)?,
+                surcharge_cents: row.get(12)?,
             })
         })
         .map_err(db_error)?;
@@ -961,7 +970,8 @@ pub fn get_invoice_detail(conn: &Connection, invoice_id: &str) -> Result<Invoice
     detail.invoice.lines = conn
         .prepare(
             "SELECT id, description, quantity, unit_price_cents, discount_rate_basis_points, taxable_base_cents,
-                    tax_rate_basis_points, tax_cents, withholding_rate_basis_points, withholding_cents, price_pending
+                    tax_rate_basis_points, tax_cents, withholding_rate_basis_points, withholding_cents, price_pending,
+                    vat_treatment, surcharge_rate_basis_points, surcharge_cents
              FROM invoice_lines WHERE invoice_id = ?1 ORDER BY position",
         )
         .map_err(db_error)?
@@ -978,6 +988,9 @@ pub fn get_invoice_detail(conn: &Connection, invoice_id: &str) -> Result<Invoice
                 withholding_rate_basis_points: row.get(8)?,
                 withholding_cents: row.get(9)?,
                 price_pending: row.get(10)?,
+                vat_treatment: vat_treatment_column(row, 11)?,
+                surcharge_rate_basis_points: row.get(12)?,
+                surcharge_cents: row.get(13)?,
             })
         })
         .map_err(db_error)?
@@ -1072,6 +1085,13 @@ pub(super) fn reserve_invoice_number_tx(
     Ok(next)
 }
 
+/// Columna `vat_treatment`: un código desconocido es un error de lectura, nunca S1.
+fn vat_treatment_column(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<VatTreatment> {
+    VatTreatment::parse(&row.get::<_, String>(index)?).map_err(|err| {
+        rusqlite::Error::FromSqlConversionFailure(index, rusqlite::types::Type::Text, err.into())
+    })
+}
+
 pub(super) fn insert_line(
     tx: &Transaction<'_>,
     invoice_id: &str,
@@ -1079,8 +1099,8 @@ pub(super) fn insert_line(
     line: &InvoiceLine,
 ) -> Result<(), String> {
     tx.execute(
-        "INSERT INTO invoice_lines (id, invoice_id, position, description, quantity, unit_price_cents, discount_rate_basis_points, taxable_base_cents, tax_rate_basis_points, tax_cents, withholding_rate_basis_points, withholding_cents, price_pending)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+        "INSERT INTO invoice_lines (id, invoice_id, position, description, quantity, unit_price_cents, discount_rate_basis_points, taxable_base_cents, tax_rate_basis_points, tax_cents, withholding_rate_basis_points, withholding_cents, price_pending, vat_treatment, surcharge_rate_basis_points, surcharge_cents)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         params![
             line.id,
             invoice_id,
@@ -1095,6 +1115,9 @@ pub(super) fn insert_line(
             line.withholding_rate_basis_points,
             line.withholding_cents,
             line.price_pending,
+            line.vat_treatment.code(),
+            line.surcharge_rate_basis_points,
+            line.surcharge_cents,
         ],
     )
     .map(|_| ())

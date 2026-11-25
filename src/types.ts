@@ -57,7 +57,10 @@ export type Product = {
   active: boolean;
   updated_at: string;
 };
+/** `tax_cents` = IVA repercutido + recargo de equivalencia (`CuotaTotal` del registro). */
 export type InvoiceTotals = { taxable_base_cents: number; tax_cents: number; withholding_cents: number; total_cents: number };
+/** N3: calificación de la línea (listas L9/L10 de la Orden HAC/1177/2024); por defecto S1. */
+export type VatTreatment = "S1" | "S2" | "E1" | "E2" | "E3" | "E4" | "E5" | "E6" | "N1" | "N2";
 /** Línea tal como la devuelve Rust (importes calculados en céntimos). */
 export type InvoiceLine = {
   id?: string;
@@ -70,6 +73,10 @@ export type InvoiceLine = {
   taxable_base_cents?: number;
   /** R2 (D8): línea de albarán sin precio; la emisión se bloquea mientras siga a 0 €. */
   price_pending?: boolean | null;
+  /** N3: Rust omite S1 y el recargo 0 (valores por defecto). */
+  vat_treatment?: VatTreatment | null;
+  surcharge_rate_basis_points?: number | null;
+  surcharge_cents?: number | null;
 };
 /** Factura completa (`invoice_draft_create`, `invoice_issue`, `commercial_document_to_invoice_draft`). */
 export type Invoice = {
@@ -242,6 +249,9 @@ export type InvoiceLineForm = {
   withholding_rate_percent: string;
   /** R2 (D8): viene marcada de Rust; se reenvía tal cual (al poner precio, Rust la borra). */
   price_pending?: boolean | null;
+  /** N3: vacío = S1; recargo vacío = sin recargo de equivalencia. */
+  vat_treatment?: VatTreatment;
+  surcharge_rate_percent?: string;
 };
 export type InvoiceLineInput = {
   description: string;
@@ -251,6 +261,8 @@ export type InvoiceLineInput = {
   tax_rate_basis_points: number;
   withholding_rate_basis_points: number | null;
   price_pending?: boolean | null;
+  vat_treatment?: VatTreatment | null;
+  surcharge_rate_basis_points?: number | null;
 };
 export type CompanyForm = Omit<Company, "id" | "created_at" | "logo_path">;
 export type CustomerForm = Omit<Customer, "id" | "updated_at">;

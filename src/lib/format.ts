@@ -8,6 +8,7 @@ import type {
   InvoiceFilterForm,
   InvoiceLineForm,
   InvoiceLineInput,
+  VatTreatment,
   PathKey,
   Product,
   ProductForm,
@@ -144,6 +145,21 @@ export function percentToBasisPoints(value: string) {
   return Math.round(decimal(value) * 100);
 }
 
+/** N3: calificaciones del editor, en el orden de las listas L9/L10. */
+export const VAT_TREATMENTS: VatTreatment[] = ["S1", "S2", "E1", "E2", "E3", "E4", "E5", "E6", "N1", "N2"];
+
+/** Solo S1 repercute IVA y recargo; el resto va a 0 % (Rust lo exige). */
+export function chargesVat(line: Pick<InvoiceLineForm, "vat_treatment">) {
+  return (line.vat_treatment ?? "S1") === "S1";
+}
+
+/** `n / d` al céntimo más próximo; la mitad se aleja de cero, igual que `round_div` en Rust. */
+export function roundDiv(n: number, d: number) {
+  const q = Math.trunc(n / d);
+  const r = n - q * d;
+  return 2 * Math.abs(r) >= d ? q + Math.sign(n) : q;
+}
+
 /** Valida línea lista para draft/issue (qty entera > 0, importes finitos). */
 export function isInvoiceLineReady(line: InvoiceLineForm) {
   const quantity = decimal(line.quantity);
@@ -151,8 +167,11 @@ export function isInvoiceLineReady(line: InvoiceLineForm) {
   const discount = percentToBasisPoints(line.discount_rate_percent);
   const tax = percentToBasisPoints(line.tax_rate_percent);
   const withholding = percentToBasisPoints(line.withholding_rate_percent);
+  const surcharge = percentToBasisPoints(line.surcharge_rate_percent ?? "");
   return (
     line.description.trim().length > 0 &&
+    Number.isFinite(surcharge) &&
+    surcharge >= 0 &&
     Number.isFinite(quantity) &&
     quantity > 0 &&
     Number.isInteger(quantity) &&
@@ -172,15 +191,20 @@ export function isInvoiceLineReady(line: InvoiceLineForm) {
 export function lineToInput(line: InvoiceLineForm): InvoiceLineInput {
   const discount = percentToBasisPoints(line.discount_rate_percent);
   const withholding = percentToBasisPoints(line.withholding_rate_percent);
+  const surcharge = percentToBasisPoints(line.surcharge_rate_percent ?? "");
+  const vat = chargesVat(line);
   return {
     description: line.description.trim(),
     quantity: decimal(line.quantity),
     unit_price_cents: eurosToCents(line.unit_price_euros),
     discount_rate_basis_points: discount > 0 ? discount : null,
-    tax_rate_basis_points: percentToBasisPoints(line.tax_rate_percent),
+    tax_rate_basis_points: vat ? percentToBasisPoints(line.tax_rate_percent) : 0,
     withholding_rate_basis_points: withholding > 0 ? withholding : null,
     // Se reenvía la marca de Rust; omitida, Rust conserva la de esa posición (contrato R2).
     ...(line.price_pending ? { price_pending: true } : {}),
+    // S1 sin recargo no añade campos: el payload de las facturas normales no cambia.
+    ...(vat ? {} : { vat_treatment: line.vat_treatment }),
+    ...(vat && surcharge > 0 ? { surcharge_rate_basis_points: surcharge } : {}),
   };
 }
 
@@ -216,28 +240,47 @@ export function invoiceToLines(invoice: Pick<Invoice, "lines">): InvoiceLineForm
     tax_rate_percent: percent(line.tax_rate_basis_points) || "0",
     withholding_rate_percent: percent(line.withholding_rate_basis_points),
     ...(line.price_pending ? { price_pending: true } : {}),
+    ...(line.vat_treatment && line.vat_treatment !== "S1" ? { vat_treatment: line.vat_treatment } : {}),
+    ...(line.surcharge_rate_basis_points ? { surcharge_rate_percent: percent(line.surcharge_rate_basis_points) } : {}),
   }));
 }
 
-/** Totales preview en cliente (base/IVA/IRPF/total) alineados con lógica de líneas. */
+/**
+ * Totales preview en cliente con el mismo cálculo que Rust (`build_lines`): base por línea al
+ * céntimo; IVA y recargo sobre la base agregada de cada grupo (calificación, tipo y recargo).
+ * `tax_cents` es solo IVA; `surcharge_cents`, el recargo; `total_cents` incluye ambos.
+ */
 export function editorTotals(lines: InvoiceLineForm[]) {
-  return lines.reduce(
-    (totals, line) => {
-      if (!isInvoiceLineReady(line)) return totals;
-      const input = lineToInput(line);
-      const discount = input.discount_rate_basis_points ?? 0;
-      const base = Math.trunc((input.quantity * input.unit_price_cents * (10_000 - discount)) / 10_000);
-      const tax = Math.trunc((base * input.tax_rate_basis_points) / 10_000);
-      const withholding = Math.trunc((base * (input.withholding_rate_basis_points ?? 0)) / 10_000);
-      return {
-        taxable_base_cents: totals.taxable_base_cents + base,
-        tax_cents: totals.tax_cents + tax,
-        withholding_cents: totals.withholding_cents + withholding,
-        total_cents: totals.total_cents + base + tax - withholding,
-      };
-    },
-    { taxable_base_cents: 0, tax_cents: 0, withholding_cents: 0, total_cents: 0 },
-  );
+  const groups = new Map<string, { base: number; tax: number; surcharge: number }>();
+  let base = 0;
+  let withholding = 0;
+  for (const line of lines) {
+    if (!isInvoiceLineReady(line)) continue;
+    const input = lineToInput(line);
+    const discount = input.discount_rate_basis_points ?? 0;
+    const lineBase = roundDiv(input.quantity * input.unit_price_cents * (10_000 - discount), 10_000);
+    base += lineBase;
+    withholding += roundDiv(lineBase * (input.withholding_rate_basis_points ?? 0), 10_000);
+    const tax = input.tax_rate_basis_points;
+    const surcharge = input.surcharge_rate_basis_points ?? 0;
+    const key = `${input.vat_treatment ?? "S1"}|${tax}|${surcharge}`;
+    const group = groups.get(key) ?? { base: 0, tax, surcharge };
+    group.base += lineBase;
+    groups.set(key, group);
+  }
+  let taxCents = 0;
+  let surchargeCents = 0;
+  for (const group of groups.values()) {
+    taxCents += roundDiv(group.base * group.tax, 10_000);
+    surchargeCents += roundDiv(group.base * group.surcharge, 10_000);
+  }
+  return {
+    taxable_base_cents: base,
+    tax_cents: taxCents,
+    surcharge_cents: surchargeCents,
+    withholding_cents: withholding,
+    total_cents: base + taxCents + surchargeCents - withholding,
+  };
 }
 
 /** Une dir+file asumiendo separador Windows o Unix según `dir`. */

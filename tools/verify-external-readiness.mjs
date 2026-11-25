@@ -6,11 +6,11 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { download as downloadEdgeDriver } from "edgedriver";
-import { commandExists, evidenceDir, pathInfo, readJson, root, windowsDriverCandidates, writeEvidence } from "./lib.mjs";
+import { cargoTargetDir, commandExists, evidenceDir, pathInfo, readJson, root, windowsDriverCandidates, writeEvidence } from "./lib.mjs";
 
 const exeSuffix = process.platform === "win32" ? ".exe" : "";
-const releaseExe = resolve(root, `target/release/cumplefactura${exeSuffix}`);
-const releaseSidecar = resolve(root, `target/release/cumplefactura-sidecar${exeSuffix}`);
+const releaseExe = resolve(cargoTargetDir(), `release/cumplefactura${exeSuffix}`);
+const releaseSidecar = resolve(cargoTargetDir(), `release/cumplefactura-sidecar${exeSuffix}`);
 const evidence = (name) => resolve(evidenceDir, `latest-${name}.json`);
 const resolvedEdgeDriverPath = await downloadEdgeDriver().catch(() => "");
 

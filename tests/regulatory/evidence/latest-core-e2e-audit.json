@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-06-28T19:20:59.354178900+00:00",
+  "generated_at": "2026-11-25T23:06:41.545637500+00:00",
   "invoices": [
     {
-      "id": "a9319a26-81c1-478e-828f-d83176872a4f",
-      "company_id": "ab2fc622-d231-400a-ad80-2fd8ed906665",
-      "customer_id": "489931ae-3ef6-4d3d-8a98-4e878403cafb",
+      "id": "10913533-f960-473f-b464-e500987a669e",
+      "company_id": "a6fc22a8-d0c6-425d-81d1-2a453d231036",
+      "customer_id": "c38a36b8-779f-47a9-8025-c4d3f4125260",
       "fiscal_year": 2026,
       "series": "VENDI2026",
       "number": 7,
@@ -15,13 +15,18 @@
       "rectification_method": null,
       "total_cents": 12100,
       "fiscal_hash": "BD0EFD5006EFE8DCBDDF5041AB764C3BB967C7C3E95D2A07450DBD2856EC43A9",
-      "created_at": "2026-06-28T19:20:58.783938200+00:00",
-      "issued_at": "2026-05-31T10:00:00+02:00"
+      "created_at": "2026-11-25T23:06:41.104769200+00:00",
+      "issued_at": "2026-05-31T10:00:00+02:00",
+      "due_date": null,
+      "paid_cents": 0,
+      "payment_status": "unpaid",
+      "recurring_label": null,
+      "recurring_period_key": null
     },
     {
-      "id": "808042d2-066c-42ad-8b40-f5d8f7346372",
-      "company_id": "ab2fc622-d231-400a-ad80-2fd8ed906665",
-      "customer_id": "489931ae-3ef6-4d3d-8a98-4e878403cafb",
+      "id": "c3c60e33-5ac3-4927-9235-b52b7a40fe16",
+      "company_id": "a6fc22a8-d0c6-425d-81d1-2a453d231036",
+      "customer_id": "c38a36b8-779f-47a9-8025-c4d3f4125260",
       "fiscal_year": 2026,
       "series": "VENDI2026",
       "number": null,
@@ -32,27 +37,32 @@
       "rectification_method": null,
       "total_cents": 12100,
       "fiscal_hash": null,
-      "created_at": "2026-06-28T19:20:58.783690200+00:00",
-      "issued_at": null
+      "created_at": "2026-11-25T23:06:41.104524400+00:00",
+      "issued_at": null,
+      "due_date": null,
+      "paid_cents": 0,
+      "payment_status": "unpaid",
+      "recurring_label": null,
+      "recurring_period_key": null
     }
   ],
   "audit_events": [
     {
-      "id": "b883de54-d7b5-4c1c-9dc1-d0e185e613d1",
-      "entity_id": "a9319a26-81c1-478e-828f-d83176872a4f",
+      "id": "addbcb6d-7f08-4c83-959d-a4e7f7e7b36e",
+      "entity_id": "10913533-f960-473f-b464-e500987a669e",
       "action": "invoice_issued",
       "actor": "core-e2e",
-      "occurred_at": "2026-06-28T19:20:58.784400700+00:00",
+      "occurred_at": "2026-11-25T23:06:41.105198700+00:00",
       "payload_hash": "BD0EFD5006EFE8DCBDDF5041AB764C3BB967C7C3E95D2A07450DBD2856EC43A9",
       "previous_hash": null,
-      "hash": "cf4ea3151decb1b7e5e3135bb6c52a4cf8e44b3b10bd21e23340e0008cf8730d"
+      "hash": "8e886c6500be5faa4cbbc0f23855ce355477575a6a535f75954d4a5ac82dfe4b"
     }
   ],
   "fiscal_records": [
     {
-      "id": "a3bf0302-24d4-4165-9935-f008c05b50fb",
-      "company_id": "ab2fc622-d231-400a-ad80-2fd8ed906665",
-      "invoice_id": "a9319a26-81c1-478e-828f-d83176872a4f",
+      "id": "330bde4f-f5ba-479a-820e-8677dad5616c",
+      "company_id": "a6fc22a8-d0c6-425d-81d1-2a453d231036",
+      "invoice_id": "10913533-f960-473f-b464-e500987a669e",
       "record_type": "Alta",
       "generated_at": "2026-05-31T10:00:00+02:00",
       "fiscal_hash": "BD0EFD5006EFE8DCBDDF5041AB764C3BB967C7C3E95D2A07450DBD2856EC43A9",
@@ -67,7 +77,7 @@
     "issue_count": 0,
     "last_hash_by_company": [
       {
-        "company_id": "ab2fc622-d231-400a-ad80-2fd8ed906665",
+        "company_id": "a6fc22a8-d0c6-425d-81d1-2a453d231036",
         "last_hash": "BD0EFD5006EFE8DCBDDF5041AB764C3BB967C7C3E95D2A07450DBD2856EC43A9"
       }
     ],

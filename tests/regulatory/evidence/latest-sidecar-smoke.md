@@ -1,0 +1,24 @@
+# CumpleFactura sidecar smoke
+
+- Generated: 2026-11-25T23:06:22.928Z
+- Status: passed
+- Binary: `C:\07 DESARROLLO\apps\CumpleFactura\.worktrees\_target\release\cumplefactura-sidecar.exe`
+
+## Checks
+
+- handshake_port_reported: true
+- handshake_pid_matches: true
+- healthz_ok: true
+- aeat_calls_disabled_by_default: true
+- production_disabled_by_default: true
+- wrong_hmac_rejected: true
+- preflight_blocked_without_certificate: true
+- submit_fail_closed: true
+- production_blocked: true
+- no_external_call: true
+- exits_when_stdin_closes: true
+
+## Limits
+
+- The sidecar runs without --allow-aeat, so it cannot reach AEAT.
+- It proves process lifecycle, HMAC boundary and fail-closed policy; real mTLS submission is verified manually with tools/homolog-verifactu.mjs.

@@ -1,6 +1,6 @@
 {
-  "id": "a9319a26-81c1-478e-828f-d83176872a4f",
-  "company_id": "ab2fc622-d231-400a-ad80-2fd8ed906665",
+  "id": "10913533-f960-473f-b464-e500987a669e",
+  "company_id": "a6fc22a8-d0c6-425d-81d1-2a453d231036",
   "company_legal_name": "Demo CumpleFactura SL",
   "company_tax_id": "B00000000",
   "customer_display_name": "Cliente Demo",
@@ -26,8 +26,22 @@
       "discount_rate_basis_points": 0,
       "taxable_base_cents": 10000,
       "tax_rate_basis_points": 2100,
-      "tax_cents": 2100
+      "tax_cents": 2100,
+      "withholding_rate_basis_points": 0,
+      "withholding_cents": 0,
+      "price_pending": false
     }
   ],
-  "rectified_invoice": null
+  "rectified_invoice": null,
+  "withholding_cents": 0,
+  "company_address": "Calle Fiscal 1, 28001 Madrid",
+  "company_logo_path": null,
+  "customer_address": "Calle Cliente 2, 28002 Madrid",
+  "notes": "",
+  "is_recapitulative": false,
+  "due_date": null,
+  "paid_cents": 0,
+  "payment_status": "unpaid",
+  "recurring_label": null,
+  "recurring_period_key": null
 }

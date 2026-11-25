@@ -19,7 +19,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { evidenceDir, pathInfo, root, sha256, writeEvidence } from "./lib.mjs";
+import { cargoTargetDir, evidenceDir, pathInfo, root, sha256, writeEvidence } from "./lib.mjs";
 
 const TEST_ENDPOINTS = new Set(["SistemaVerifactuPruebas", "SistemaVerifactuSelloPruebas"]);
 
@@ -44,7 +44,7 @@ if (!TEST_ENDPOINTS.has(endpointName)) {
 }
 
 const exe = process.platform === "win32" ? ".exe" : "";
-const binary = resolve(root, `target/release/cumplefactura-sidecar${exe}`);
+const binary = resolve(cargoTargetDir(), `release/cumplefactura-sidecar${exe}`);
 if (!pathInfo(binary).is_file) {
   console.error(`Falta ${binary}. Ejecuta: cargo build -p cumplefactura-sidecar --release`);
   process.exit(2);

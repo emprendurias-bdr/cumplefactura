@@ -1,7 +1,7 @@
 ﻿# CumpleFactura - Regulatory test plan
 
 Fecha: 2026-06-04
-Fuente: C:\03 LEGISLACION\docs\estudios\ESTUDIO_VERIFACTU_RRSIF_CUMPLEFACTURA_2026-05-28.md
+Fuente: C:\03 LEGISLACION\legislacion_icac_revision\docs\estudios\ESTUDIO_VERIFACTU_RRSIF_CUMPLEFACTURA_2026-05-28.md
 
 ## Tests regulatorios minimos
 

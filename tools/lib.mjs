@@ -14,6 +14,15 @@ export const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 /** Carpeta donde el gate deja la evidencia `latest-*.json/md`. */
 export const evidenceDir = resolve(root, "tests/regulatory/evidence");
 
+/**
+ * Carpeta `target` de cargo: `CARGO_TARGET_DIR` (absoluta, o relativa a la raíz del repo,
+ * que es el cwd de los scripts npm y del gate) o `<repo>/target`.
+ */
+export function cargoTargetDir(env = process.env) {
+  const dir = env.CARGO_TARGET_DIR?.trim();
+  return dir ? resolve(root, dir) : resolve(root, "target");
+}
+
 /** SHA-256 hexadecimal de un texto o buffer. */
 export function sha256(data) {
   return createHash("sha256").update(data).digest("hex");

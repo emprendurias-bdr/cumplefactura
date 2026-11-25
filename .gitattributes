@@ -1,2 +1,10 @@
 # Fixtures comparados byte a byte en tests (include_str!): LF en todas las plataformas.
 src-tauri/src/services/testdata/*.xml text eol=lf
+
+# Binarios: sin conversión de fin de línea (el PDF de evidencia se detectaba como texto).
+*.pdf binary
+*.png binary
+*.ico binary
+*.woff2 binary
+*.sqlite binary
+*.zip binary

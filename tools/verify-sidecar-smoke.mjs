@@ -2,18 +2,18 @@
 // el handshake, la autenticación HMAC, que falla cerrado sin --allow-aeat y que termina
 // al cerrarse stdin. Nunca pasa --allow-aeat: no puede llamar a la AEAT.
 //
-// Binario: target/release/cumplefactura-sidecar[.exe] (o CUMPLEFACTURA_SIDECAR_PATH).
+// Binario: <CARGO_TARGET_DIR|target>/release/cumplefactura-sidecar[.exe] (o CUMPLEFACTURA_SIDECAR_PATH).
 import { spawn } from "node:child_process";
 import { createHmac, randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { pathInfo, root, sha256, writeEvidence } from "./lib.mjs";
+import { cargoTargetDir, pathInfo, root, sha256, writeEvidence } from "./lib.mjs";
 
 const exeSuffix = process.platform === "win32" ? ".exe" : "";
 const binary =
-  process.env.CUMPLEFACTURA_SIDECAR_PATH?.trim() || resolve(root, `target/release/cumplefactura-sidecar${exeSuffix}`);
+  process.env.CUMPLEFACTURA_SIDECAR_PATH?.trim() || resolve(cargoTargetDir(), `release/cumplefactura-sidecar${exeSuffix}`);
 const registro =
   '<sfLR:RegFactuSistemaFacturacion xmlns:sfLR="https://www2.agenciatributaria.gob.es/static_files/common/internet/dep/aplicaciones/es/aeat/tike/cont/ws/SuministroLR.xsd"/>';
 

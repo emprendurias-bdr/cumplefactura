@@ -28,7 +28,7 @@ export function timeOf(value?: string | null): string {
   return match ? match[1] : "";
 }
 
-/** Hoy en ISO civil del equipo (para formularios). */
+/** Hoy en ISO civil de España (Europe/Madrid), igual que Rust; ni UTC ni zona del equipo. */
 export function todayIso(now = new Date()): string {
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(now);
 }

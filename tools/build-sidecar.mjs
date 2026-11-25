@@ -6,7 +6,7 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { root } from "./lib.mjs";
+import { cargoTargetDir, root } from "./lib.mjs";
 
 const debug = process.argv.includes("--debug");
 const run = (command, args) => {
@@ -20,7 +20,7 @@ if (!triple) throw new Error("cannot read host target triple from rustc -vV");
 run("cargo", ["build", "-p", "cumplefactura-sidecar", ...(debug ? [] : ["--release"])]);
 
 const exe = process.platform === "win32" ? ".exe" : "";
-const source = resolve(root, "target", debug ? "debug" : "release", `cumplefactura-sidecar${exe}`);
+const source = resolve(cargoTargetDir(), debug ? "debug" : "release", `cumplefactura-sidecar${exe}`);
 const targetDir = resolve(root, "src-tauri", "binaries");
 const target = resolve(targetDir, `cumplefactura-sidecar-${triple}${exe}`);
 mkdirSync(targetDir, { recursive: true });

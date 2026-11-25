@@ -145,7 +145,7 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite; sidecar Rust `cumplefactura
 
 ## VERI*FACTU XML
 
-- Basado en XSD locales `SuministroLR VERI-FACTU.xsd` y `SuministroInformacion VERI-FACTU.xsd` de `C:\03 LEGISLACION\AEAT\FACTURACION Y SIF\05 DOCUMENTACION TECNICA AEAT\01 VERIFACTU`, copiados a `src-tauri/resources/xsd/verifactu/`.
+- Basado en XSD locales `SuministroLR VERI-FACTU.xsd` y `SuministroInformacion VERI-FACTU.xsd` de `C:\03 LEGISLACION\legislacion_icac_revision\AEAT\FACTURACION Y SIF\05 DOCUMENTACION TECNICA AEAT\01 VERIFACTU`, copiados a `src-tauri/resources/xsd/verifactu/`.
 - Alcance actual: `RegistroAlta` F1/F2/R1-R5, rectificativa incremental o sustitutiva `I/S`, IVA general, y `RegistroAnulacion` con `RegistroAnterior` tomado de la cadena fiscal.
 - Huella `RegistroAlta`: SHA-256 uppercase sobre campos oficiales AEAT (`IDEmisorFactura`, `NumSerieFactura`, `FechaExpedicionFactura`, `TipoFactura`, `CuotaTotal`, `ImporteTotal`, `Huella`, `FechaHoraHusoGenRegistro`).
 - Huella `RegistroAnulacion`: SHA-256 uppercase sobre campos oficiales AEAT (`IDEmisorFacturaAnulada`, `NumSerieFacturaAnulada`, `FechaExpedicionFacturaAnulada`, `Huella`, `FechaHoraHusoGenRegistro`).
@@ -170,10 +170,10 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite; sidecar Rust `cumplefactura
 
 ## Fuentes regulatorias locales
 
-- `C:\03 LEGISLACION\docs\estudios\ESTUDIO_VERIFACTU_RRSIF_CUMPLEFACTURA_2026-05-28.md`
-- `C:\03 LEGISLACION\AEAT\MATRIZ_TECNICA_CUMPLEFACTURA_2026-05-27.md`
-- `C:\03 LEGISLACION\AEAT\FACTURACION Y SIF\05 DOCUMENTACION TECNICA AEAT\01 VERIFACTU\Detalle especificaciones huella hash registros facturacion - AEAT.pdf`
-- `C:\03 LEGISLACION\FORAL\05 NAVARRA HTN\MAPA_PRESENTACION_HTN.md`
-- `C:\03 LEGISLACION\docs\estudios\MATRIZ_AI_ACT_APPS_2026-05-28.md`
+- `C:\03 LEGISLACION\legislacion_icac_revision\docs\estudios\ESTUDIO_VERIFACTU_RRSIF_CUMPLEFACTURA_2026-05-28.md`
+- `C:\03 LEGISLACION\legislacion_icac_revision\AEAT\MATRIZ_TECNICA_CUMPLEFACTURA_2026-05-27.md`
+- `C:\03 LEGISLACION\legislacion_icac_revision\AEAT\FACTURACION Y SIF\05 DOCUMENTACION TECNICA AEAT\01 VERIFACTU\Detalle especificaciones huella hash registros facturacion - AEAT.pdf`
+- `C:\03 LEGISLACION\legislacion_icac_revision\FORAL\05 NAVARRA HTN\MAPA_PRESENTACION_HTN.md`
+- `C:\03 LEGISLACION\legislacion_icac_revision\docs\estudios\MATRIZ_AI_ACT_APPS_2026-05-28.md`
 
 No usar este scaffold como garantia de cumplimiento. Es base tecnica para implementar y probar.

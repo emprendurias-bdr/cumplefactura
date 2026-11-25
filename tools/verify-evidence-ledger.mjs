@@ -65,27 +65,27 @@ for (const [index, row] of rows.entries()) {
 const normativeSources = [
   {
     id: "cumplefactura_technical_matrix",
-    path: "C:\\03 LEGISLACION\\AEAT\\MATRIZ_TECNICA_CUMPLEFACTURA_2026-05-27.md",
+    path: "C:\\03 LEGISLACION\\legislacion_icac_revision\\AEAT\\MATRIZ_TECNICA_CUMPLEFACTURA_2026-05-27.md",
   },
   {
     id: "verifactu_hash_detail_pdf",
-    path: "C:\\03 LEGISLACION\\AEAT\\FACTURACION Y SIF\\05 DOCUMENTACION TECNICA AEAT\\01 VERIFACTU\\Detalle especificaciones huella hash registros facturacion - AEAT.pdf",
+    path: "C:\\03 LEGISLACION\\legislacion_icac_revision\\AEAT\\FACTURACION Y SIF\\05 DOCUMENTACION TECNICA AEAT\\01 VERIFACTU\\Detalle especificaciones huella hash registros facturacion - AEAT.pdf",
   },
   {
     id: "verifactu_signature_pdf",
-    path: "C:\\03 LEGISLACION\\AEAT\\FACTURACION Y SIF\\05 DOCUMENTACION TECNICA AEAT\\01 VERIFACTU\\Especificaciones firma electronica registros facturacion - AEAT.pdf",
+    path: "C:\\03 LEGISLACION\\legislacion_icac_revision\\AEAT\\FACTURACION Y SIF\\05 DOCUMENTACION TECNICA AEAT\\01 VERIFACTU\\Especificaciones firma electronica registros facturacion - AEAT.pdf",
   },
   {
     id: "verifactu_wsdl",
-    path: "C:\\03 LEGISLACION\\AEAT\\FACTURACION Y SIF\\05 DOCUMENTACION TECNICA AEAT\\01 VERIFACTU\\SistemaFacturacion VERI-FACTU.wsdl",
+    path: "C:\\03 LEGISLACION\\legislacion_icac_revision\\AEAT\\FACTURACION Y SIF\\05 DOCUMENTACION TECNICA AEAT\\01 VERIFACTU\\SistemaFacturacion VERI-FACTU.wsdl",
   },
   {
     id: "verifactu_suministro_lr_xsd",
-    path: "C:\\03 LEGISLACION\\AEAT\\FACTURACION Y SIF\\05 DOCUMENTACION TECNICA AEAT\\01 VERIFACTU\\SuministroLR VERI-FACTU.xsd",
+    path: "C:\\03 LEGISLACION\\legislacion_icac_revision\\AEAT\\FACTURACION Y SIF\\05 DOCUMENTACION TECNICA AEAT\\01 VERIFACTU\\SuministroLR VERI-FACTU.xsd",
   },
   {
     id: "verifactu_suministro_informacion_xsd",
-    path: "C:\\03 LEGISLACION\\AEAT\\FACTURACION Y SIF\\05 DOCUMENTACION TECNICA AEAT\\01 VERIFACTU\\SuministroInformacion VERI-FACTU.xsd",
+    path: "C:\\03 LEGISLACION\\legislacion_icac_revision\\AEAT\\FACTURACION Y SIF\\05 DOCUMENTACION TECNICA AEAT\\01 VERIFACTU\\SuministroInformacion VERI-FACTU.xsd",
   },
 ];
 
@@ -233,7 +233,7 @@ const ledger = {
   rows: rows.length,
   rules: [
     "Every matrix row must keep promise, local source, executable evidence and live limit.",
-    "Critical local normative sources are hashed from C:\\03 LEGISLACION.",
+    "Critical local normative sources are hashed from C:\\03 LEGISLACION\\legislacion_icac_revision.",
     "Current or latest gate logs are hashed.",
     "Generated XML/PDF/JSON/PNG evidence artifacts are hashed.",
     "External acceptance manifests are represented by redacted hashes only and are hashed when present.",

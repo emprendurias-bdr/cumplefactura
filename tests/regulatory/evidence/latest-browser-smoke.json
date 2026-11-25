@@ -1,37 +1,37 @@
 {
   "app": "CumpleFactura",
-  "generated_at": "2026-06-28T19:21:18.272Z",
+  "generated_at": "2026-11-25T23:06:53.161Z",
   "status": "passed",
   "url": "http://127.0.0.1:1421",
   "viewport": "1366x900",
   "browser": "Playwright Chromium headless",
   "browser_plugin_note": "Repeatable npm gate uses Playwright because MCP Browser cannot be invoked from npm scripts.",
-  "flow": "app loads -> create company/customer/series -> edit invoice line with discount/IRPF -> draft -> issue -> export VERI*FACTU XML -> prepare signature/submission package",
+  "flow": "first run (company/series/folder) -> customer -> product to line with discount/IRPF and notes -> draft -> confirm issue -> notes in detail -> filters -> export VERI*FACTU XML -> session password -> sidecar preflight -> submit (mocked AEAT CSV) -> backup validate/restore -> quote to invoice draft -> recurring template -> recurring draft opened from list and issued -> payment (Cobrada) -> delivery notes without prices block issue until priced -> dark mode",
   "checks": {
     "page_identity": true,
     "not_blank": true,
     "framework_overlay_absent": true,
     "console_health": true,
     "interaction_proof": true,
+    "certificate_password_not_persisted": true,
     "visible_limits": {
       "initial": {
-        "noSignatureOrSend": true,
-        "fakeSidecar": true,
-        "externalBlocked": true,
-        "contaproImport": true
+        "noSend": true,
+        "gateNoAeat": true,
+        "externalBlocked": true
       },
       "final": {
         "noAeatCsv": true,
-        "fakeSidecar": true
+        "gateNoAeat": true
       }
     }
   },
-  "screenshot_path": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\browser-smoke-2026-06-28T19-21-03-586Z.png",
-  "latest_screenshot_path": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-browser-smoke.png",
-  "server_log_path": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\browser-smoke-vite-2026-06-28T19-21-03-586Z.log",
+  "screenshot_path": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\.worktrees\\g2\\tests\\regulatory\\evidence\\browser-smoke-2026-11-25T23-06-42-562Z.png",
+  "latest_screenshot_path": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\.worktrees\\g2\\tests\\regulatory\\evidence\\latest-browser-smoke.png",
+  "server_log_path": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\.worktrees\\g2\\tests\\regulatory\\evidence\\browser-smoke-vite-2026-11-25T23-06-42-562Z.log",
   "limits": [
     "Browser smoke uses a local Tauri invoke mock.",
     "It proves rendered UI workflow and visible limits only.",
-    "It does not prove Rust command execution, certificate-backed XAdES, SOAP AEAT transport or external acceptance."
+    "It does not prove Rust command execution, the sidecar process, mTLS AEAT transport or external acceptance."
   ]
 }

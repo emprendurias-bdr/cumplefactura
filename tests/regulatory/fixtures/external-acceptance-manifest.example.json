@@ -19,8 +19,8 @@
     }
   ],
   "source_normative_paths": [
-    "C:\\03 LEGISLACION\\AEAT\\FACTURACION Y SIF\\05 DOCUMENTACION TECNICA AEAT\\01 VERIFACTU\\SistemaFacturacion VERI-FACTU.wsdl",
-    "C:\\03 LEGISLACION\\AEAT\\MATRIZ_TECNICA_CUMPLEFACTURA_2026-05-27.md"
+    "C:\\03 LEGISLACION\\legislacion_icac_revision\\AEAT\\FACTURACION Y SIF\\05 DOCUMENTACION TECNICA AEAT\\01 VERIFACTU\\SistemaFacturacion VERI-FACTU.wsdl",
+    "C:\\03 LEGISLACION\\legislacion_icac_revision\\AEAT\\MATRIZ_TECNICA_CUMPLEFACTURA_2026-05-27.md"
   ],
   "redaction_note": "Template only. Replace hashes and paths with real redacted artifacts generated outside the gate."
 }

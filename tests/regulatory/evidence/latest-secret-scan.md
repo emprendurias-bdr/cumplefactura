@@ -1,8 +1,8 @@
 # CumpleFactura secret scan
 
-- Generated: 2026-06-28T19:21:22.439Z
+- Generated: 2026-11-25T23:06:53.940Z
 - Status: passed
-- Files scanned: 170
+- Files scanned: 330
 - Findings: 0
 
 ## Findings

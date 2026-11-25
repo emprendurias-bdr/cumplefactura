@@ -3,11 +3,11 @@ import { spawn } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { download as downloadEdgeDriver } from "edgedriver";
-import { commandExists, evidenceDir, pathInfo, root, windowsDriverCandidates, writeEvidence } from "./lib.mjs";
+import { cargoTargetDir, commandExists, evidenceDir, pathInfo, root, windowsDriverCandidates, writeEvidence } from "./lib.mjs";
 
 const windows = process.platform === "win32";
 // CUMPLEFACTURA_DESKTOP_APP permite probar otro build (por ejemplo target/debug).
-const releaseExe = process.env.CUMPLEFACTURA_DESKTOP_APP?.trim() || resolve(root, `target/release/cumplefactura${windows ? ".exe" : ""}`);
+const releaseExe = process.env.CUMPLEFACTURA_DESKTOP_APP?.trim() || resolve(cargoTargetDir(), `release/cumplefactura${windows ? ".exe" : ""}`);
 const realMode = ["1", "true", "yes", "on"].includes(
   (process.env.CUMPLEFACTURA_TAURI_DESKTOP_E2E_REAL ?? "").trim().toLowerCase(),
 );

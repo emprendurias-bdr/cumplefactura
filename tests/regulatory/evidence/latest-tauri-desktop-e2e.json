@@ -1,44 +1,26 @@
 {
   "app": "CumpleFactura",
-  "generated_at": "2026-06-28T19:23:08.962Z",
-  "status": "passed",
+  "generated_at": "2026-11-25T23:08:00.889Z",
+  "status": "failed",
   "mode": "real",
-  "release_exe": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\src-tauri\\target\\release\\cumplefactura.exe",
+  "release_exe": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\.worktrees\\_target\\release\\cumplefactura.exe",
   "checks": {
     "release_exe_exists": true,
     "tauri_driver_available": true,
-    "webdriver_available": true,
-    "webdriver_session_created": true,
-    "ui_text_detected": true,
-    "real_rust_commands_executed": true,
-    "verifactu_xml_exported": true,
-    "submission_prepared": true
+    "webdriver_available": true
   },
   "evidence": {
     "tauri_driver_paths": [
       "C:\\Users\\Usuario\\.cargo\\bin\\tauri-driver.exe"
     ],
-    "chromedriver_paths": [
-      "C:\\07 DESARROLLO\\apps\\CumpleFactura\\node_modules\\.bin\\chromedriver.cmd",
-      "C:\\07 DESARROLLO\\apps\\CumpleFactura\\node_modules\\chromedriver\\lib\\chromedriver\\chromedriver.exe"
-    ],
-    "msedgedriver_paths": [
+    "native_webdriver_paths": [
       "C:\\Users\\Usuario\\AppData\\Local\\Temp\\msedgedriver.exe"
     ]
   },
   "limits": [
-    "Real mode launches the release executable via tauri-driver and Microsoft Edge WebDriver.",
-    "It executes local UI events that call real Rust/Tauri commands for company, customer, draft, issue, VERI*FACTU XML export and local signature/submission preparation.",
-    "It performs no AEAT call and uses no secrets."
+    "Preflight mode proves release binary and driver prerequisites only.",
+    "Set CUMPLEFACTURA_TAURI_DESKTOP_E2E_REAL=1 to attempt a live Tauri WebDriver session.",
+    "This verifier performs no AEAT call and uses no secrets."
   ],
-  "driver_log_tail": "",
-  "completed_steps": [
-    "Guardar emisor",
-    "Guardar cliente",
-    "Crear borrador",
-    "Emitir factura",
-    "Exportar XML",
-    "Preparar"
-  ],
-  "screenshot_path": "C:\\07 DESARROLLO\\apps\\CumpleFactura\\tests\\regulatory\\evidence\\latest-tauri-desktop-e2e.png"
+  "error": "Timed out waiting for Empresa creada.. Body head: BDR.\nCumpleFactura\nPRIMER ARRANQUE\nPrepara CumpleFactura\nCuatro pasos y empiezas a facturar. Puedes cambiarlo todo después en Ajustes.\n✓ Empresa\n2 Fiscalidad\n3 Primera serie\n4 Certificado y carpeta\nFiscalidad\n\nPor defecto: territorio común y VERI*FACTU.\n\nTERRITORIO Y RÉGIMEN\nTerritorio común\nVERI*FACTU\nSII (no disponible todavía)\nAtrás\nSiguiente Body tail: BDR.\nCumpleFactura\nPRIMER ARRANQUE\nPrepara CumpleFactura\nCuatro pasos y empiezas a facturar. Puedes cambiarlo todo después en Ajustes.\n✓ Empresa\n2 Fiscalidad\n3 Primera serie\n4 Certificado y carpeta\nFiscalidad\n\nPor defecto: territorio común y VERI*FACTU.\n\nTERRITORIO Y RÉGIMEN\nTerritorio común\nVERI*FACTU\nSII (no disponible todavía)\nAtrás\nSiguiente"
 }

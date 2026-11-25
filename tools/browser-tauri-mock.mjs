@@ -72,7 +72,7 @@ export function installTauriMock(page, seed = null) {
     }
     const withBase = (lines) =>
       lines.map((line, index) => ({ id: `line-${index}`, ...line, price_pending: Boolean(line.price_pending) && !(line.unit_price_cents > 0), taxable_base_cents: totals([line]).taxable_base_cents }));
-    const today = () => new Date().toISOString().slice(0, 10);
+    const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(new Date()); // como Rust y la UI
 
     /* --- R2: cobros, ficha y resumen de factura --- */
     const paidOf = (target) =>

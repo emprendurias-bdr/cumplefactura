@@ -11,7 +11,6 @@ use super::*;
 use crate::domain::invoice::{InvoiceDraftInput, InvoiceKind, InvoiceLineInput};
 use crate::domain::tax::TerritoryFlag;
 use chrono::{Datelike, Months, NaiveDate, Utc};
-use sha2::{Digest, Sha256};
 
 const DATE_FORMAT: &str = "%Y-%m-%d";
 
@@ -211,31 +210,7 @@ fn audit_tx(
     action: &str,
     payload: &str,
 ) -> Result<(), String> {
-    let payload_hash = fiscal_contract::to_hex(&Sha256::digest(payload.as_bytes()));
-    let event = AuditEvent::operational(
-        entity_type,
-        entity_id,
-        action,
-        payload_hash,
-        latest_audit_hash(conn)?,
-    );
-    conn.execute(
-        "INSERT INTO audit_events (id, entity_type, entity_id, action, actor, occurred_at, payload_hash, previous_hash, hash)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        params![
-            event.id,
-            event.entity_type,
-            event.entity_id,
-            event.action,
-            event.actor,
-            event.occurred_at,
-            event.payload_hash,
-            event.previous_hash,
-            event.chain_hash(),
-        ],
-    )
-    .map(|_| ())
-    .map_err(db_error)
+    operational_audit(conn, entity_type, entity_id, action, payload)
 }
 
 fn template_json(item: &RecurringInvoice) -> Result<String, String> {
@@ -321,7 +296,7 @@ pub fn save_recurring(
     let mut item = validated(conn, input)?;
     let json = template_json(&item)?;
     let now = Utc::now().to_rfc3339();
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let action = if item.id.trim().is_empty() {
         item.id = uuid::Uuid::new_v4().to_string();
         tx.execute(
@@ -395,7 +370,7 @@ pub fn set_recurring_active(
     active: bool,
     today: NaiveDate,
 ) -> Result<RecurringInvoice, String> {
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let current = get_recurring(&tx, id)?;
     let mut next = parse_iso_date(&current.next_run_date, "next_run_date")?;
     if active && !current.active {
@@ -424,7 +399,7 @@ pub fn set_recurring_active(
 
 /// Borrado lógico: conserva `recurring_runs` y las facturas generadas.
 pub fn delete_recurring(conn: &mut Connection, id: &str) -> Result<(), String> {
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let changed = tx
         .execute(
             "UPDATE recurring_invoices SET deleted_at = ?2, active = 0, updated_at = ?2
@@ -459,7 +434,7 @@ pub fn generate_due_recurring(
         while run <= today && end.is_none_or(|end| run <= end) {
             let key = period_key(run, &item.frequency)?;
             let next = advance(run, &item.frequency)?;
-            let tx = conn.transaction().map_err(db_error)?;
+            let tx = write_tx(conn)?;
             let done = tx
                 .query_row(
                     "SELECT 1 FROM recurring_runs WHERE recurring_id = ?1 AND period_key = ?2",
@@ -755,7 +730,12 @@ mod tests {
             previous_audit_hash: None,
         })
         .expect("issue");
-        let event = AuditEvent::invoice_issued(issued.id.clone(), "t".into(), hash.clone(), None);
+        let event = AuditEvent::invoice_issued(
+            issued.id.clone(),
+            "t".into(),
+            hash.clone(),
+            latest_audit_hash(&conn).expect("head"),
+        );
         insert_issued_invoice_from_draft(&mut conn, &issued, &hash, None, &event, Some(draft_id))
             .expect("insert");
         let detail = get_invoice_detail(&conn, &issued.id).expect("issued detail");

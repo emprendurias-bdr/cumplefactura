@@ -24,7 +24,9 @@ pub fn app_settings_update(
             .map_err(|err| format!("cannot create export dir: {err}"))?;
     }
     let conn = state.lock()?;
-    let settings = db::update_app_settings(&conn, input)?;
-    db::audit_change(&conn, "app_settings", "app", "settings_updated", &settings)?;
+    let tx = db::write_tx(&conn)?;
+    let settings = db::update_app_settings(&tx, input)?;
+    db::audit_change(&tx, "app_settings", "app", "settings_updated", &settings)?;
+    tx.commit().map_err(|err| err.to_string())?;
     Ok(settings)
 }

@@ -191,13 +191,19 @@ pub fn invoice_export_pdf(
     let conn = state.lock()?;
     let invoice = db::invoice_pdf_data(&conn, &invoice_id)?;
     let qr_environment = QrEnvironment::parse(&db::get_app_settings(&conn)?.qr_environment)?;
-    pdf::write_invoice_pdf(&target_path, &invoice, qr_environment)?;
-    db::audit_change(
+    db::audited_file_export(
         &conn,
-        "invoice",
-        &invoice_id,
-        "pdf_exported",
-        &serde_json::json!({ "target_path": target_path }),
+        &target_path,
+        || pdf::write_invoice_pdf(&target_path, &invoice, qr_environment),
+        |tx, _| {
+            db::audit_change(
+                tx,
+                "invoice",
+                &invoice_id,
+                "pdf_exported",
+                &serde_json::json!({ "target_path": target_path }),
+            )
+        },
     )?;
     Ok(target_path)
 }

@@ -108,14 +108,23 @@ pub fn commercial_document_pdf(
     require("target_path", &target_path)?;
     let conn = state.lock()?;
     let data = db::commercial_document_pdf_data(&conn, &id)?;
-    let sha256 = pdf::write_commercial_document_pdf(&target_path, &data)
-        .map_err(|err| format!("io_error:{err}"))?;
-    db::audit_change(
+    let sha256 = db::audited_file_export(
         &conn,
-        "commercial_document",
-        &id,
-        "pdf_exported",
-        &serde_json::json!({ "target_path": target_path, "sha256": sha256 }),
+        &target_path,
+        || {
+            pdf::write_commercial_document_pdf(&target_path, &data)
+                .map_err(|err| format!("io_error:{err}"))
+        },
+        |tx, sha256| {
+            db::audit_change(
+                tx,
+                "commercial_document",
+                &id,
+                "pdf_exported",
+                &serde_json::json!({ "target_path": target_path, "sha256": sha256 }),
+            )?;
+            Ok(sha256)
+        },
     )?;
     Ok(CommercialDocumentPdf {
         target_path,
@@ -141,8 +150,6 @@ pub fn commercial_series_configure(
     input: CommercialSeriesConfigInput,
 ) -> Result<CommercialSeriesConfig, String> {
     let mut conn = state.lock()?;
-    let series = db::configure_commercial_series(&mut conn, input)?;
-    let id = format!("{}:{}", series.company_id, series.kind);
-    db::audit_change(&conn, "commercial_series", &id, "series_saved", &series)?;
-    Ok(series)
+    // La propia transacción de `configure_commercial_series` guarda el evento.
+    db::configure_commercial_series(&mut conn, input)
 }

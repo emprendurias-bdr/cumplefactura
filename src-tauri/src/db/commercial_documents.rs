@@ -153,7 +153,7 @@ pub fn save_commercial_draft(
     conn: &mut Connection,
     input: CommercialDocumentInput,
 ) -> Result<CommercialDocument, String> {
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let id = save_draft_tx(&tx, input, None)?;
     tx.commit().map_err(db_error)?;
     get_commercial_document(conn, &id)
@@ -255,7 +255,7 @@ pub fn list_commercial_documents(
 
 /// Solo los borradores se borran; después se anulan con motivo.
 pub fn delete_commercial_draft(conn: &mut Connection, id: &str) -> Result<(), String> {
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let doc = get_commercial_document(&tx, id)?;
     if doc.header.status != "draft" {
         return Err("not_draft".to_string());
@@ -297,7 +297,7 @@ pub fn set_commercial_status(
     to: &str,
     reason: Option<&str>,
 ) -> Result<CommercialDocument, String> {
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let doc = get_commercial_document(&tx, id)?;
     let from = doc.header.status.as_str();
     // `converted` e `invoiced` solo los ponen la conversión y la emisión.
@@ -379,7 +379,7 @@ pub fn derive_commercial_document(
         notes: source.header.notes.clone(),
         lines: source.lines,
     };
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let new_id = save_draft_tx(&tx, input, Some(id))?;
     tx.commit().map_err(db_error)?;
     get_commercial_document(conn, &new_id)
@@ -394,7 +394,7 @@ pub fn commercial_documents_to_invoice_draft(
     if ids.is_empty() || unique.len() != ids.len() {
         return Err("validation_error:ids".to_string());
     }
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let docs = ids
         .iter()
         .map(|id| get_commercial_document(&tx, id))
@@ -657,7 +657,7 @@ pub fn configure_commercial_series(
     if !(1..=10).contains(&padding) {
         return Err("validation_error:padding".to_string());
     }
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     tx.execute(
         "INSERT INTO commercial_series_configs (company_id, kind, series_code, padding, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5)
@@ -921,30 +921,13 @@ fn audit(
     action: &str,
     payload: serde_json::Value,
 ) -> Result<(), String> {
-    let event = AuditEvent::operational(
+    operational_audit(
+        conn,
         "commercial_document",
         id,
         action,
-        fiscal_contract::sha256_hex(payload.to_string().as_bytes()),
-        latest_audit_hash(conn)?,
-    );
-    conn.execute(
-        "INSERT INTO audit_events (id, entity_type, entity_id, action, actor, occurred_at, payload_hash, previous_hash, hash)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        params![
-            event.id,
-            event.entity_type,
-            event.entity_id,
-            event.action,
-            event.actor,
-            event.occurred_at,
-            event.payload_hash,
-            event.previous_hash,
-            event.chain_hash(),
-        ],
+        &payload.to_string(),
     )
-    .map(|_| ())
-    .map_err(db_error)
 }
 
 fn summary_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CommercialDocumentSummary> {

@@ -1373,3 +1373,127 @@ fn collect_all_pages_reads_past_one_page() {
     .unwrap();
     assert_eq!(all, rows);
 }
+
+/// Hace fallar toda inserción en `audit_events` (simula un fallo al escribir el evento).
+fn block_audit_inserts(conn: &Connection) {
+    conn.execute_batch(
+        "CREATE TRIGGER test_block_audit BEFORE INSERT ON audit_events
+         BEGIN SELECT RAISE(ABORT, 'audit blocked'); END;",
+    )
+    .expect("block audit");
+}
+
+fn count(conn: &Connection, table: &str) -> i64 {
+    conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+        row.get(0)
+    })
+    .expect("count")
+}
+
+#[test]
+fn change_is_not_saved_when_its_audit_event_fails() {
+    let mut conn = memory_conn();
+    // Fuera de una transacción el evento se rechaza: cambio y evento van siempre juntos.
+    assert_eq!(
+        audit_change(&conn, "company", "c1", "company_created", &"x").unwrap_err(),
+        "audit_requires_transaction"
+    );
+    block_audit_inserts(&conn);
+
+    // Patrón de los comandos de datos maestros (`company_create`).
+    let company = company();
+    {
+        let tx = write_tx(&conn).expect("tx");
+        insert_company(&tx, &company).expect("company insert");
+        assert!(audit_change(&tx, "company", &company.id, "company_created", &company).is_err());
+    }
+    assert_eq!(count(&conn, "companies"), 0);
+
+    // Funciones que abren su propia transacción (`company_series_configure`).
+    conn.execute_batch("DROP TRIGGER test_block_audit;")
+        .expect("unblock");
+    {
+        let tx = write_tx(&conn).expect("tx");
+        insert_company(&tx, &company).expect("company insert");
+        audit_change(&tx, "company", &company.id, "company_created", &company).expect("audit");
+        tx.commit().expect("commit");
+    }
+    block_audit_inserts(&conn);
+    let saved = upsert_invoice_series_config(
+        &mut conn,
+        InvoiceSeriesConfigInput {
+            company_id: company.id.clone(),
+            label: "Serie".to_string(),
+            series_code: "B".to_string(),
+            fiscal_year: 2026,
+            include_year: true,
+            separator: "-".to_string(),
+            padding: 2,
+            next_number: 1,
+            is_default: false,
+        },
+    );
+    assert!(saved.is_err());
+    assert_eq!(count(&conn, "invoice_series_configs"), 0);
+}
+
+#[test]
+fn two_instances_on_the_same_file_cannot_fork_the_audit_chain() {
+    let dir = std::env::temp_dir().join(format!("cf-audit-lock-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(&dir).expect("dir");
+    let path = dir.join("db.sqlite3");
+    let first = open_database(&path).expect("first");
+    let second = open_database(&path).expect("second");
+    second
+        .busy_timeout(std::time::Duration::ZERO)
+        .expect("busy timeout");
+
+    // Evento preparado en la segunda instancia antes de que escriba la primera.
+    let stale = AuditEvent::operational(
+        "company",
+        "c2",
+        "company_created",
+        "h2".into(),
+        latest_audit_hash(&second).expect("head"),
+    );
+    {
+        let tx = write_tx(&first).expect("first tx");
+        // Mientras la primera tiene la transacción, la segunda no puede ni empezar la suya.
+        assert!(write_tx(&second).is_err());
+        audit_change(&tx, "company", "c1", "company_created", &"c1").expect("first event");
+        tx.commit().expect("commit");
+    }
+    let tx = write_tx(&second).expect("second tx");
+    assert!(insert_audit_event(&tx, &stale)
+        .unwrap_err()
+        .starts_with("audit_chain_moved"));
+    audit_change(&tx, "company", "c2", "company_created", &"c2").expect("second event");
+    tx.commit().expect("commit");
+
+    let chain = crate::services::fiscal_chain::verify(&first).expect("verify");
+    assert!(chain.valid, "{:?}", chain.issues);
+    assert_eq!(chain.audit_total_events, 2);
+    drop((first, second));
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn export_file_is_removed_when_its_event_is_not_recorded() {
+    let conn = memory_conn();
+    let path = std::env::temp_dir().join(format!("cf-export-{}.json", uuid::Uuid::new_v4()));
+    let target = path.to_str().expect("utf8").to_string();
+    let write = || fs::write(&path, "{}").map_err(|err| err.to_string());
+    let record = |tx: &Connection, ()| audit_change(tx, "export", "e1", "json_exported", &"e1");
+
+    audited_file_export(&conn, &target, write, record).expect("export");
+    assert!(path.exists());
+    assert_eq!(count(&conn, "audit_events"), 1);
+
+    block_audit_inserts(&conn);
+    assert!(audited_file_export(&conn, &target, write, record).is_err());
+    assert!(
+        !path.exists(),
+        "no debe quedar fichero exportado sin evento"
+    );
+    assert_eq!(count(&conn, "audit_events"), 1);
+}

@@ -57,7 +57,7 @@
         <sf:NIF>B00000000</sf:NIF>
         <sf:NombreSistemaInformatico>CumpleFactura</sf:NombreSistemaInformatico>
         <sf:IdSistemaInformatico>CF</sf:IdSistemaInformatico>
-        <sf:Version>0.1.0</sf:Version>
+        <sf:Version>1.0.0-rc.1</sf:Version>
         <sf:NumeroInstalacion>LOCAL-B00000000</sf:NumeroInstalacion>
         <sf:TipoUsoPosibleSoloVerifactu>N</sf:TipoUsoPosibleSoloVerifactu>
         <sf:TipoUsoPosibleMultiOT>S</sf:TipoUsoPosibleMultiOT>

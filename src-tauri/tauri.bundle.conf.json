@@ -5,6 +5,20 @@
   },
   "bundle": {
     "active": true,
-    "externalBin": ["binaries/cumplefactura-sidecar"]
+    "externalBin": [
+      "binaries/cumplefactura-sidecar"
+    ],
+    "targets": [
+      "nsis"
+    ],
+    "windows": {
+      "nsis": {
+        "languages": [
+          "Spanish"
+        ],
+        "displayLanguageSelector": false,
+        "installMode": "currentUser"
+      }
+    }
   }
 }

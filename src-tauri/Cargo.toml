@@ -1,6 +1,6 @@
 [package]
 name = "cumplefactura"
-version = "0.1.0"
+version.workspace = true
 description = "Desktop local-first invoicing app for Spanish fiscal compliance."
 authors = ["CumpleFactura"]
 edition.workspace = true

@@ -1,8 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "CumpleFactura",
-  "version": "0.1.0",
-  "identifier": "com.local.cumplefactura",
+  "identifier": "es.saizaragon.cumplefactura",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -29,6 +28,8 @@
     "resources": {
       "../tools/validate-verifactu-xsd.ps1": "tools/validate-verifactu-xsd.ps1",
       "resources/xsd/verifactu": "xsd/verifactu"
-    }
+    },
+    "publisher": "VENDINGSAIZARAGON, S.L.",
+    "shortDescription": "Facturación local-first con VERI*FACTU"
   }
 }

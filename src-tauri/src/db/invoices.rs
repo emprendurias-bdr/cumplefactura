@@ -8,7 +8,7 @@ use super::*;
 use crate::domain::invoice::InvoiceDraftInput;
 
 pub fn insert_invoice_draft(conn: &mut Connection, invoice: &Invoice) -> Result<(), String> {
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     insert_invoice(&tx, invoice, None)?;
     tx.commit().map_err(db_error)
 }
@@ -43,8 +43,7 @@ pub fn insert_issued_invoice_from_draft(
     audit_event: &AuditEvent,
     draft_id: Option<&str>,
 ) -> Result<(), String> {
-    let audit_hash = audit_event.chain_hash();
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     if let Some(source_invoice_id) = &invoice.rectifies_invoice_id {
         let updated = tx
             .execute(
@@ -76,22 +75,7 @@ pub fn insert_issued_invoice_from_draft(
             created_at: chrono::Utc::now().to_rfc3339(),
         },
     )?;
-    tx.execute(
-        "INSERT INTO audit_events (id, entity_type, entity_id, action, actor, occurred_at, payload_hash, previous_hash, hash)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        params![
-            audit_event.id,
-            audit_event.entity_type,
-            audit_event.entity_id,
-            audit_event.action,
-            audit_event.actor,
-            audit_event.occurred_at,
-            audit_event.payload_hash,
-            audit_event.previous_hash,
-            audit_hash,
-        ],
-    )
-    .map_err(db_error)?;
+    insert_audit_event(&tx, audit_event)?;
     if let Some(draft_id) = draft_id {
         consume_draft(&tx, draft_id, invoice)?;
     }
@@ -185,7 +169,7 @@ pub fn update_invoice_draft(
     draft_id: &str,
     input: InvoiceDraftInput,
 ) -> Result<Invoice, String> {
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let (status, company_id, created_at): (String, String, String) = tx
         .query_row(
             "SELECT status, company_id, created_at FROM invoices WHERE id = ?1",
@@ -299,7 +283,7 @@ pub fn reserve_invoice_number(
     if series.trim().is_empty() {
         return Err("series is required".to_string());
     }
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let next = reserve_invoice_number_tx(&tx, company_id, fiscal_year, series)?;
     tx.commit().map_err(db_error)?;
     Ok(next)

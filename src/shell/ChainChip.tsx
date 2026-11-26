@@ -5,14 +5,14 @@
  */
 import { href } from "../lib/routes";
 import type { FiscalChainVerification } from "../types";
-import { chainStatus } from "../ui/status";
+import { chainSize, chainStatus } from "../ui/status";
 import { StatusChip } from "../ui/StatusChip";
 import { t } from "../i18n/es";
 
 export function ChainChip({ chain }: { chain: FiscalChainVerification | null }) {
   return (
     <a className="cf-chainchip" href={href({ section: "verifactu" })} title={t("cadena.ayuda")}>
-      <StatusChip status={chainStatus(chain?.valid, chain?.total_records)} detail={chain && !chain.valid ? chain.issue_count : undefined} />
+      <StatusChip status={chainStatus(chain?.valid, chainSize(chain))} detail={chain && !chain.valid ? chain.issue_count : undefined} />
     </a>
   );
 }

@@ -54,6 +54,9 @@ export const documentStatus = (status: string) => DOCUMENT[status] ?? UNKNOWN;
 export const recordType = (type: string) =>
   type.toLowerCase() === "alta" ? s("info", "estado.alta") : s("neu", "estado.anulacion");
 /** Sin verificación → «Sin comprobar»; sin registros → «Sin registros»: nunca ok sin evidencia. */
+/** Registros fiscales + eventos de auditoría verificados (ambas cadenas cuentan para «sin registros»). */
+export const chainSize = (chain: { total_records: number; audit_total_events: number } | null | undefined) =>
+  chain ? chain.total_records + chain.audit_total_events : undefined;
 export const chainStatus = (valid: boolean | null | undefined, records?: number) =>
   valid == null
     ? s("neu", "estado.sinComprobar")

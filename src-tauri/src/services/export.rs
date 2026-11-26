@@ -184,6 +184,7 @@ mod tests {
         let chain = FiscalChainVerification {
             valid: true,
             total_records: 0,
+            audit_total_events: 0,
             issue_count: 0,
             last_hash_by_company: vec![],
             issues: vec![],

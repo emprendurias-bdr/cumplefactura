@@ -177,6 +177,8 @@ type FiscalCompanyChainHead = {
 export type FiscalChainVerification = {
   valid: boolean;
   total_records: number;
+  /** Eventos de `audit_events` verificados; sus incidencias llevan código `AUDIT_*`. */
+  audit_total_events: number;
   issue_count: number;
   last_hash_by_company: FiscalCompanyChainHead[];
   issues: FiscalChainIssue[];

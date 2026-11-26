@@ -15,7 +15,7 @@ import { Card } from "../ui/Card";
 import { DataTable } from "../ui/DataTable";
 import { Field, Select } from "../ui/Field";
 import { Accent, Hero } from "../ui/Hero";
-import { chainStatus, expiryStatus, preflightStatus, recordType, submissionStatus } from "../ui/status";
+import { chainSize, chainStatus, expiryStatus, preflightStatus, recordType, submissionStatus } from "../ui/status";
 import { StatusChip } from "../ui/StatusChip";
 import { Stepper } from "../ui/Stepper";
 import type { VerifactuSubmissionSummary } from "../types";
@@ -50,7 +50,7 @@ export function VerifactuSection(c: Ctx) {
             {t("vf.estado")} <Accent>{t("vf.fiscal")}</Accent>
           </>
         }
-        chip={<StatusChip status={chainStatus(m.fiscalChain?.valid, m.fiscalChain?.total_records)} />}
+        chip={<StatusChip status={chainStatus(m.fiscalChain?.valid, chainSize(m.fiscalChain))} />}
         secondary={<Button icon="refresh" onClick={() => void m.verifyFiscalChain()}>{t("vf.comprobarIntegridad")}</Button>}
       />
       <Callout tone="info" title={t("vf.avisoTitulo")}>{t("vf.aviso")}</Callout>

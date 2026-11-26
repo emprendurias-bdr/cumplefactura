@@ -10,7 +10,7 @@ use crate::db::{
     PreviousInvoiceLink, VerifactuSubmissionSummary,
 };
 use crate::domain::require;
-use crate::services::audit::AuditEvent;
+use crate::services::audit::{self, AuditEvent};
 use crate::services::export;
 use crate::services::fiscal_chain::{self, FiscalChainVerification};
 use crate::services::rectification_advisor::{self, RectificationAdvice, RectificationAdviceInput};
@@ -89,7 +89,17 @@ pub fn backup_export(
     require("target_path", &target_path)?;
 
     let conn = state.lock()?;
-    db::backup_database(&conn, &target_path)?;
+    db::audited_file_export(
+        &conn,
+        &target_path,
+        || db::backup_database(&conn, &target_path),
+        |tx, ()| {
+            // La copia se identifica por su SHA-256, no por la ruta (dato personal).
+            let entity_id = file_sha256(&target_path)?;
+            let payload = serde_json::json!({ "target_path": target_path });
+            db::audit_change(tx, "backup", &entity_id, "backup_exported", &payload)
+        },
+    )?;
 
     Ok(BackupResult {
         target_path,
@@ -121,8 +131,29 @@ pub fn backup_restore(
             ],
         });
     }
+    // El evento identifica la copia por su SHA-256, no por la ruta (dato personal).
+    let source_sha256 = file_sha256(&source_path)?;
     let mut conn = state.lock()?;
     let outcome = db::restore_database(&mut conn, Path::new(&source_path))?;
+    // Restauración de copia (TipoEvento 07 de EventosSIF), en la base que queda activa.
+    let action = if outcome.status == "restored" {
+        "backup_restored"
+    } else {
+        "backup_restore_rolled_back"
+    };
+    let payload = serde_json::json!({
+        "source_path": source_path,
+        "safety_backup_path": outcome.safety_backup_path,
+        "chain_ok": outcome.chain_ok,
+    });
+    // Sin evento la restauración no queda registrada: el fallo llega a la interfaz con el
+    // estado y la copia previa, para poder volver atrás.
+    record_restore_event(&conn, &source_sha256, action, &payload).map_err(|err| {
+        format!(
+            "restore_audit_failed: {err}; estado {}; copia previa en {}",
+            outcome.status, outcome.safety_backup_path
+        )
+    })?;
     Ok(BackupRestoreResult {
         source_path,
         status: outcome.status.to_string(),
@@ -143,7 +174,15 @@ pub fn invoice_export_json(
     require("target_path", &target_path)?;
     let conn = state.lock()?;
     let invoice = db::invoice_pdf_data(&conn, &invoice_id)?;
-    export::write_invoice_json(&target_path, &invoice)?;
+    db::audited_file_export(
+        &conn,
+        &target_path,
+        || export::write_invoice_json(&target_path, &invoice),
+        |tx, ()| {
+            let payload = serde_json::json!({ "target_path": target_path });
+            db::audit_change(tx, "invoice", &invoice_id, "json_exported", &payload)
+        },
+    )?;
     Ok(ExportResult {
         target_path,
         status: "created".to_string(),
@@ -162,7 +201,16 @@ pub fn invoice_export_csv(
     let conn = state.lock()?;
     let filtered = filters.is_some();
     let invoices = db::list_invoices_filtered(&conn, filters.unwrap_or_default())?;
-    export::write_invoice_csv(&target_path, &invoices)?;
+    db::audited_file_export(
+        &conn,
+        &target_path,
+        || export::write_invoice_csv(&target_path, &invoices),
+        |tx, ()| {
+            let payload =
+                serde_json::json!({ "target_path": target_path, "invoices": invoices.len() });
+            db::audit_change(tx, "export", &target_path, "csv_exported", &payload)
+        },
+    )?;
     Ok(ExportResult {
         target_path,
         status: "created".to_string(),
@@ -188,12 +236,29 @@ pub fn fiscal_audit_export(
     let invoices = db::list_invoices_filtered(&conn, filters.unwrap_or_default())?;
     let (audit_events, fiscal_records) = audit_rows_for(&conn, &invoices, filtered)?;
     let note = filters_note(filtered, invoices.len());
-    export::write_fiscal_audit_json(
+    let verification = fiscal_chain::verify(&conn)?;
+    db::audited_file_export(
+        &conn,
         &target_path,
-        invoices,
-        audit_events,
-        fiscal_records,
-        fiscal_chain::verify(&conn)?,
+        || {
+            export::write_fiscal_audit_json(
+                &target_path,
+                invoices,
+                audit_events,
+                fiscal_records,
+                verification,
+            )
+        },
+        |tx, ()| {
+            let payload = serde_json::json!({ "target_path": target_path, "filtered": filtered });
+            db::audit_change(
+                tx,
+                "export",
+                &target_path,
+                "fiscal_audit_exported",
+                &payload,
+            )
+        },
     )?;
     Ok(ExportResult {
         target_path,
@@ -249,17 +314,27 @@ pub fn verifactu_xml_draft_export(
     };
     let has_previous = previous.is_some();
     let assets = resolve_verifactu_xsd_assets(&app)?;
-    verifactu::write_verifactu_xml_draft_validated(
-        &target_path,
-        &invoice,
-        previous.as_ref(),
-        &assets,
-    )?;
-    let export = verifactu_submit::record_xml_export(
+    let export = db::audited_file_export(
         &conn,
-        &invoice_id,
         &target_path,
-        verifactu_submit::PAYLOAD_VERSION,
+        || {
+            verifactu::write_verifactu_xml_draft_validated(
+                &target_path,
+                &invoice,
+                previous.as_ref(),
+                &assets,
+            )
+        },
+        |tx, _| {
+            let export = verifactu_submit::record_xml_export(
+                tx,
+                &invoice_id,
+                &target_path,
+                verifactu_submit::PAYLOAD_VERSION,
+            )?;
+            db::audit_change(tx, "invoice", &invoice_id, "xml_exported", &export)?;
+            Ok(export)
+        },
     )?;
 
     Ok(VerifactuXmlResult {
@@ -297,7 +372,7 @@ pub fn verifactu_xml_anulacion_draft_export(
         return Err("reason_required".to_string());
     }
 
-    let mut conn = state.lock()?;
+    let conn = state.lock()?;
     let invoice = db::invoice_pdf_data(&conn, &invoice_id)?;
     // Desde «Anulación rechazada» se reintenta con un registro nuevo (decisión 12.1).
     if invoice.status != "Issued" && invoice.status != db::VOID_REJECTED {
@@ -332,39 +407,47 @@ pub fn verifactu_xml_anulacion_draft_export(
         &generated_at,
     )?;
     let assets = resolve_verifactu_xsd_assets(&app)?;
-    verifactu::write_verifactu_anulacion_xml_draft_validated(
-        &target_path,
-        &invoice,
-        &previous,
-        &generated_at,
-        flags,
-        &assets,
-    )?;
     let previous_audit_hash = db::latest_audit_hash(&conn)?;
     let audit_event = AuditEvent::invoice_voided(
         invoice.id.clone(),
-        "local-user".to_string(),
+        audit::system_actor(),
         cancellation_hash.clone(),
         previous_audit_hash,
     );
-    if let Err(err) = db::insert_anulacion_record(
-        &mut conn,
-        &invoice_id,
-        &cancellation_hash,
-        Some(&previous.fiscal_hash),
-        &generated_at,
-        &target_path,
-        &audit_event,
-        &reason,
-    ) {
-        let _ = fs::remove_file(&target_path);
-        return Err(err);
-    }
-    let export = verifactu_submit::record_xml_export(
+    // Registro de anulación, exportación del XML y sus eventos: una sola transacción.
+    let export = db::audited_file_export(
         &conn,
-        &invoice_id,
         &target_path,
-        db::ANULACION_PAYLOAD_VERSION,
+        || {
+            verifactu::write_verifactu_anulacion_xml_draft_validated(
+                &target_path,
+                &invoice,
+                &previous,
+                &generated_at,
+                flags,
+                &assets,
+            )
+        },
+        |tx, _| {
+            db::insert_anulacion_record_tx(
+                tx,
+                &invoice_id,
+                &cancellation_hash,
+                Some(&previous.fiscal_hash),
+                &generated_at,
+                &target_path,
+                &audit_event,
+                &reason,
+            )?;
+            let export = verifactu_submit::record_xml_export(
+                tx,
+                &invoice_id,
+                &target_path,
+                db::ANULACION_PAYLOAD_VERSION,
+            )?;
+            db::audit_change(tx, "invoice", &invoice_id, "xml_exported", &export)?;
+            Ok(export)
+        },
     )?;
 
     let mut notes = vec![
@@ -611,4 +694,54 @@ fn invoice_self_link(invoice: &db::InvoicePdfData) -> Result<PreviousInvoiceLink
         issued_at,
         fiscal_hash,
     })
+}
+
+/// Evento de restauración de copia (TipoEvento 07 de EventosSIF) en la base activa.
+fn record_restore_event(
+    conn: &rusqlite::Connection,
+    source_sha256: &str,
+    action: &str,
+    payload: &serde_json::Value,
+) -> Result<(), String> {
+    let tx = db::write_tx(conn)?;
+    db::audit_change(&tx, "backup", source_sha256, action, payload)?;
+    tx.commit().map_err(|err| err.to_string())
+}
+
+/// SHA-256 (hex) del fichero en `path`, sin cargarlo entero en memoria.
+fn file_sha256(path: &str) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let mut file = fs::File::open(path).map_err(|err| format!("file read error: {err}"))?;
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut file, &mut hasher).map_err(|err| format!("file read error: {err}"))?;
+    Ok(fiscal_contract::to_hex(&hasher.finalize()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backup_events_use_file_sha256_not_the_path() {
+        let path = std::env::temp_dir().join(format!("cf-copia-{}.sqlite3", uuid::Uuid::new_v4()));
+        fs::write(&path, b"copia").expect("write");
+        let id = file_sha256(path.to_str().expect("utf8")).expect("sha");
+        let _ = fs::remove_file(&path);
+        assert_eq!(id, fiscal_contract::sha256_hex(b"copia"));
+        assert!(!id.contains("cf-copia"));
+    }
+
+    #[test]
+    fn restore_event_failure_is_returned_not_swallowed() {
+        let conn = db::test_conn();
+        let payload = serde_json::json!({ "chain_ok": true });
+        record_restore_event(&conn, "ab12", "backup_restored", &payload).expect("recorded");
+        conn.execute_batch(
+            "CREATE TRIGGER test_block_audit BEFORE INSERT ON audit_events
+             BEGIN SELECT RAISE(ABORT, 'audit blocked'); END;",
+        )
+        .expect("block audit");
+        let err = record_restore_event(&conn, "ab12", "backup_restored", &payload).unwrap_err();
+        assert!(err.contains("audit blocked"), "{err}");
+    }
 }

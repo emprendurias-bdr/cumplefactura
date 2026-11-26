@@ -27,7 +27,7 @@ use crate::domain::invoice::{Invoice, InvoiceLine};
 use crate::domain::product::Product;
 use crate::domain::settings::{AppSettings, AppSettingsInput};
 use crate::services::audit::AuditEvent;
-use rusqlite::{params, Connection, OptionalExtension, Transaction};
+use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs;
@@ -56,6 +56,13 @@ pub use payments::*;
 pub use products::*;
 pub use recurring::*;
 pub use settings::*;
+
+/// Transacción de escritura `IMMEDIATE`: toma el bloqueo de escritura al empezar, así
+/// leer el último hash de auditoría e insertar el evento no se cruza con otra instancia
+/// de la app sobre la misma base. El cambio auditado y su evento van siempre en una.
+pub fn write_tx(conn: &Connection) -> Result<Transaction<'_>, String> {
+    Transaction::new_unchecked(conn, TransactionBehavior::Immediate).map_err(db_error)
+}
 
 pub struct AppState {
     pub conn: Mutex<Connection>,

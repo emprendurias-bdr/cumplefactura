@@ -20,8 +20,36 @@ pub const ANULACION_PAYLOAD_VERSION: &str = "verifactu-anulacion-xml-v1";
 /// Solo pasa a `Void` cuando la AEAT acepta el envío (`record_verifactu_submission`).
 // Un argumento por dato del registro de anulación; agruparlos solo movería el problema.
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 pub fn insert_anulacion_record(
     conn: &mut Connection,
+    invoice_id: &str,
+    fiscal_hash: &str,
+    previous_fiscal_hash: Option<&str>,
+    generated_at: &str,
+    xml_path: &str,
+    audit_event: &AuditEvent,
+    reason: &str,
+) -> Result<(), String> {
+    let tx = write_tx(conn)?;
+    insert_anulacion_record_tx(
+        &tx,
+        invoice_id,
+        fiscal_hash,
+        previous_fiscal_hash,
+        generated_at,
+        xml_path,
+        audit_event,
+        reason,
+    )?;
+    tx.commit().map_err(db_error)
+}
+
+/// `insert_anulacion_record` dentro de una transacción ya abierta (`write_tx`), para
+/// confirmar en ella también la exportación del XML y su evento.
+#[allow(clippy::too_many_arguments)]
+pub fn insert_anulacion_record_tx(
+    tx: &Connection,
     invoice_id: &str,
     fiscal_hash: &str,
     previous_fiscal_hash: Option<&str>,
@@ -34,8 +62,6 @@ pub fn insert_anulacion_record(
     if reason.is_empty() {
         return Err("reason_required".to_string());
     }
-    let audit_hash = audit_event.chain_hash();
-    let tx = conn.transaction().map_err(db_error)?;
     let company_id: String = tx
         .query_row(
             "SELECT company_id FROM invoices WHERE id = ?1",
@@ -61,7 +87,7 @@ pub fn insert_anulacion_record(
     })?;
 
     insert_fiscal_record_tx(
-        &tx,
+        tx,
         &FiscalRecordInput {
             id: uuid::Uuid::new_v4().to_string(),
             company_id,
@@ -76,31 +102,81 @@ pub fn insert_anulacion_record(
         },
     )?;
 
-    tx.execute(
-        "INSERT INTO audit_events (id, entity_type, entity_id, action, actor, occurred_at, payload_hash, previous_hash, hash)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        params![
-            audit_event.id,
-            audit_event.entity_type,
-            audit_event.entity_id,
-            audit_event.action,
-            audit_event.actor,
-            audit_event.occurred_at,
-            audit_event.payload_hash,
-            audit_event.previous_hash,
-            audit_hash,
-        ],
-    )
-    .map_err(db_error)?;
+    insert_audit_event(tx, audit_event)?;
     // El motivo va en un evento propio, encadenado detrás: `invoice_voided` no cambia.
     let payload = serde_json::json!({ "reason": reason }).to_string();
-    operational_audit(&tx, "invoice", invoice_id, "invoice_void_reason", &payload)?;
-    tx.commit().map_err(db_error)
+    operational_audit(tx, "invoice", invoice_id, "invoice_void_reason", &payload)
+}
+
+/// Evento de auditoría de un cambio o exportación; se guarda el hash de `value` serializado.
+pub fn audit_change(
+    conn: &Connection,
+    entity_type: &str,
+    entity_id: &str,
+    action: &str,
+    value: &impl Serialize,
+) -> Result<(), String> {
+    let payload = serde_json::to_string(value).map_err(|err| format!("audit_payload: {err}"))?;
+    operational_audit(conn, entity_type, entity_id, action, &payload)
+}
+
+/// Exportación auditada: escribe el fichero y, en una sola transacción, lo que haga
+/// `record` (registro de la exportación y su evento). Si la transacción no se confirma,
+/// borra el fichero recién escrito: no queda un fichero exportado sin su evento.
+// shortcut: si la app muere entre escribir y confirmar queda el fichero sin evento; escribir a temporal y renombrar tras el commit si hiciera falta cubrirlo.
+pub fn audited_file_export<W, T>(
+    conn: &Connection,
+    target_path: &str,
+    write: impl FnOnce() -> Result<W, String>,
+    record: impl FnOnce(&Connection, W) -> Result<T, String>,
+) -> Result<T, String> {
+    let written = write()?;
+    let recorded = write_tx(conn).and_then(|tx| {
+        let value = record(&tx, written)?;
+        tx.commit().map_err(db_error)?;
+        Ok(value)
+    });
+    if recorded.is_err() {
+        let _ = fs::remove_file(target_path);
+    }
+    recorded
+}
+
+/// Eventos de auditoría en orden de cadena (el de `latest_audit_hash`) con su hash guardado.
+/// La cadena sigue el orden de inserción (`rowid`), no `occurred_at`: si el reloj del
+/// equipo retrocede, el orden no cambia. `VACUUM INTO` (copias) conserva ese orden.
+pub fn list_audit_events_for_verification(
+    conn: &Connection,
+) -> Result<Vec<(AuditEvent, String)>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, entity_type, entity_id, action, actor, occurred_at, payload_hash, previous_hash, hash
+             FROM audit_events ORDER BY rowid ASC",
+        )
+        .map_err(db_error)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                AuditEvent {
+                    id: row.get(0)?,
+                    entity_type: row.get(1)?,
+                    entity_id: row.get(2)?,
+                    action: row.get(3)?,
+                    actor: row.get(4)?,
+                    occurred_at: row.get(5)?,
+                    payload_hash: row.get(6)?,
+                    previous_hash: row.get(7)?,
+                },
+                row.get(8)?,
+            ))
+        })
+        .map_err(db_error)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
 }
 
 pub fn latest_audit_hash(conn: &Connection) -> Result<Option<String>, String> {
     conn.query_row(
-        "SELECT hash FROM audit_events ORDER BY occurred_at DESC, rowid DESC LIMIT 1",
+        "SELECT hash FROM audit_events ORDER BY rowid DESC LIMIT 1",
         [],
         |row| row.get(0),
     )
@@ -184,7 +260,7 @@ pub fn list_audit_events_paginated(
     let mut stmt = conn
         .prepare(
             "SELECT id, entity_id, action, actor, occurred_at, payload_hash, previous_hash, hash
-             FROM audit_events ORDER BY occurred_at DESC, rowid DESC
+             FROM audit_events ORDER BY rowid DESC
              LIMIT ?1 OFFSET ?2",
         )
         .map_err(db_error)?;
@@ -397,8 +473,24 @@ pub fn record_verifactu_submission(
     conn: &mut Connection,
     record: VerifactuSubmissionRecord,
 ) -> Result<String, String> {
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let id = insert_verifactu_submission(&tx, record)?;
+    // Cada envío que llega a salir hacia la AEAT queda en la auditoría con su resultado.
+    let response = record.response;
+    audit_change(
+        &tx,
+        "invoice",
+        record.invoice_id,
+        "verifactu_submitted",
+        &serde_json::json!({
+            "submission_id": id,
+            "fiscal_export_id": record.fiscal_export_id,
+            "endpoint_name": response.endpoint_name,
+            "status": response.status,
+            "csv": response.csv,
+            "codigo_error": response.codigo_error,
+        }),
+    )?;
     let is_anulacion = tx
         .query_row(
             "SELECT payload_version = ?2 FROM fiscal_exports WHERE id = ?1",
@@ -504,7 +596,7 @@ pub fn check_anulacion_export_is_current(
 /// y queda constancia en la auditoría (`invoice_void_desisted`). El registro rechazado
 /// y su resultado en `anulacion_outcomes` no cambian (ambos son inalterables).
 pub fn desist_rejected_anulacion(conn: &mut Connection, invoice_id: &str) -> Result<(), String> {
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let updated = tx
         .execute(
             "UPDATE invoices SET status = 'Issued', void_reason = NULL WHERE id = ?1 AND status = ?2",
@@ -860,7 +952,7 @@ pub fn previous_issued_invoice_link(
 }
 
 pub(super) fn insert_fiscal_record_tx(
-    tx: &Transaction<'_>,
+    tx: &Connection,
     record: &FiscalRecordInput,
 ) -> Result<(), String> {
     tx.execute(

@@ -55,7 +55,7 @@ export function VerifactuTecnico({ m, vf }: Ctx) {
           <dt>{t("tecnico.respuesta")}</dt>
           <dd>{vf.submitResult ? `${vf.submitResult.status} · HTTP ${vf.submitResult.http_status ?? "—"} · ${vf.submitResult.estado_envio ?? "—"}/${vf.submitResult.estado_registro ?? "—"} · ${vf.submitResult.codigo_error ?? ""} ${vf.submitResult.soap_fault ?? ""}` : "—"}</dd>
           <dt>{t("tecnico.cadena")}</dt>
-          <dd>{chain ? `${chain.total_records} registros · ${chain.issue_count} incidencias · ${chain.last_hash_by_company.map((h) => h.last_hash).join(", ") || "—"}` : "—"}</dd>
+          <dd>{chain ? `${t("tecnico.cadenaResumen", { registros: chain.total_records, eventos: chain.audit_total_events, incidencias: chain.issue_count })} · ${chain.last_hash_by_company.map((h) => h.last_hash).join(", ") || "—"}` : "—"}</dd>
         </dl>
         {chain?.issues.length ? (
           <ul className="bdr-small">

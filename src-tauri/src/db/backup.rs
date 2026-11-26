@@ -91,7 +91,8 @@ pub fn restore_database(conn: &mut Connection, source: &Path) -> Result<RestoreO
         }
         Ok(false) => (
             Some(false),
-            "fiscal_chain_invalid: la cadena fiscal de la copia no es válida".to_string(),
+            "fiscal_chain_invalid: la cadena fiscal o la de auditoría de la copia no es válida"
+                .to_string(),
         ),
         Err(err) => (None, err),
     };

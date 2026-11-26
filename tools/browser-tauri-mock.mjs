@@ -113,6 +113,7 @@ export function installTauriMock(page, seed = null) {
       return {
         valid: true,
         total_records: state.fiscalRecords.length,
+        audit_total_events: state.audit.length,
         issue_count: 0,
         last_hash_by_company: head ? [{ company_id: head.company_id, last_hash: head.fiscal_hash }] : [],
         issues: [],

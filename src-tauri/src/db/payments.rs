@@ -79,7 +79,7 @@ pub fn register_payment(conn: &mut Connection, input: PaymentInput) -> Result<Pa
         return Err("validation_error:method".to_string());
     }
     parse_payment_date(&input.paid_at, "paid_at")?;
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let (entity_type, entity_id, total, paid) = match (&invoice_id, &document_id) {
         (Some(id), _) => {
             let (status, total): (String, i64) = tx
@@ -190,7 +190,7 @@ pub fn list_payments(
 }
 
 pub fn delete_payment(conn: &mut Connection, payment_id: &str) -> Result<(), String> {
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let (invoice_id, document_id): (Option<String>, Option<String>) = tx
         .query_row(
             "SELECT invoice_id, commercial_document_id FROM invoice_payments WHERE id = ?1",
@@ -243,7 +243,7 @@ pub fn set_invoice_due_date(
     if let Some(value) = due_date {
         parse_payment_date(value, "due_date")?;
     }
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let changed = tx
         .execute(
             "UPDATE invoices SET due_date = ?2 WHERE id = ?1",
@@ -296,6 +296,23 @@ pub(crate) fn operational_audit(
         fiscal_contract::sha256_hex(payload.as_bytes()),
         latest_audit_hash(conn)?,
     );
+    insert_audit_event(conn, &event)
+}
+
+/// Añade `event` al final de la cadena de auditoría. Exige una transacción abierta
+/// (`write_tx`): el cambio auditado y su evento se confirman juntos o ninguno. Dentro
+/// de ella el último hash no puede moverse; si `previous_hash` no es el último, el
+/// evento se preparó antes que otro y se rechaza en vez de bifurcar la cadena.
+pub(crate) fn insert_audit_event(conn: &Connection, event: &AuditEvent) -> Result<(), String> {
+    if conn.is_autocommit() {
+        return Err("audit_requires_transaction".to_string());
+    }
+    if event.previous_hash != latest_audit_hash(conn)? {
+        return Err(
+            "audit_chain_moved: otro proceso escribió en la auditoría; repite la operación"
+                .to_string(),
+        );
+    }
     conn.execute(
         "INSERT INTO audit_events (id, entity_type, entity_id, action, actor, occurred_at, payload_hash, previous_hash, hash)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",

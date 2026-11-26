@@ -13,7 +13,10 @@ pub fn company_create(state: State<'_, AppState>, input: CompanyInput) -> Result
     input.validate()?;
     let company = Company::from_input(input);
     let conn = state.lock()?;
-    db::insert_company(&conn, &company)?;
+    let tx = db::write_tx(&conn)?;
+    db::insert_company(&tx, &company)?;
+    db::audit_change(&tx, "company", &company.id, "company_created", &company)?;
+    tx.commit().map_err(|err| err.to_string())?;
     Ok(company)
 }
 
@@ -24,7 +27,11 @@ pub fn company_update(
     input: CompanyUpdateInput,
 ) -> Result<Company, String> {
     let conn = state.lock()?;
-    db::update_company(&conn, &input)
+    let tx = db::write_tx(&conn)?;
+    let company = db::update_company(&tx, &input)?;
+    db::audit_change(&tx, "company", &company.id, "company_updated", &company)?;
+    tx.commit().map_err(|err| err.to_string())?;
+    Ok(company)
 }
 
 /// Listado resumen de empresas.
@@ -41,6 +48,7 @@ pub fn company_series_configure(
     input: InvoiceSeriesConfigInput,
 ) -> Result<InvoiceSeriesConfig, String> {
     let mut conn = state.lock()?;
+    // La propia transacción de `upsert_invoice_series_config` guarda el evento.
     db::upsert_invoice_series_config(&mut conn, input)
 }
 
@@ -72,6 +80,7 @@ pub fn company_logo_set(
         .map_err(|err| format!("app data dir error: {err}"))?
         .join("logos");
     let mut conn = state.lock()?;
+    // `set_company_logo` ya guarda `company_logo_set` en su transacción.
     db::set_company_logo(
         &mut conn,
         &company_id,
@@ -84,5 +93,6 @@ pub fn company_logo_set(
 pub fn company_logo_clear(state: State<'_, AppState>, company_id: String) -> Result<(), String> {
     require("company_id", &company_id)?;
     let mut conn = state.lock()?;
+    // `clear_company_logo` ya guarda `company_logo_cleared` en su transacción.
     db::clear_company_logo(&mut conn, &company_id)
 }

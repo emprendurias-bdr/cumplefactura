@@ -8,7 +8,7 @@ use crate::db::{
 };
 use crate::domain::invoice::{Invoice, InvoiceDraftInput, InvoiceIssueInput, IssuedInvoice};
 use crate::domain::require;
-use crate::services::audit::AuditEvent;
+use crate::services::audit::{self, AuditEvent};
 use crate::services::pdf;
 use crate::services::qr::QrEnvironment;
 use crate::services::verifactu;
@@ -73,12 +73,11 @@ pub fn invoice_issue(
         db::check_commercial_links_for_issue(&conn, draft_id, &input.draft.customer_id)?;
     }
     db::check_price_pending_for_issue(&conn, draft_id.as_deref(), &input.draft)?;
-    let previous_hash = match input.previous_audit_hash.clone() {
-        Some(hash) => Some(hash),
-        None => db::latest_audit_hash(&conn)?,
-    };
-    let actor = input.actor.clone();
+    // Actor y eslabón previo salen del backend: lo que mande la interfaz se ignora.
+    let previous_hash = db::latest_audit_hash(&conn)?;
+    let actor = audit::system_actor();
     let mut issue_input = input;
+    issue_input.actor = actor.clone();
     require("actor", &issue_input.actor)?;
     require("issued_at", &issue_input.issued_at)?;
     Invoice::draft(issue_input.draft.clone())?;
@@ -192,6 +191,19 @@ pub fn invoice_export_pdf(
     let conn = state.lock()?;
     let invoice = db::invoice_pdf_data(&conn, &invoice_id)?;
     let qr_environment = QrEnvironment::parse(&db::get_app_settings(&conn)?.qr_environment)?;
-    pdf::write_invoice_pdf(&target_path, &invoice, qr_environment)?;
+    db::audited_file_export(
+        &conn,
+        &target_path,
+        || pdf::write_invoice_pdf(&target_path, &invoice, qr_environment),
+        |tx, _| {
+            db::audit_change(
+                tx,
+                "invoice",
+                &invoice_id,
+                "pdf_exported",
+                &serde_json::json!({ "target_path": target_path }),
+            )
+        },
+    )?;
     Ok(target_path)
 }

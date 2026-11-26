@@ -238,7 +238,8 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
     assert_eq!(db::list_companies(&conn).expect("companies").len(), 1);
     assert_eq!(db::list_customers(&conn).expect("customers").len(), 1);
     assert_eq!(db::list_invoices(&conn).expect("invoices").len(), 2);
-    assert_eq!(db::list_audit_events(&conn).expect("audit").len(), 1);
+    // `series_saved` (en la transacción de la serie) e `invoice_issued`.
+    assert_eq!(db::list_audit_events(&conn).expect("audit").len(), 2);
     assert_eq!(
         db::list_fiscal_records(&conn)
             .expect("fiscal records")

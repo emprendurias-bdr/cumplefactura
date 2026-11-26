@@ -11,9 +11,17 @@ pub fn customer_upsert(
     input: CustomerInput,
 ) -> Result<Customer, String> {
     input.validate()?;
+    let action = if input.id.is_some() {
+        "customer_updated"
+    } else {
+        "customer_created"
+    };
     let customer = Customer::from_input(input);
     let conn = state.lock()?;
-    db::upsert_customer(&conn, &customer)?;
+    let tx = db::write_tx(&conn)?;
+    db::upsert_customer(&tx, &customer)?;
+    db::audit_change(&tx, "customer", &customer.id, action, &customer)?;
+    tx.commit().map_err(|err| err.to_string())?;
     Ok(customer)
 }
 

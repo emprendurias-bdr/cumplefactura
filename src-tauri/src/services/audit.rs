@@ -6,7 +6,38 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::sync::OnceLock;
 use uuid::Uuid;
+
+/// Actor de auditoría: `usuario@equipo` del sistema operativo, leído en el backend.
+/// Nunca viene de la interfaz.
+// shortcut: variables de entorno del proceso; pasar a la API del SO si hace falta resistir a quien lanza la app con otro entorno.
+pub fn system_actor() -> String {
+    static ACTOR: OnceLock<String> = OnceLock::new();
+    ACTOR
+        .get_or_init(|| {
+            let env = |names: &[&str]| {
+                names
+                    .iter()
+                    .find_map(|name| std::env::var(name).ok())
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty())
+            };
+            let user = env(&["USERNAME", "USER", "LOGNAME"]);
+            let host = env(&["COMPUTERNAME", "HOSTNAME"]).or_else(|| {
+                std::fs::read_to_string("/etc/hostname")
+                    .ok()
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty())
+            });
+            format!(
+                "{}@{}",
+                user.as_deref().unwrap_or("desconocido"),
+                host.as_deref().unwrap_or("desconocido")
+            )
+        })
+        .clone()
+}
 
 /// Evento inmutable de auditoría (factura emitida/anulada, actor, hashes).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,7 +104,7 @@ impl AuditEvent {
             entity_type: entity_type.to_string(),
             entity_id: entity_id.to_string(),
             action: action.to_string(),
-            actor: "local-user".to_string(),
+            actor: system_actor(),
             occurred_at: Utc::now().to_rfc3339(),
             payload_hash,
             previous_hash,
@@ -116,5 +147,15 @@ mod tests {
         );
 
         assert_ne!(first.chain_hash(), second.chain_hash());
+    }
+
+    #[test]
+    fn system_actor_is_user_at_host_and_stable() {
+        let actor = system_actor();
+        let (user, host) = actor.split_once('@').expect("usuario@equipo");
+        assert!(!user.is_empty() && !host.is_empty());
+        assert_eq!(actor, system_actor());
+        let event = AuditEvent::operational("company", "c1", "company_created", "h".into(), None);
+        assert_eq!(event.actor, actor);
     }
 }

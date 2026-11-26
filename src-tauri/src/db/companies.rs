@@ -102,7 +102,7 @@ pub fn upsert_invoice_series_config(
         .map_err(db_error)?;
     let id = existing_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let created_at = chrono::Utc::now().to_rfc3339();
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
 
     if input.is_default {
         tx.execute(
@@ -158,13 +158,13 @@ pub fn upsert_invoice_series_config(
         ],
     )
     .map_err(db_error)?;
-    tx.commit().map_err(db_error)?;
-
-    let configs = list_invoice_series_configs(conn, &input.company_id, input.fiscal_year)?;
-    configs
+    let saved = list_invoice_series_configs(&tx, &input.company_id, input.fiscal_year)?
         .into_iter()
         .find(|config| config.series_code == series_code)
-        .ok_or_else(|| "invoice series config not found after save".to_string())
+        .ok_or_else(|| "invoice series config not found after save".to_string())?;
+    audit_change(&tx, "invoice_series", &saved.id, "series_saved", &saved)?;
+    tx.commit().map_err(db_error)?;
+    Ok(saved)
 }
 
 pub fn list_invoice_series_configs(
@@ -306,7 +306,7 @@ pub fn set_company_logo(
     let target = logos_dir.join(format!("{company_id}.{}", logo.extension));
     fs::write(&target, &bytes).map_err(|err| format!("logo_write_error:{err}"))?;
     let target = target.to_string_lossy().into_owned();
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let previous: Option<String> = tx
         .query_row(
             "SELECT logo_path FROM companies WHERE id = ?1",
@@ -331,7 +331,7 @@ pub fn set_company_logo(
 /// Quita el logo y borra su copia.
 pub fn clear_company_logo(conn: &mut Connection, company_id: &str) -> Result<(), String> {
     require_company(conn, company_id)?;
-    let tx = conn.transaction().map_err(db_error)?;
+    let tx = write_tx(conn)?;
     let previous: Option<String> = tx
         .query_row(
             "SELECT logo_path FROM companies WHERE id = ?1",

@@ -460,6 +460,7 @@ export const es = {
   "tecnico.comprobacion": "Comprobación previa",
   "tecnico.respuesta": "Respuesta del sidecar",
   "tecnico.cadena": "Cadena",
+  "tecnico.cadenaResumen": "{registros} registros fiscales · {eventos} eventos de auditoría · {incidencias} incidencias",
   "tecnico.exportarAuditoria": "Exportar auditoría",
   "tecnico.auditoria": "Auditoría",
   "tecnico.carpeta": "Carpeta de exportación",

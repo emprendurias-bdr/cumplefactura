@@ -1,12 +1,15 @@
 /**
  * Ajustes › Acerca de: identificación del sistema informático (nombre, versión, fabricante y NIF)
  * y texto completo de la declaración responsable (Orden HAC/1177/2024 art. 15.3). Todo sale de
- * `src/legal/declaracion.ts`, que lee el documento legal al compilar. Si es borrador o tiene datos
- * PENDIENTE, un aviso lo dice antes del texto. Solo lectura, sin estado.
+ * `src/legal/declaracion.ts`, que lee el documento legal al compilar, salvo la versión: la del
+ * binario (`getVersion()`, la misma que va en el XML a la AEAT). Si es borrador, tiene datos
+ * PENDIENTE o es de otra versión, un aviso lo dice antes del texto. Solo lectura.
  */
-import { Fragment } from "react";
+import { getVersion } from "@tauri-apps/api/app";
+import { Fragment, useEffect, useState } from "react";
 import { t } from "../../i18n/es";
 import { declaracion, plain } from "../../legal/declaracion";
+import { otraVersion } from "../../legal/declaracionParse";
 import { Callout } from "../../ui/Callout";
 import { Card } from "../../ui/Card";
 
@@ -48,10 +51,22 @@ function Declaracion({ text }: { text: string }) {
 }
 
 export function AjustesAcerca() {
-  const { nombre, version, productor, nif, provisional, text } = declaracion;
+  const { nombre, version: declarada, productor, nif, provisional, text } = declaracion;
+  // Versión instalada. Fuera de Tauri (navegador, mock de pruebas) falla y se queda «Sin dato», sin aviso.
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    getVersion().then((v) => vivo && setVersion(v), () => undefined);
+    return () => {
+      vivo = false;
+    };
+  }, []);
   return (
     <>
       {provisional ? <Callout tone="warn" title={t("acerca.borrador")}>{t("acerca.borradorAyuda")}</Callout> : null}
+      {otraVersion(version, declarada) ? (
+        <Callout tone="warn" title={t("acerca.otraVersion")}>{t("acerca.otraVersionAyuda", { declarada: declarada ?? "", instalada: version ?? "" })}</Callout>
+      ) : null}
       <Card title={t("acerca.sistema")}>
         <dl className="cf-dl">
           <dt>{t("acerca.nombre")}</dt>

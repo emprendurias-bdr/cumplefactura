@@ -133,6 +133,7 @@ const SCREENS = [
   ["ajustes-series", "#/ajustes/series"],
   ["ajustes-certificado", "#/ajustes/certificado"],
   ["ajustes-copias", "#/ajustes/copias"],
+  ["ajustes-acerca", "#/ajustes/acerca"],
   ["primer-arranque", "#/facturas", { ...seed, companies: [], customers: [], invoices: [], seriesConfigs: [], fiscalRecords: [], submissions: [], documents: [], recurring: [], settings: { ...seed.settings, onboarding_completed: false } }],
 ];
 

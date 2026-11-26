@@ -9,7 +9,7 @@ export type Section = (typeof SECTIONS)[number];
 
 export const DOC_TABS = ["presupuestos", "proformas", "albaranes"] as const;
 export type DocTab = (typeof DOC_TABS)[number];
-export const SETTINGS_TABS = ["empresa", "series", "fiscalidad", "certificado", "copias", "avanzado"] as const;
+export const SETTINGS_TABS = ["empresa", "series", "fiscalidad", "certificado", "copias", "avanzado", "acerca"] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 export type Route = { section: Section; tab: string | null; id: string | null; action: string | null };

@@ -224,6 +224,28 @@ checks.push({
   detail: "certificate password is never written to localStorage/sessionStorage.",
 });
 
+// L2: la declaración responsable se muestra en Ajustes › Acerca de, leída del documento legal al
+// compilar (sin copias en src/). El documento debe conservar el formato que lee src/legal/declaracion.ts.
+const declaracionMd = fs.readFileSync(path.join(root, "docs", "legal", "DECLARACION_RESPONSABLE_SIF.md"), "utf8").replace(/\r\n/g, "\n");
+const declaracionBody = declaracionMd.slice(Math.max(0, declaracionMd.indexOf("\n## 2."))).split(/\n---\n/)[1] ?? "";
+checks.push(
+  {
+    id: "legal:declaracion_imported_from_doc",
+    ok: includesText('docs/legal/DECLARACION_RESPONSABLE_SIF.md?raw"') && includesText("AjustesAcerca"),
+    detail: "Ajustes › Acerca de renders the declaration from docs/legal/DECLARACION_RESPONSABLE_SIF.md.",
+  },
+  {
+    id: "legal:declaracion_format",
+    ok: ["a", "c", "h", "i", "k"].every((letter) => new RegExp(`^${letter}\\) \\*\\*`, "m").test(declaracionBody)),
+    detail: "Declaration section 2 sits between '---' rules and keeps letters a), c), h), i), k).",
+  },
+  {
+    id: "legal:declaracion_not_duplicated",
+    ok: !includesText("cumple con lo dispuesto en el artículo 29.2.j)"),
+    detail: "Declaration text is not copied into src/.",
+  },
+);
+
 // Registro Rust: cada comando invocado existe y cada comando registrado se usa.
 const libRs = fs.readFileSync(path.join(root, "src-tauri", "src", "lib.rs"), "utf8");
 const registeredCommands = new Set([...libRs.matchAll(/commands::\w+::(\w+)/g)].map((match) => match[1]));

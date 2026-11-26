@@ -93,6 +93,11 @@ a.bdr-btn--secondary { color: var(--fg); }
 .cf-dl dt { color: var(--muted); }
 .cf-dl dd { margin: 0; }
 .cf-dl--mono dd { font-family: var(--fuente-mono); font-size: 12px; overflow-wrap: anywhere; }
+.cf-mono { font-family: var(--fuente-mono); }
+/* Texto legal largo (Ajustes › Acerca de): medida legible. */
+.cf-prose { max-width: 72ch; line-height: 1.55; }
+.cf-prose p, .cf-prose ul { margin: 0 0 12px; }
+.cf-prose > :last-child { margin-bottom: 0; }
 
 
 

@@ -1,12 +1,14 @@
 /**
  * Ajustes con subpáginas por hash `#/ajustes/<x>` y pestañas: Empresa · Series · Fiscalidad ·
- * Certificado y carpeta · Copias · Avanzado. La apariencia vive en ⚙ y la densidad en la barra
+ * Certificado y carpeta · Copias · Avanzado · Acerca de
+ * (versión, fabricante y declaración responsable). La apariencia vive en ⚙ y la densidad en la barra
  * lateral. Cada subpágina es un formulario con su propio «Guardar» (acción principal).
  */
 import type { ReactElement } from "react";
 import { t } from "../i18n/es";
 import { href, SETTINGS_TABS, type SettingsTab } from "../lib/routes";
 import { Hero } from "../ui/Hero";
+import { AjustesAcerca } from "./ajustes/AjustesAcerca";
 import { AjustesAvanzado } from "./ajustes/AjustesAvanzado";
 import { AjustesCertificado } from "./ajustes/AjustesCertificado";
 import { AjustesCopias } from "./ajustes/AjustesCopias";
@@ -22,6 +24,7 @@ const PAGES: Record<SettingsTab, (c: Ctx) => ReactElement> = {
   certificado: AjustesCertificado,
   copias: AjustesCopias,
   avanzado: AjustesAvanzado,
+  acerca: AjustesAcerca,
 };
 
 export function AjustesSection(c: Ctx) {

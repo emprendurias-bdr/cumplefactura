@@ -34,9 +34,9 @@ Los datos salen de `docs/legal/FABRICANTE.md` (rama `cf/ga-backlog`, acción H2)
 
 **DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN**
 
-a) **Nombre del sistema informático:** PENDIENTE (hoy «CumpleFactura»; nombre comercial sin decidir).
+a) **Nombre del sistema informático:** CumpleFactura (provisional: el nombre comercial se decidirá más adelante).
 
-b) **Código identificador del sistema informático:** PENDIENTE (hoy «CF»; 2 caracteres, Orden anexo apartado 2.6; no puede coincidir con otro sistema del mismo productor).
+b) **Código identificador del sistema informático:** CF (2 caracteres, Orden anexo apartado 2.6; no puede coincidir con otro sistema del mismo productor).
 
 c) **Identificador completo de la versión:** 1.0.0 (según `FABRICANTE.md`). Ojo: el código declara hoy `0.1.0` (`src-tauri/Cargo.toml:3`, usado en el XML por `src-tauri/src/services/verifactu.rs:557`); P2 lo alinea.
 
@@ -51,11 +51,11 @@ f) **¿Lo pueden usar varios obligados tributarios, o un usuario para varios?:**
 
 g) **Tipos de firma de registros y eventos:** no aplica (solo VERI\*FACTU; RRSIF art. 16.3).
 
-h) **Productor (nombre y apellidos o razón social):** PENDIENTE.
+h) **Productor (nombre y apellidos o razón social):** VENDINGSAIZARAGON, S.L.
 
-i) **NIF del productor:** PENDIENTE.
+i) **NIF del productor:** B98945173.
 
-j) **Dirección postal completa de contacto:** PENDIENTE.
+j) **Dirección postal completa de contacto:** Calle Naranjo 38, 46117 Bétera, Valencia, España.
 
 k) **Declaración de cumplimiento:** La entidad productora declara que el sistema informático de facturación identificado, en la versión indicada en esta declaración, cumple con lo dispuesto en el artículo 29.2.j) de la Ley 58/2003, de 17 de diciembre, General Tributaria; en el Reglamento que establece los requisitos que deben adoptar los sistemas y programas informáticos o electrónicos que soporten los procesos de facturación de empresarios y profesionales, y la estandarización de formatos de los registros de facturación, aprobado por el Real Decreto 1007/2023, de 5 de diciembre; en la Orden HAC/1177/2024, de 17 de octubre; y en las especificaciones publicadas en la sede electrónica de la Agencia Estatal de Administración Tributaria que las desarrollan.
 

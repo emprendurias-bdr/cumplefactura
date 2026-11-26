@@ -47,12 +47,34 @@ Al subir la versión, actualiza también `<sf:Version>` en `src-tauri/src/servic
 
      ```powershell
      $env:CF_SIGN_THUMBPRINT = "<huella>"
-     npx tauri build --config src-tauri/tauri.bundle.conf.json --config "{\"bundle\":{\"windows\":{\"certificateThumbprint\":\"$env:CF_SIGN_THUMBPRINT\",\"digestAlgorithm\":\"sha256\",\"timestampUrl\":\"http://timestamp.digicert.com\"}}}"
      ```
 
-     Tauri firma con `signtool` (Windows SDK) el ejecutable y el instalador.
-   - Comprueba con `Get-AuthenticodeSignature` que dan `Valid` el instalador y, tras instalar, `cumplefactura.exe` y el sidecar `cumplefactura-sidecar.exe`. Si el sidecar no sale firmado, fírmalo antes de empaquetar con `signtool sign /sha1 $env:CF_SIGN_THUMBPRINT /fd sha256 /tr http://timestamp.digicert.com /td sha256 src-tauri\binaries\cumplefactura-sidecar-*.exe` justo después de `node tools/build-sidecar.mjs`.
-   - Al acabar, borra el certificado del almacén y la variable (`Remove-Item Env:CF_SIGN_THUMBPRINT`).
+   - Escribe la configuración de firma en un fichero **fuera del repo** (no se pasa JSON en línea: PowerShell 5.1 rompe las comillas escapadas `\"` al llamar a `npx`). El fichero queda así:
+
+     ```json
+     {
+       "bundle": {
+         "windows": {
+           "certificateThumbprint": "<huella>",
+           "digestAlgorithm": "sha256",
+           "timestampUrl": "http://timestamp.digicert.com"
+         }
+       }
+     }
+     ```
+
+     Créalo desde la variable y empaqueta con él:
+
+     ```powershell
+     $firma = Join-Path $env:TEMP "cf-firma.json"
+     $config = @{ bundle = @{ windows = @{ certificateThumbprint = $env:CF_SIGN_THUMBPRINT; digestAlgorithm = "sha256"; timestampUrl = "http://timestamp.digicert.com" } } }
+     [IO.File]::WriteAllText($firma, ($config | ConvertTo-Json -Depth 3))  # UTF-8 sin BOM
+     npx tauri build --config src-tauri/tauri.bundle.conf.json --config $firma
+     ```
+
+     Tauri firma con `signtool` (Windows SDK) el ejecutable, el sidecar (`src-tauri\binaries\cumplefactura-sidecar-*.exe`, que copia `tools/build-sidecar.mjs` dentro del propio `tauri build`) y el instalador. No firmes el sidecar a mano en `binaries\`: ese mismo `tauri build` lo sobrescribe antes de empaquetar.
+   - Comprueba con `Get-AuthenticodeSignature` que dan `Valid` el instalador y, tras instalar, `cumplefactura.exe` y el sidecar `cumplefactura-sidecar.exe`.
+   - Al acabar, borra el certificado del almacén, el fichero y la variable (`Remove-Item (Join-Path $env:TEMP "cf-firma.json"); Remove-Item Env:CF_SIGN_THUMBPRINT`).
    - Sin certificado, Windows SmartScreen avisa al instalar (H4 del backlog).
 7. **Sumas SHA-256**:
 

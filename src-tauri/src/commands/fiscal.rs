@@ -90,11 +90,18 @@ pub fn backup_export(
 
     let conn = state.lock()?;
     db::backup_database(&conn, &target_path)?;
+    let archived = db::backup_xml_archive(&conn, Path::new(&target_path))?;
 
     Ok(BackupResult {
+        notes: vec![
+            "SQLite backup created with VACUUM INTO.".to_string(),
+            format!(
+                "XML archivados copiados en {}: {archived}.",
+                db::xml_archive_backup_dir(Path::new(&target_path)).display()
+            ),
+        ],
         target_path,
         status: "created".to_string(),
-        notes: vec!["SQLite backup created with VACUUM INTO.".to_string()],
     })
 }
 
@@ -293,6 +300,14 @@ pub fn verifactu_xml_anulacion_draft_export(
         &generated_at,
         &assets,
     )?;
+    // N4: copia en `<app_data>/registros`; el registro guarda esa ruta, no la elegida por el usuario.
+    let archive = match archive_anulacion_xml(&app, &conn, &invoice, &target_path) {
+        Ok(path) => path,
+        Err(err) => {
+            let _ = fs::remove_file(&target_path);
+            return Err(err);
+        }
+    };
     let previous_audit_hash = db::latest_audit_hash(&conn)?;
     let audit_event = AuditEvent::invoice_voided(
         invoice.id.clone(),
@@ -306,11 +321,12 @@ pub fn verifactu_xml_anulacion_draft_export(
         &cancellation_hash,
         Some(&previous.fiscal_hash),
         &generated_at,
-        &target_path,
+        &archive.to_string_lossy(),
         &audit_event,
         &reason,
     ) {
         let _ = fs::remove_file(&target_path);
+        let _ = fs::remove_file(&archive);
         return Err(err);
     }
     let export = verifactu_submit::record_xml_export(&conn, &invoice_id, &target_path)?;
@@ -473,6 +489,31 @@ fn resolve_verifactu_xsd_assets(app: &AppHandle) -> Result<verifactu::VerifactuX
             ))
         }
     }
+}
+
+/// Copia el XML de anulación ya validado a su ruta de archivo y la devuelve.
+fn archive_anulacion_xml(
+    app: &AppHandle,
+    conn: &rusqlite::Connection,
+    invoice: &db::InvoicePdfData,
+    exported_path: &str,
+) -> Result<std::path::PathBuf, String> {
+    let num_serie = invoice
+        .num_serie
+        .as_deref()
+        .ok_or_else(|| "issued invoice missing num_serie".to_string())?;
+    let app_data = app.path().app_data_dir().map_err(|err| err.to_string())?;
+    let archive = verifactu::archive_xml_path(
+        &app_data,
+        invoice.fiscal_year,
+        &invoice.company_tax_id,
+        num_serie,
+        "Anulacion",
+    );
+    db::ensure_archive_path_free(conn, &archive)?;
+    let xml = fs::read_to_string(exported_path).map_err(|err| format!("XML read error: {err}"))?;
+    verifactu::write_archive_xml(&archive, &xml)?;
+    Ok(archive)
 }
 
 fn invoice_self_link(invoice: &db::InvoicePdfData) -> Result<PreviousInvoiceLink, String> {

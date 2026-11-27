@@ -59,6 +59,8 @@ pub use settings::*;
 
 pub struct AppState {
     pub conn: Mutex<Connection>,
+    /// S4: un solo envío a la AEAT a la vez (cola de remisión y reintentos).
+    pub remision: Mutex<()>,
 }
 
 impl AppState {
@@ -152,6 +154,7 @@ pub fn init_app_state(app: &tauri::App) -> Result<AppState, Box<dyn Error>> {
     let conn = open_database(&app_data_dir.join("cumplefactura.sqlite3"))?;
     Ok(AppState {
         conn: Mutex::new(conn),
+        remision: Mutex::new(()),
     })
 }
 

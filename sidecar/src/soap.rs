@@ -91,9 +91,17 @@ pub fn parse_response(body: &[u8]) -> AeatOutcome {
         return transport_error("aeat_response_unrecognized");
     };
     let estado_registro = text("EstadoRegistro");
+    // `RegistroDuplicado` solo llega si se rechaza por duplicado y trae el estado del registro
+    // que ya consta en la AEAT (RespuestaSuministro.xsd, `RegistroDuplicadoType`). Un reenvío
+    // tras «sin confirmar» que ya llegó no es un rechazo: vale lo que la AEAT tiene guardado.
+    let duplicado = text("EstadoRegistroDuplicado");
     // Una línea por envío: si la línea es `Incorrecto`, el registro no quedó aceptado.
     let status = match (estado_envio.as_str(), estado_registro.as_deref()) {
-        (_, Some("Incorrecto")) => "rejected",
+        (_, Some("Incorrecto")) => match duplicado.as_deref() {
+            Some("Correcta" | "Anulada") => "accepted",
+            Some("AceptadaConErrores") => "accepted_with_errors",
+            _ => "rejected",
+        },
         ("Correcto", Some("AceptadoConErrores")) => "accepted_with_errors",
         ("Correcto", _) => "accepted",
         ("ParcialmenteCorrecto", _) => "accepted_with_errors",
@@ -254,11 +262,31 @@ mod tests {
         assert_eq!(rejected.codigo_error.as_deref(), Some("1100"));
     }
 
+    fn duplicado(estado: &str) -> String {
+        format!("<tikR:RespuestaLinea><tikR:EstadoRegistro>Incorrecto</tikR:EstadoRegistro><tikR:CodigoErrorRegistro>1100</tikR:CodigoErrorRegistro><tikR:DescripcionErrorRegistro>Valor no permitido</tikR:DescripcionErrorRegistro><tikR:RegistroDuplicado><tik:IdPeticionRegistroDuplicado>1</tik:IdPeticionRegistroDuplicado><tik:EstadoRegistroDuplicado>{estado}</tik:EstadoRegistroDuplicado><tik:CodigoErrorRegistro>3000</tik:CodigoErrorRegistro><tik:DescripcionErrorRegistro>Registro duplicado</tik:DescripcionErrorRegistro></tikR:RegistroDuplicado></tikR:RespuestaLinea>")
+    }
+
+    #[test]
+    fn duplicate_takes_the_state_already_stored_at_the_aeat() {
+        for (estado, status) in [
+            ("Correcta", "accepted"),
+            ("Anulada", "accepted"),
+            ("AceptadaConErrores", "accepted_with_errors"),
+            ("Otro", "rejected"),
+        ] {
+            let outcome = parse_response(respuesta("Incorrecto", &duplicado(estado)).as_bytes());
+            assert_eq!(outcome.status, status, "{estado}");
+        }
+    }
+
     #[test]
     fn keeps_every_error_and_rejects_incorrect_line() {
-        let linea = "<tikR:RespuestaLinea><tikR:EstadoRegistro>Incorrecto</tikR:EstadoRegistro><tikR:CodigoErrorRegistro>1100</tikR:CodigoErrorRegistro><tikR:DescripcionErrorRegistro>Valor no permitido</tikR:DescripcionErrorRegistro><tikR:RegistroDuplicado><tik:IdPeticionRegistroDuplicado>1</tik:IdPeticionRegistroDuplicado><tik:EstadoRegistroDuplicado>Correcta</tik:EstadoRegistroDuplicado><tik:CodigoErrorRegistro>3000</tik:CodigoErrorRegistro><tik:DescripcionErrorRegistro>Registro duplicado</tik:DescripcionErrorRegistro></tikR:RegistroDuplicado></tikR:RespuestaLinea>";
+        let linea = "<tikR:RespuestaLinea><tikR:EstadoRegistro>Incorrecto</tikR:EstadoRegistro><tikR:CodigoErrorRegistro>1100</tikR:CodigoErrorRegistro><tikR:DescripcionErrorRegistro>Valor no permitido</tikR:DescripcionErrorRegistro></tikR:RespuestaLinea>";
         let outcome = parse_response(respuesta("ParcialmenteCorrecto", linea).as_bytes());
         assert_eq!(outcome.status, "rejected");
+        assert_eq!(outcome.codigo_error.as_deref(), Some("1100"));
+        // Con duplicado se conservan también los códigos del registro ya guardado.
+        let outcome = parse_response(respuesta("Incorrecto", &duplicado("Correcta")).as_bytes());
         assert_eq!(outcome.codigo_error.as_deref(), Some("1100"));
         assert_eq!(
             outcome.errores,

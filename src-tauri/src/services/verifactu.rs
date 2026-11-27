@@ -80,6 +80,49 @@ fn write_xml(target_path: &str, xml: String) -> Result<(), String> {
     fs::write(path, xml).map_err(|err| format!("XML write error: {err}"))
 }
 
+/// N4: copia archivada del registro, `<app_data>/registros/<año>/<NIF>_<NumSerieFactura>-<tipo>.xml`
+/// (RD 1007/2023 art. 8.2.c: conservar los registros generados). El NIF separa empresas con la misma
+/// serie; lo que no sea letra, dígito, `-`, `_` o `.` (p. ej. el `/` de `F2026/0012`) pasa a `_`.
+pub fn archive_xml_path(
+    app_data: &Path,
+    fiscal_year: i32,
+    issuer_tax_id: &str,
+    num_serie: &str,
+    record_type: &str,
+) -> PathBuf {
+    let safe = |value: &str| -> String {
+        value
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect()
+    };
+    app_data
+        .join("registros")
+        .join(fiscal_year.to_string())
+        .join(format!(
+            "{}_{}-{}.xml",
+            safe(issuer_tax_id),
+            safe(num_serie),
+            safe(record_type)
+        ))
+}
+
+/// Escribe la copia archivada. A diferencia de `write_xml`, sobrescribe: el llamador ya comprobó
+/// (`db::ensure_archive_path_free`) que ningún registro usa esa ruta, así que un fichero previo
+/// solo puede ser el resto de una emisión que hizo rollback.
+pub fn write_archive_xml(path: &Path, xml: &str) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| format!("XML archive directory error: {err}"))?;
+    }
+    fs::write(path, xml).map_err(|err| format!("XML archive write error: {err}"))
+}
+
 /// Alta + validación XSD; si falla, borra el XML escrito.
 pub fn write_verifactu_xml_draft_validated(
     target_path: &str,

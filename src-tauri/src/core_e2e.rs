@@ -100,6 +100,7 @@ fn real_sqlite_verifactu_core_workflow_generates_evidence() {
         },
         Some(&draft.id),
         &verifactu::generated_at_now(),
+        None,
     )
     .expect("issued invoice persistence");
     let issued = issued_result.invoice;

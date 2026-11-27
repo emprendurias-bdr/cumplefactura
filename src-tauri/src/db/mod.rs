@@ -153,6 +153,11 @@ pub fn migrations() -> Vec<Migration> {
             name: "desglose_lineas",
             sql: include_str!("migrations/015_desglose_lineas.sql"),
         },
+        Migration {
+            version: 16,
+            name: "instantanea_partes",
+            sql: include_str!("migrations/016_instantanea_partes.sql"),
+        },
     ]
 }
 

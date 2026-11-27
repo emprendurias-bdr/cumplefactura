@@ -20,11 +20,14 @@ pub fn insert_invoice_draft(conn: &mut Connection, invoice: &Invoice) -> Result<
 /// rollback devuelve el número a la secuencia: no quedan huecos ni filas huérfanas.
 /// `generated_at` es `FechaHoraHusoGenRegistro` (reloj del sistema, no lo manda el cliente).
 /// Con `draft_id`, consume el borrador (ver `consume_draft`) dentro de la misma transacción.
+/// Con `archive_dir` (carpeta de datos de la app) archiva el XML de alta y guarda su ruta en el
+/// registro (N4); `None` solo en tests que no miran el archivo.
 pub fn issue_invoice(
     conn: &mut Connection,
     mut input: InvoiceIssueInput,
     draft_id: Option<&str>,
     generated_at: &str,
+    archive_dir: Option<&std::path::Path>,
 ) -> Result<IssuedInvoice, String> {
     require_company(conn, &input.draft.company_id)?;
     crate::domain::require("series", &input.draft.series)?;
@@ -93,8 +96,20 @@ pub fn issue_invoice(
         previous_audit_hash,
     );
     let audit_hash = audit_event.chain_hash();
+    let xml_archive = archive_dir.map(|dir| {
+        verifactu::archive_xml_path(
+            dir,
+            invoice.fiscal_year,
+            &company_tax_id,
+            &num_serie,
+            "Alta",
+        )
+    });
+    if let Some(path) = &xml_archive {
+        ensure_archive_path_free(&tx, path)?;
+    }
 
-    insert_issued_invoice_tx(
+    let result = insert_issued_invoice_tx(
         &tx,
         &invoice,
         generated_at,
@@ -102,8 +117,16 @@ pub fn issue_invoice(
         previous_fiscal_hash.as_deref(),
         &audit_event,
         draft_id,
-    )?;
-    tx.commit().map_err(db_error)?;
+        xml_archive.as_deref(),
+    )
+    .and_then(|()| tx.commit().map_err(db_error));
+    if let Err(err) = result {
+        // Rollback: el XML archivado de una emisión que no existe no debe quedar.
+        if let Some(path) = &xml_archive {
+            let _ = std::fs::remove_file(path);
+        }
+        return Err(err);
+    }
     Ok(IssuedInvoice {
         invoice,
         fiscal_hash,
@@ -165,13 +188,31 @@ pub fn insert_issued_invoice_from_draft(
         previous_fiscal_hash,
         audit_event,
         draft_id,
+        None,
     )?;
     tx.commit().map_err(db_error)
 }
 
+/// N4: copia en la factura los datos de emisor y destinatario que aparecen en ella
+/// (RD 1619/2012 art. 6.1 c-e). Misma sentencia que la migración 016 para las antiguas.
+const SNAPSHOT_PARTIES_SQL: &str = "UPDATE invoices SET
+  (issuer_legal_name, issuer_tax_id, issuer_address, issuer_postal_code, issuer_municipality, issuer_province) =
+    (SELECT c.legal_name, c.tax_id, c.address, c.postal_code, c.municipality, c.province
+     FROM companies c WHERE c.id = invoices.company_id),
+  (recipient_name, recipient_tax_id, recipient_address, recipient_postal_code, recipient_municipality,
+   recipient_province, recipient_country_code, recipient_id_type) =
+    (SELECT cu.display_name, cu.tax_id, cu.address, cu.postal_code, cu.municipality, cu.province,
+            cu.country_code, cu.id_type
+     FROM customers cu WHERE cu.id = invoices.customer_id)
+WHERE id = ?1";
+
 /// Alta, registro fiscal `Alta` y auditoría dentro de la transacción del llamador.
 /// Con `draft_id` pasa a la emitida los albaranes y periodos recurrentes del borrador y lo borra:
 /// así no puede emitirse dos veces ni facturar dos veces los mismos albaranes.
+/// Con `xml_archive` escribe ahí el XML de alta (el mismo que da la exportación) antes de
+/// insertar el registro con esa ruta: `fiscal_records` es solo-añadir, no admite UPDATE.
+// Un argumento por dato del alta; agruparlos solo movería el problema.
+#[allow(clippy::too_many_arguments)]
 fn insert_issued_invoice_tx(
     tx: &Transaction<'_>,
     invoice: &Invoice,
@@ -180,6 +221,7 @@ fn insert_issued_invoice_tx(
     previous_fiscal_hash: Option<&str>,
     audit_event: &AuditEvent,
     draft_id: Option<&str>,
+    xml_archive: Option<&std::path::Path>,
 ) -> Result<(), String> {
     if invoice.num_serie.is_none() {
         return Err("issued invoice missing num_serie".to_string());
@@ -198,6 +240,32 @@ fn insert_issued_invoice_tx(
         }
     }
     insert_invoice(tx, invoice, Some(fiscal_hash))?;
+    tx.execute(SNAPSHOT_PARTIES_SQL, params![invoice.id])
+        .map_err(db_error)?;
+    // Antes del XML: el borrador aporta la marca de recapitulativa, que cambia `FechaOperacion`.
+    if let Some(draft_id) = draft_id {
+        consume_draft(tx, draft_id, invoice)?;
+    }
+    let xml_path = match xml_archive {
+        Some(path) => {
+            let mut data = invoice_pdf_data(tx, &invoice.id)?;
+            // El registro aún no está insertado: su hora es la de esta emisión.
+            data.record_generated_at = Some(generated_at.to_string());
+            // Mismo enlace que `verifactu_xml_draft_export`: registro anterior o, sin él, la emitida previa.
+            let previous = match previous_fiscal_hash {
+                Some(hash) => fiscal_record_link_by_hash(tx, hash)?,
+                None => None,
+            };
+            let previous = match previous {
+                Some(link) => Some(link),
+                None => previous_issued_invoice_link(tx, &invoice.id)?,
+            };
+            let xml = verifactu::build_verifactu_xml_draft(&data, previous.as_ref())?;
+            verifactu::write_archive_xml(path, &xml)?;
+            Some(path.to_string_lossy().into_owned())
+        }
+        None => None,
+    };
     insert_fiscal_record_tx(
         tx,
         &FiscalRecordInput {
@@ -208,7 +276,7 @@ fn insert_issued_invoice_tx(
             generated_at: generated_at.to_string(),
             fiscal_hash: fiscal_hash.to_string(),
             previous_fiscal_hash: previous_fiscal_hash.map(str::to_string),
-            xml_path: None,
+            xml_path,
             status: "created".to_string(),
             created_at: chrono::Utc::now().to_rfc3339(),
         },
@@ -229,9 +297,6 @@ fn insert_issued_invoice_tx(
         ],
     )
     .map_err(db_error)?;
-    if let Some(draft_id) = draft_id {
-        consume_draft(tx, draft_id, invoice)?;
-    }
     Ok(())
 }
 
@@ -559,10 +624,10 @@ pub fn list_invoices_filtered_paginated(
                  OR lower(i.kind) LIKE ?7
                  OR lower(i.status) LIKE ?7
                  OR lower(COALESCE(i.fiscal_hash, '')) LIKE ?7
-                 OR lower(c.legal_name) LIKE ?7
-                 OR lower(c.tax_id) LIKE ?7
-                 OR lower(cu.display_name) LIKE ?7
-                 OR lower(cu.tax_id) LIKE ?7
+                 OR lower(COALESCE(i.issuer_legal_name, c.legal_name)) LIKE ?7
+                 OR lower(COALESCE(i.issuer_tax_id, c.tax_id)) LIKE ?7
+                 OR lower(COALESCE(i.recipient_name, cu.display_name)) LIKE ?7
+                 OR lower(COALESCE(i.recipient_tax_id, cu.tax_id)) LIKE ?7
                )
              ORDER BY i.created_at DESC
              LIMIT ?8 OFFSET ?9"
@@ -698,16 +763,24 @@ pub fn invoice_pdf_data(conn: &Connection, invoice_id: &str) -> Result<InvoicePd
     let today = today_iso();
     let mut invoice = conn
         .query_row(
-            &format!("SELECT i.id, i.company_id, c.legal_name, c.tax_id, cu.display_name, cu.tax_id, i.fiscal_year, i.series, i.number, i.kind, i.status,
+            // N4: emisor y destinatario de la instantánea si la factura está emitida; en vivo si es borrador.
+            &format!("SELECT i.id, i.company_id, COALESCE(i.issuer_legal_name, c.legal_name), COALESCE(i.issuer_tax_id, c.tax_id),
+                    COALESCE(i.recipient_name, cu.display_name), COALESCE(i.recipient_tax_id, cu.tax_id),
+                    i.fiscal_year, i.series, i.number, i.kind, i.status,
                     i.rectifies_invoice_id, i.rectification_reason_code, i.rectification_method,
                     i.taxable_base_cents, i.tax_cents, i.total_cents, i.fiscal_hash, i.issued_at,
                     {OPERATIONAL_COLUMNS},
                     i.withholding_cents, i.notes, i.is_recapitulative, c.logo_path,
-                    c.address, c.postal_code, c.municipality, c.province,
-                    cu.address, cu.postal_code, cu.municipality, cu.province, i.num_serie,
+                    COALESCE(i.issuer_address, c.address), COALESCE(i.issuer_postal_code, c.postal_code),
+                    COALESCE(i.issuer_municipality, c.municipality), COALESCE(i.issuer_province, c.province),
+                    COALESCE(i.recipient_address, cu.address), COALESCE(i.recipient_postal_code, cu.postal_code),
+                    COALESCE(i.recipient_municipality, cu.municipality), COALESCE(i.recipient_province, cu.province),
+                    i.num_serie,
                     (SELECT fr.generated_at FROM fiscal_records fr
                      WHERE fr.invoice_id = i.id AND fr.record_type = 'Alta' LIMIT 1),
-                    cu.country_code, cu.id_type, (SELECT COUNT(*) FROM companies) > 1
+                    COALESCE(i.recipient_country_code, cu.country_code),
+                    CASE WHEN i.recipient_name IS NULL THEN cu.id_type ELSE i.recipient_id_type END,
+                    (SELECT COUNT(*) FROM companies) > 1
              FROM invoices i
              JOIN companies c ON c.id = i.company_id
              JOIN customers cu ON cu.id = i.customer_id

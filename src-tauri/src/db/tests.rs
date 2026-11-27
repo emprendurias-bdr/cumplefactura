@@ -1167,6 +1167,7 @@ fn failed_issue_after_reserving_leaves_no_gap_nor_orphans() {
         n1_issue_input(&company.id, &customer.id, "A"),
         Some("missing-draft"),
         "2026-05-28T10:00:00+02:00",
+        None,
     )
     .expect_err("must fail");
     assert_eq!(error, "not_draft");
@@ -1188,6 +1189,7 @@ fn failed_issue_after_reserving_leaves_no_gap_nor_orphans() {
         n1_issue_input(&company.id, &customer.id, "A"),
         None,
         "2026-05-28T10:00:00+02:00",
+        None,
     )
     .expect("issue");
     assert_eq!(issued.invoice.number, Some(1));
@@ -1206,6 +1208,7 @@ fn generation_time_comes_from_backend_and_cannot_go_back() {
         n1_issue_input(&company.id, &customer.id, "A"),
         None,
         "2026-05-28T10:00:00+02:00",
+        None,
     )
     .expect("first");
     let generated_at: String = conn
@@ -1226,6 +1229,7 @@ fn generation_time_comes_from_backend_and_cannot_go_back() {
         n1_issue_input(&company.id, &customer.id, "A"),
         None,
         "2026-05-28T09:59:59+02:00",
+        None,
     )
     .expect_err("clock behind");
     assert!(
@@ -1243,6 +1247,7 @@ fn generation_time_comes_from_backend_and_cannot_go_back() {
         n1_issue_input(&company.id, &customer.id, "A"),
         None,
         "2026-05-28T10:00:01+02:00",
+        None,
     )
     .expect("second");
     let chain = crate::services::fiscal_chain::verify(&conn).expect("verify");
@@ -1278,6 +1283,7 @@ fn same_number_in_series_preview_xml_qr_and_pdf() {
         n1_issue_input(&company.id, &customer.id, &config.resolved_series),
         None,
         "2026-05-28T10:00:00+02:00",
+        None,
     )
     .expect("issue");
     assert_eq!(issued.invoice.num_serie.as_deref(), Some("F2026/0012"));
@@ -1400,4 +1406,229 @@ fn line_treatment_and_surcharge_round_trip_and_old_lines_read_as_s1() {
     )
     .expect("corrupt");
     assert!(get_invoice_detail(&conn, &invoice.id).is_err());
+}
+
+/// N4: carpeta temporal propia de cada test (en Windows puede quedar abierta: no se limpia).
+fn n4_temp_dir(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("cf-n4-{name}-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    dir
+}
+
+/// N4: edita empresa (también el NIF) y cliente con datos distintos de los emitidos.
+fn n4_edit_parties(conn: &Connection, company: &Company, customer: &Customer) {
+    update_company(
+        conn,
+        &CompanyUpdateInput {
+            id: company.id.clone(),
+            legal_name: "Empresa Renombrada SL".to_string(),
+            tax_id: "B11111119".to_string(),
+            address: "Calle Nueva 9".to_string(),
+            postal_code: "50001".to_string(),
+            municipality: "Zaragoza".to_string(),
+            province: "Zaragoza".to_string(),
+            country_code: "ES".to_string(),
+            default_series: None,
+        },
+    )
+    .expect("company update");
+    let mut edited = customer.clone();
+    edited.display_name = "Cliente Renombrado".to_string();
+    edited.tax_id = "11111111H".to_string();
+    edited.address = "Avenida Otra 3".to_string();
+    edited.municipality = "Sevilla".to_string();
+    edited.province = "Sevilla".to_string();
+    upsert_customer(conn, &edited).expect("customer edit");
+}
+
+#[test]
+fn n4_editing_parties_after_issue_keeps_pdf_and_xml() {
+    let mut conn = memory_conn();
+    let company = company();
+    let customer = customer();
+    insert_company(&conn, &company).expect("company");
+    upsert_customer(&conn, &customer).expect("customer");
+    let issued = issue_invoice(
+        &mut conn,
+        n1_issue_input(&company.id, &customer.id, "A"),
+        None,
+        "2026-05-28T10:00:00+02:00",
+        None,
+    )
+    .expect("issue");
+    let id = issued.invoice.id.clone();
+    let dir = n4_temp_dir("pdf");
+    let render = |conn: &Connection, name: &str| {
+        let data = invoice_pdf_data(conn, &id).expect("pdf data");
+        let path = dir.join(name);
+        crate::services::pdf::write_invoice_pdf(
+            path.to_str().expect("utf8"),
+            &data,
+            crate::services::qr::QrEnvironment::Test,
+        )
+        .expect("pdf");
+        let xml = crate::services::verifactu::build_verifactu_xml_draft(&data, None).expect("xml");
+        (data, std::fs::read(path).expect("pdf bytes"), xml)
+    };
+    let (before, pdf_before, xml_before) = render(&conn, "antes.pdf");
+
+    n4_edit_parties(&conn, &company, &customer);
+    let (after, pdf_after, xml_after) = render(&conn, "despues.pdf");
+
+    assert_eq!(after.company_legal_name, "Demo SL");
+    assert_eq!(after.company_tax_id, "B00000000");
+    assert_eq!(after.customer_display_name, "Cliente Demo");
+    assert_eq!(after.customer_tax_id, "00000000T");
+    assert_eq!(after.company_address, before.company_address);
+    assert_eq!(after.customer_address, before.customer_address);
+    assert_eq!(xml_after, xml_before);
+    assert!(
+        pdf_after == pdf_before,
+        "el PDF cambió tras editar las partes"
+    );
+    // La cadena sigue verificando con el NIF congelado aunque la empresa haya cambiado de NIF.
+    let chain = crate::services::fiscal_chain::verify(&conn).expect("verify");
+    assert!(chain.valid, "{:?}", chain.issues);
+}
+
+#[test]
+fn n4_drafts_read_parties_live() {
+    let mut conn = memory_conn();
+    let company = company();
+    let customer = customer();
+    insert_company(&conn, &company).expect("company");
+    upsert_customer(&conn, &customer).expect("customer");
+    let draft = invoice(company.id.clone(), customer.id.clone());
+    insert_invoice_draft(&mut conn, &draft).expect("draft");
+    n4_edit_parties(&conn, &company, &customer);
+    let data = invoice_pdf_data(&conn, &draft.id).expect("draft data");
+    assert_eq!(data.customer_display_name, "Cliente Renombrado");
+    assert_eq!(data.company_tax_id, "B11111119");
+}
+
+#[test]
+fn n4_issue_archives_alta_xml_with_record_hash() {
+    let mut conn = memory_conn();
+    let company = company();
+    let customer = customer();
+    insert_company(&conn, &company).expect("company");
+    upsert_customer(&conn, &customer).expect("customer");
+    let dir = n4_temp_dir("archivo");
+    let mut records = Vec::new();
+    for generated_at in ["2026-05-28T10:00:00+02:00", "2026-05-28T10:00:01+02:00"] {
+        let issued = issue_invoice(
+            &mut conn,
+            n1_issue_input(&company.id, &customer.id, "A"),
+            None,
+            generated_at,
+            Some(&dir),
+        )
+        .expect("issue");
+        let (xml_path, fiscal_hash): (Option<String>, String) = conn
+            .query_row(
+                "SELECT xml_path, fiscal_hash FROM fiscal_records WHERE invoice_id = ?1",
+                params![issued.invoice.id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("record");
+        records.push((issued, xml_path.expect("xml_path"), fiscal_hash));
+    }
+    let (second, path, fiscal_hash) = &records[1];
+    let expected = dir
+        .join("registros")
+        .join("2026")
+        .join("B00000000_A-2-Alta.xml");
+    assert_eq!(std::path::Path::new(path), expected);
+    let xml = std::fs::read_to_string(path).expect("archived xml");
+    // La huella propia es la última `sf:Huella` del registro y coincide con la del registro.
+    let own = xml
+        .rsplit("<sf:Huella>")
+        .next()
+        .and_then(|tail| tail.split("</sf:Huella>").next())
+        .expect("huella");
+    assert_eq!(own, fiscal_hash);
+    assert_eq!(fiscal_hash, &second.fiscal_hash);
+    // Encadenado con la primera, como en la exportación.
+    assert!(xml.contains(&format!("<sf:Huella>{}</sf:Huella>", records[0].2)));
+    // Mismo XML que daría la exportación de esa factura.
+    let data = invoice_pdf_data(&conn, &second.invoice.id).expect("data");
+    let previous = previous_fiscal_record_link_for_invoice(&conn, &second.invoice.id, "Alta")
+        .expect("previous");
+    assert_eq!(
+        crate::services::verifactu::build_verifactu_xml_draft(&data, previous.as_ref())
+            .expect("export xml"),
+        xml
+    );
+    // Una ruta ya registrada no se reutiliza.
+    assert!(ensure_archive_path_free(&conn, &expected)
+        .expect_err("used")
+        .starts_with("archived_xml_exists"));
+}
+
+#[test]
+fn n4_failed_issue_leaves_no_archived_xml() {
+    let mut conn = memory_conn();
+    let company = company();
+    let customer = customer();
+    insert_company(&conn, &company).expect("company");
+    upsert_customer(&conn, &customer).expect("customer");
+    let dir = n4_temp_dir("rollback");
+    issue_invoice(
+        &mut conn,
+        n1_issue_input(&company.id, &customer.id, "A"),
+        Some("missing-draft"),
+        "2026-05-28T10:00:00+02:00",
+        Some(&dir),
+    )
+    .expect_err("must fail");
+    assert!(!dir
+        .join("registros")
+        .join("2026")
+        .join("B00000000_A-1-Alta.xml")
+        .exists());
+}
+
+#[test]
+fn n4_migration_backfills_issued_invoices_only() {
+    let mut conn = memory_conn();
+    let company = company();
+    let customer = customer();
+    insert_company(&conn, &company).expect("company");
+    upsert_customer(&conn, &customer).expect("customer");
+    let issued = issue_invoice(
+        &mut conn,
+        n1_issue_input(&company.id, &customer.id, "A"),
+        None,
+        "2026-05-28T10:00:00+02:00",
+        None,
+    )
+    .expect("issue");
+    let draft = invoice(company.id.clone(), customer.id.clone());
+    insert_invoice_draft(&mut conn, &draft).expect("draft");
+    // Como una base anterior a N4: sin instantánea. Se ejecuta el relleno de la migración 016.
+    conn.execute(
+        "UPDATE invoices SET issuer_tax_id = NULL, recipient_name = NULL, recipient_address = NULL",
+        [],
+    )
+    .expect("clear");
+    let sql = include_str!("migrations/016_instantanea_partes.sql");
+    let backfill = &sql[sql.find("UPDATE invoices SET").expect("backfill")..];
+    conn.execute_batch(backfill).expect("backfill");
+    let row = |id: &str| -> (Option<String>, Option<String>, Option<String>) {
+        conn.query_row(
+            "SELECT issuer_tax_id, recipient_name, recipient_address FROM invoices WHERE id = ?1",
+            params![id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("row")
+    };
+    assert_eq!(
+        row(&issued.invoice.id),
+        (
+            Some("B00000000".to_string()),
+            Some("Cliente Demo".to_string()),
+            Some("Calle Cliente 1".to_string())
+        )
+    );
+    assert_eq!(row(&draft.id), (None, None, None));
 }

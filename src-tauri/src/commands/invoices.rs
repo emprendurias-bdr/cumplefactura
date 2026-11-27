@@ -12,7 +12,7 @@ use crate::domain::require;
 use crate::services::pdf;
 use crate::services::qr::QrEnvironment;
 use crate::services::verifactu;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 /// Preview del siguiente número (UI); la reserva real ocurre en `invoice_issue`.
 #[derive(Debug, serde::Serialize)]
@@ -67,6 +67,7 @@ pub fn invoice_get(
 /// y periodos recurrentes pasan a la factura emitida.
 #[tauri::command]
 pub fn invoice_issue(
+    app: AppHandle,
     state: State<'_, AppState>,
     input: InvoiceIssueInput,
     draft_id: Option<String>,
@@ -78,11 +79,14 @@ pub fn invoice_issue(
     db::check_price_pending_for_issue(&conn, draft_id.as_deref(), &input.draft)?;
     require("actor", &input.actor)?;
     require("issued_at", &input.issued_at)?;
+    // N4: el XML de alta se archiva en `<app_data>/registros` al emitir.
+    let app_data = app.path().app_data_dir().map_err(|err| err.to_string())?;
     db::issue_invoice(
         &mut conn,
         input,
         draft_id.as_deref(),
         &verifactu::generated_at_now(),
+        Some(&app_data),
     )
 }
 

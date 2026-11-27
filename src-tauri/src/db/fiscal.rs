@@ -744,6 +744,8 @@ pub struct PendingRemision {
 
 /// Registros pendientes de remitir, en el orden de su cadena por empresa
 /// (Orden HAC/1177/2024, art. 16.4: «respetando el orden temporal de generación»).
+/// Se ordena por `rowid` (orden de inserción, la tabla es append-only): `generated_at` mezcla
+/// desfases (+01:00 en altas, Z en anulaciones) y su texto no sigue el orden temporal.
 /// Pendiente = la AEAT no ha dado aún respuesta definitiva (aceptado, con errores o
 /// rechazado): sin intentos o solo «sin confirmar». Un alta se mira por sus envíos de
 /// alta; una anulación, por `anulacion_outcomes`, y solo la vigente (factura `VoidPending`).
@@ -760,7 +762,7 @@ pub fn pending_remision(conn: &Connection) -> Result<Vec<PendingRemision>, Strin
                         AND s.status IN ('accepted', 'accepted_with_errors', 'rejected')))
                 OR (fr.record_type = 'Anulacion' AND i.status = ?2 AND NOT EXISTS (
                       SELECT 1 FROM anulacion_outcomes ao WHERE ao.fiscal_record_id = fr.id))
-             ORDER BY fr.company_id, fr.generated_at, fr.rowid",
+             ORDER BY fr.company_id, fr.rowid",
         )
         .map_err(db_error)?;
     let rows = stmt

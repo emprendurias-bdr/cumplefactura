@@ -310,8 +310,9 @@ pub fn status(
         pending: pending.len(),
         oldest_pending_at: pending
             .iter()
-            .map(|item| item.generated_at.clone())
-            .min_by(|a, b| chronological(a).cmp(&chronological(b))),
+            .filter_map(|item| chronological(&item.generated_at).map(|at| (at, &item.generated_at)))
+            .min()
+            .map(|(_, text)| text.clone()),
         last_attempt_at: db::last_remision_attempt(&conn)?,
         next_attempt_at,
         last_error,
@@ -426,7 +427,8 @@ mod tests {
             let mut issued = invoice(company.id.clone(), customer.id.clone());
             issued.number = Some(index as i64 + 1);
             issued.status = InvoiceStatus::Issued;
-            issued.issued_at = Some(format!("2026-05-28T10:0{index}:00Z"));
+            // Hora local con desfase, como guarda la app las altas.
+            issued.issued_at = Some(format!("2026-05-28T12:0{index}:00+02:00"));
             let hash = format!("{index:X}").repeat(64)[..64].to_string();
             let event = AuditEvent::invoice_issued(
                 issued.id.clone(),
@@ -681,7 +683,8 @@ mod tests {
                 &invoice_id,
                 &hash,
                 Some(&"0".repeat(64)),
-                "2026-05-29T10:00:00Z",
+                // 10:30Z es posterior al alta (10:00Z), pero su texto ordena antes de «12:00+02:00».
+                "2026-05-28T10:30:00Z",
                 &path,
                 &event,
                 "Error en el importe",

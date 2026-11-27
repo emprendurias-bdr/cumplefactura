@@ -89,11 +89,13 @@ export function useVerifactu(m: Model) {
     }
   }
 
-  // Al abrir la app y cada vez que cambian las facturas (emitir, anular): remitir lo nuevo.
+  // Al abrir la app y cada vez que se emite o anula: remitir lo nuevo. La clave es de ids y estados,
+  // no del array: refrescar tras un intento fallido no debe lanzar otra vuelta en bucle.
+  const invoicesKey = m.invoices.map((item) => `${item.id}:${item.status}`).join(",");
   useEffect(() => {
     void loadSubmissions();
     void runRemision(true);
-  }, [m.invoices]);
+  }, [invoicesKey]);
 
   // Reintento al menos cada hora (art. 16.4); la antigüedad del pendiente se refresca cada minuto.
   useEffect(() => {

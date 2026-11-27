@@ -2,7 +2,8 @@
 //!
 //! El envío a la AEAT pasa siempre por el sidecar (`services::sidecar_process`):
 //! la app nunca abre certificados ni conexiones salientes. Toda respuesta del envío
-//! se guarda (`verifactu_submission_list`); reenviar es siempre decisión del usuario.
+//! se guarda (`verifactu_submission_list`). Los registros se remiten por la cola de
+//! `services::remision` (`remision_run`): automática y «Reintentar ahora» usan el mismo camino.
 //! `backup_restore` solo valida salvo con `confirm = true` (ver `db::backup`).
 
 use crate::db::{
@@ -14,11 +15,12 @@ use crate::services::audit::{self, AuditEvent};
 use crate::services::export;
 use crate::services::fiscal_chain::{self, FiscalChainVerification};
 use crate::services::rectification_advisor::{self, RectificationAdvice, RectificationAdviceInput};
+use crate::services::remision::{self, RemisionStatus};
 use crate::services::sidecar_process::{LaunchConfig, SidecarManager};
 use crate::services::verifactu;
 use crate::services::verifactu_submit::{self, SubmitInput, XmlExport};
 use chrono::{SecondsFormat, Utc};
-use fiscal_contract::messages::{InvokeSubmitResponse, SubmitPreflightResponse};
+use fiscal_contract::messages::SubmitPreflightResponse;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -59,17 +61,6 @@ pub struct ExportResult {
     pub target_path: String,
     pub status: String,
     pub notes: Vec<String>,
-}
-
-/// Resultado del envío: respuesta AEAT interpretada y el identificador de la fila
-/// guardada en `verifactu_submissions` (también si fue `transport_error`).
-#[derive(Debug, Clone, Serialize)]
-pub struct VerifactuSubmission {
-    pub invoice_id: String,
-    pub export_id: String,
-    pub submission_id: String,
-    #[serde(flatten)]
-    pub aeat: InvokeSubmitResponse,
 }
 
 /// Asistente técnico R1–R5 / S|I (no decide causa jurídica).
@@ -273,19 +264,7 @@ pub fn verifactu_xml_draft_export(
     require("target_path", &target_path)?;
 
     let conn = state.lock()?;
-    let invoice = db::invoice_pdf_data(&conn, &invoice_id)?;
-    let previous = match db::previous_fiscal_record_link_for_invoice(&conn, &invoice_id, "Alta")? {
-        Some(link) => Some(link),
-        None => db::previous_issued_invoice_link(&conn, &invoice_id)?,
-    };
-    let has_previous = previous.is_some();
-    let assets = resolve_verifactu_xsd_assets(&app)?;
-    verifactu::write_verifactu_xml_draft_validated(
-        &target_path,
-        &invoice,
-        previous.as_ref(),
-        &assets,
-    )?;
+    let has_previous = write_alta_xml(&app, &conn, &invoice_id, &target_path)?;
     let export = verifactu_submit::record_xml_export(
         &conn,
         &invoice_id,
@@ -455,51 +434,53 @@ pub fn verifactu_submit_preflight(
     sidecar: State<'_, SidecarManager>,
     mut input: SubmitInput,
 ) -> Result<SubmitPreflightResponse, String> {
-    let (_, endpoint_name) = checked_submission(&state, &mut input)?;
+    let (_, endpoint_name) = remision::checked_submission(&state, &mut input)?;
     let client = sidecar.client(|| LaunchConfig::resolve(&app))?;
     verifactu_submit::preflight(&client, &input, &endpoint_name)
 }
 
-/// Envía el XML exportado a la AEAT a través del sidecar y guarda cada intento.
-/// Si falla después de poder llegar a la AEAT (sin respuesta, respuesta ilegible o
-/// incoherente), se guarda como `transport_error` («sin confirmar»), nunca como
-/// aceptado ni rechazado. Un `transport_error` previo no bloquea: se reintenta a mano.
-/// Si el XML era una anulación, la respuesta decide el estado de la factura
-/// (`db::record_verifactu_submission`).
+/// Una vuelta de la cola de remisión (S4): envía en orden de cadena los registros sin
+/// respuesta definitiva de la AEAT. `automatic` = la lanza la app (al abrir, tras emitir o
+/// anular, cada hora y al acabar la espera); con el envío real apagado no envía nada.
+/// `false` = «Reintentar ahora». La contraseña solo llega en modo «solo durante esta sesión».
 #[tauri::command]
-pub fn verifactu_submit(
+pub fn remision_run(
     app: AppHandle,
     state: State<'_, AppState>,
     sidecar: State<'_, SidecarManager>,
-    mut input: SubmitInput,
-) -> Result<VerifactuSubmission, String> {
-    let (xml, endpoint_name) = checked_submission(&state, &mut input)?;
-    {
-        let conn = state.lock()?;
-        verifactu_submit::check_wait_time(&conn, &input.invoice_id, &endpoint_name, Utc::now())?;
-    }
-    let client = sidecar.client(|| LaunchConfig::resolve(&app))?;
-    // Sin bloqueo de base de datos durante la llamada a la AEAT (hasta 30 s).
-    let aeat = match verifactu_submit::submit(&client, &input, xml, &endpoint_name) {
-        Ok(aeat) => aeat,
-        Err(err) if verifactu_submit::failed_before_aeat(&err) => return Err(err),
-        Err(err) => verifactu_submit::unconfirmed_response(&input, &endpoint_name, &err),
+    certificate_ref: String,
+    certificate_password: Option<String>,
+    automatic: bool,
+) -> Result<RemisionStatus, String> {
+    require("certificate_ref", &certificate_ref)?;
+    let xml_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|err| format!("app_data_dir: {err}"))?
+        .join("remision");
+    let connect = || sidecar.client(|| LaunchConfig::resolve(&app));
+    let write = |conn: &rusqlite::Connection, invoice_id: &str, path: &str| {
+        write_alta_xml(&app, conn, invoice_id, path).map(|_| ())
     };
-    let mut conn = state.lock()?;
-    let submission_id = db::record_verifactu_submission(
-        &mut conn,
-        db::VerifactuSubmissionRecord {
-            invoice_id: &input.invoice_id,
-            fiscal_export_id: &input.export_id,
-            response: &aeat,
+    remision::Queue {
+        state: &state,
+        client: &connect,
+        xml_dir: &xml_dir,
+        write_alta_xml: &write,
+    }
+    .run(
+        &remision::Credentials {
+            certificate_ref,
+            certificate_password,
         },
-    )?;
-    Ok(VerifactuSubmission {
-        invoice_id: input.invoice_id,
-        export_id: input.export_id,
-        submission_id,
-        aeat,
-    })
+        automatic,
+    )
+}
+
+/// Estado de la cola sin enviar: pendientes, último intento y próxima hora permitida.
+#[tauri::command]
+pub fn remision_status(state: State<'_, AppState>) -> Result<RemisionStatus, String> {
+    remision::status(&state, None, false)
 }
 
 /// Paquete de envío de una anulación pendiente (mismos campos que el de la interfaz).
@@ -560,31 +541,27 @@ pub fn verifactu_submission_list(
     db::list_verifactu_submissions(&conn, invoice_id.as_deref())
 }
 
-/// Comprobaciones comunes a preflight y envío. Devuelve el XML y el endpoint del entorno elegido.
-/// En modo `env` descarta la contraseña que llegue de la interfaz: manda el entorno del sidecar.
-fn checked_submission(
-    state: &AppState,
-    input: &mut SubmitInput,
-) -> Result<(String, String), String> {
-    let xml = verifactu_submit::read_checked_xml(input)?;
-    let conn = state.lock()?;
-    if !db::fiscal_export_matches(
-        &conn,
-        &input.export_id,
-        &input.invoice_id,
-        &input.xml_sha256,
-    )? {
-        return Err("export_not_found: exporta de nuevo el XML de esta factura".to_string());
-    }
-    if db::verifactu_xml_already_accepted(&conn, &input.xml_sha256)? {
-        return Err("xml_already_accepted_by_aeat".to_string());
-    }
-    db::check_anulacion_export_is_current(&conn, &input.export_id, &input.invoice_id)?;
-    let settings = db::get_app_settings(&conn)?;
-    if !settings.sends_certificate_password() {
-        input.certificate_password = None;
-    }
-    Ok((xml, settings.effective_endpoint().as_str().to_string()))
+/// Escribe el XML de alta de la factura validado contra el XSD. Lo usan la exportación
+/// y la cola de remisión. Devuelve si lleva `RegistroAnterior`.
+fn write_alta_xml(
+    app: &AppHandle,
+    conn: &rusqlite::Connection,
+    invoice_id: &str,
+    target_path: &str,
+) -> Result<bool, String> {
+    let invoice = db::invoice_pdf_data(conn, invoice_id)?;
+    let previous = match db::previous_fiscal_record_link_for_invoice(conn, invoice_id, "Alta")? {
+        Some(link) => Some(link),
+        None => db::previous_issued_invoice_link(conn, invoice_id)?,
+    };
+    let assets = resolve_verifactu_xsd_assets(app)?;
+    verifactu::write_verifactu_xml_draft_validated(
+        target_path,
+        &invoice,
+        previous.as_ref(),
+        &assets,
+    )?;
+    Ok(previous.is_some())
 }
 
 fn resolve_verifactu_xsd_assets(app: &AppHandle) -> Result<verifactu::VerifactuXsdAssets, String> {

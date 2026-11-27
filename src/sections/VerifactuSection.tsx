@@ -102,7 +102,7 @@ export function VerifactuSection(c: Ctx) {
                 header: "",
                 cell: (row) =>
                   row.status === "transport_error" ? (
-                    <Button size="sm" variant="dark" onClick={() => void vf.retry(row)} disabled={!vf.canRetry(row)} reason={vf.canRetry(row) ? null : t("vf.reintentarMotivo")}>
+                    <Button size="sm" variant="dark" onClick={() => void vf.retryNow()} disabled={!vf.canRetryNow} reason={vf.canRetryNow ? null : t("vf.reintentarMotivo")}>
                       {t("envio.reintentar")}
                     </Button>
                   ) : null,

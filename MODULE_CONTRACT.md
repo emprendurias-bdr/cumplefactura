@@ -45,7 +45,8 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite; sidecar Rust `cumplefactura
 | `verifactu_xml_anulacion_draft_export` | `invoice_id`, `target_path`, `reason` | `VerifactuXmlResult` | XML anulacion, XSD local obligatorio, registro fiscal append-only, factura `Void`, `xml_exported`; sin envio. `reason` obligatorio (`reason_required`): se guarda en `invoices.void_reason` y en un evento `invoice_void_reason` encadenado tras `invoice_voided`; no entra en XML ni huella |
 | `fiscal_chain_verify` | - | `FiscalChainVerification` | Recalculo huellas AEAT + enlaces `previous_fiscal_hash` + deteccion tamper |
 | `verifactu_submit_preflight` | `SubmitInput` (`invoice_id`, `export_id`, `xml_path`, `xml_sha256`, `certificate_ref`, `certificate_password?`) | `SubmitPreflightResponse` (+ `certificate_expires_at`, `certificate_expires_in_days`; avisos `certificate_expires_soon`, `certificate_expired`, este ultimo tambien bloqueo) | Comprueba que el XML sigue siendo el exportado y pregunta al sidecar (lanzandolo si hace falta) por endpoint, certificado y permiso AEAT; nunca llama a la AEAT |
-| `verifactu_submit` | `SubmitInput` | `VerifactuSubmission` | Envia el XML sin firma al sidecar, que lo remite a la AEAT por TLS mutuo; guarda toda respuesta en `verifactu_submissions`, tambien `transport_error`; rechaza `aeat_wait_time_pending:<s>` y `xml_already_accepted_by_aeat`; sin reintentos automaticos |
+| `remision_run` | `certificate_ref`, `certificate_password?`, `automatic` | `RemisionStatus` | Cola de remision (S4): envia sin firma al sidecar, en orden de cadena, los registros sin respuesta definitiva; guarda toda respuesta en `verifactu_submissions`, tambien `transport_error`; respeta `TiempoEsperaEnvio`; con el envio real apagado las vueltas automaticas no envian; audita cada intento (`remision_attempted`) |
+| `remision_status` | — | `RemisionStatus` | Pendientes, ultimo intento y proxima hora permitida, sin enviar |
 | `verifactu_submission_list` | `invoice_id?` | `VerifactuSubmissionSummary[]` | Todas las respuestas AEAT, la mas reciente primero |
 | `company_list` / `customer_list` / `invoice_list` / `audit_list` / `fiscal_record_list` | filtros/paginacion segun lista | listas resumen | Lectura SQLite |
 | `backup_export` | `target_path` | `BackupResult` | Export SQLite con `VACUUM INTO` |
@@ -89,7 +90,7 @@ Stack: Tauri 2 + React + TypeScript + Rust + SQLite; sidecar Rust `cumplefactura
 - `fiscal_chain_verify` debe detectar hash fiscal no recalculable, enlace roto, duplicado, factura alterada y XML de anulacion ausente.
 - `fiscal_audit_export` debe incluir facturas, eventos, registros fiscales y resultado de `fiscal_chain_verify`.
 - Los registros VERI*FACTU se envian sin firma XAdES: RD 1007/2023 art. 16.3 y Orden HAC/1177/2024 arts. 3-5. El modo No VERI*FACTU queda fuera de v1.
-- `verifactu_submit_preflight` y `verifactu_submit` exigen que `export_id` sea una exportacion `xml_exported` de esa factura con ese SHA-256 y que el fichero no haya cambiado.
+- `verifactu_submit_preflight` y `remision_run` exigen que `export_id` sea una exportacion `xml_exported` de esa factura con ese SHA-256 y que el fichero no haya cambiado.
 - Un XML ya aceptado por la AEAT no se reenvia: `xml_already_accepted_by_aeat` y un indice unico en `verifactu_submissions`.
 - La app comprueba que la respuesta del sidecar trae el mismo SHA-256, que el preflight no salio a internet y que no contiene la referencia del certificado ni el secreto.
 - El sidecar se lanza con un secreto HMAC nuevo por sesion (stdin), solo escucha en `127.0.0.1`, se relanza si muere y se cierra al salir la app.

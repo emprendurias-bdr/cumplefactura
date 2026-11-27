@@ -14,7 +14,7 @@ fn memory_conn() -> Connection {
     super::test_conn()
 }
 
-fn company() -> Company {
+pub(crate) fn company() -> Company {
     Company::from_input(CompanyInput {
         legal_name: "Demo SL".to_string(),
         tax_id: "B00000000".to_string(),
@@ -27,7 +27,7 @@ fn company() -> Company {
     })
 }
 
-fn customer() -> Customer {
+pub(crate) fn customer() -> Customer {
     Customer::from_input(CustomerInput {
         id: None,
         display_name: "Cliente Demo".to_string(),
@@ -41,7 +41,7 @@ fn customer() -> Customer {
     })
 }
 
-fn invoice(company_id: String, customer_id: String) -> Invoice {
+pub(crate) fn invoice(company_id: String, customer_id: String) -> Invoice {
     Invoice::draft(InvoiceDraftInput {
         company_id,
         customer_id,

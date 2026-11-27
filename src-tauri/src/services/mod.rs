@@ -6,6 +6,7 @@
 //! 3. XML VERI*FACTU → generación y validación XSD (`verifactu`).
 //! 4. Envío a la AEAT → `verifactu_submit` habla con el sidecar que arranca
 //!    `sidecar_process`. Solo el sidecar abre el certificado y sale a internet.
+//!    `remision` es la cola que remite cada registro al generarse y reintenta los pendientes.
 //! 5. Asistente técnico de rectificativas → `rectification_advisor` (no decide la causa jurídica).
 //!
 //! Aquí no hay UI ni red, salvo el canal HTTP loopback con el sidecar.
@@ -17,6 +18,7 @@ pub mod logo;
 pub mod pdf;
 pub mod qr;
 pub mod rectification_advisor;
+pub mod remision;
 pub mod sidecar_process;
 pub mod verifactu;
 pub mod verifactu_submit;

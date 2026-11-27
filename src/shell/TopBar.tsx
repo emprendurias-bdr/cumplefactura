@@ -1,7 +1,7 @@
 /**
  * Barra superior (design.md §5.1), 52 px en --surface: BDR. · icono + CumpleFactura ·
  * ContextSelect Empresa · Serie · buscador Ctrl K (abre la paleta) · chip de entorno de envío (S3) ·
- * chip de cadena · ⚙ · avatar.
+ * chip de remisión (S4) · chip de cadena · ⚙ · avatar.
  * Sin campana de avisos. El avatar es la inicial de la empresa activa; sin Cuenta BDR en
  * escritorio, «Cambiar de app» se ve deshabilitado con su motivo (§7.14).
  */
@@ -10,10 +10,12 @@ import { t } from "../i18n/es";
 import { AppearancePanel } from "../ui/AppearancePanel";
 import { ContextSelect } from "../ui/ContextSelect";
 import type { Model } from "../useCumpleFactura";
+import type { Verifactu } from "../useVerifactu";
 import { ChainChip } from "./ChainChip";
+import { RemisionChip } from "./RemisionChip";
 import { SendingChip } from "./SendingChip";
 
-export function TopBar({ m, onSearch }: { m: Model; onSearch: () => void }) {
+export function TopBar({ m, vf, onSearch }: { m: Model; vf: Verifactu; onSearch: () => void }) {
   const initial = m.company?.legal_name.trim()[0]?.toUpperCase();
   return (
     <header className="bdr-top">
@@ -46,6 +48,7 @@ export function TopBar({ m, onSearch }: { m: Model; onSearch: () => void }) {
       </button>
       <span className="bdr-spacer" />
       <SendingChip environment={m.sendingEnvironment} enabled={m.sendingEnabled} />
+      <RemisionChip vf={vf} />
       <ChainChip chain={m.fiscalChain} />
       <AppearancePanel />
       <details className="cf-menu cf-avatar">

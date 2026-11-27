@@ -732,6 +732,83 @@ pub fn list_verifactu_submissions(
     rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
 }
 
+/// Registro de facturación aún sin remitir a la AEAT (S4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PendingRemision {
+    pub fiscal_record_id: String,
+    pub invoice_id: String,
+    pub company_id: String,
+    pub record_type: String,
+    pub generated_at: String,
+}
+
+/// Registros pendientes de remitir, en el orden de su cadena por empresa
+/// (Orden HAC/1177/2024, art. 16.4: «respetando el orden temporal de generación»).
+/// Se ordena por `rowid` (orden de inserción, la tabla es append-only): `generated_at` mezcla
+/// desfases (+01:00 en altas, Z en anulaciones) y su texto no sigue el orden temporal.
+/// Pendiente = la AEAT no ha dado aún respuesta definitiva (aceptado, con errores o
+/// rechazado): sin intentos o solo «sin confirmar». Un alta se mira por sus envíos de
+/// alta; una anulación, por `anulacion_outcomes`, y solo la vigente (factura `VoidPending`).
+pub fn pending_remision(conn: &Connection) -> Result<Vec<PendingRemision>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT fr.id, fr.invoice_id, fr.company_id, fr.record_type, fr.generated_at
+             FROM fiscal_records fr
+             JOIN invoices i ON i.id = fr.invoice_id
+             WHERE (fr.record_type = 'Alta' AND NOT EXISTS (
+                      SELECT 1 FROM verifactu_submissions s
+                      JOIN fiscal_exports fe ON fe.id = s.fiscal_export_id
+                      WHERE s.invoice_id = fr.invoice_id AND fe.payload_version <> ?1
+                        AND s.status IN ('accepted', 'accepted_with_errors', 'rejected')))
+                OR (fr.record_type = 'Anulacion' AND i.status = ?2 AND NOT EXISTS (
+                      SELECT 1 FROM anulacion_outcomes ao WHERE ao.fiscal_record_id = fr.id))
+             ORDER BY fr.company_id, fr.rowid",
+        )
+        .map_err(db_error)?;
+    let rows = stmt
+        .query_map(params![ANULACION_PAYLOAD_VERSION, VOID_PENDING], |row| {
+            Ok(PendingRemision {
+                fiscal_record_id: row.get(0)?,
+                invoice_id: row.get(1)?,
+                company_id: row.get(2)?,
+                record_type: row.get(3)?,
+                generated_at: row.get(4)?,
+            })
+        })
+        .map_err(db_error)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(db_error)
+}
+
+/// Exportación de alta ya registrada con ese hash (para reusar el XML de la cola).
+pub fn alta_export_with_hash(
+    conn: &Connection,
+    invoice_id: &str,
+    xml_sha256: &str,
+) -> Result<Option<String>, String> {
+    conn.query_row(
+        "SELECT id FROM fiscal_exports
+         WHERE invoice_id = ?1 AND upper(payload_hash) = upper(?2)
+           AND payload_version <> ?3 AND status = 'xml_exported'
+         ORDER BY created_at DESC, rowid DESC LIMIT 1",
+        params![invoice_id, xml_sha256, ANULACION_PAYLOAD_VERSION],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(db_error)
+}
+
+/// Hora del último intento de remisión (evento `remision_attempted`), si lo hay.
+pub fn last_remision_attempt(conn: &Connection) -> Result<Option<String>, String> {
+    conn.query_row(
+        "SELECT occurred_at FROM audit_events WHERE action = 'remision_attempted'
+         ORDER BY occurred_at DESC, rowid DESC LIMIT 1",
+        [],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(db_error)
+}
+
 /// Última respuesta con `TiempoEsperaEnvio` para la empresa de la factura y ese
 /// endpoint: (`submitted_at`, segundos). La espera de la AEAT es por obligado
 /// tributario, no por factura.

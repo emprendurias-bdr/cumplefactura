@@ -313,6 +313,19 @@ export type VerifactuSubmission = {
   external_call_performed: boolean;
 };
 
+/** S4: estado de la cola de remisión (`remision_run`, `remision_status`). */
+export type RemisionStatus = {
+  pending: number;
+  oldest_pending_at: string | null;
+  last_attempt_at: string | null;
+  /** UTC: primer momento en que la AEAT deja volver a enviar. */
+  next_attempt_at: string | null;
+  last_error: string | null;
+  sending_enabled: boolean;
+  /** Había otra vuelta en curso: esta no envió nada. */
+  busy: boolean;
+};
+
 /** S1: un `CodigoErrorRegistro` con su descripción. */
 export type AeatError = { codigo: string | null; descripcion: string | null };
 

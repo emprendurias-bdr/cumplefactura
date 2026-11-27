@@ -1,5 +1,6 @@
 /**
- * Shell (design.md §5.1): salto al contenido · TopBar · SideNav · <main> de hasta 1440 px · Toaster.
+ * Shell (design.md §5.1): salto al contenido · TopBar · SideNav · <main> de hasta 1440 px · Toaster ·
+ * aviso al cerrar con registros sin remitir (S4).
  * Atajos de teclado (design.md §9, apps de trabajo): Ctrl K paleta · N nueva factura · / buscar
  * facturas · Ctrl+Enter emitir (lo recoge el editor con el evento `cf:emitir`) · Esc cierra
  * diálogos (nativo). N y / no se disparan mientras se escribe en un campo.
@@ -10,7 +11,9 @@ import { invoiceNumber } from "../lib/numberProposal";
 import { href, type Route } from "../lib/routes";
 import { Toaster } from "../ui/Toast";
 import type { Model } from "../useCumpleFactura";
+import type { Verifactu } from "../useVerifactu";
 import { type Command, CommandPalette } from "./CommandPalette";
+import { RemisionCierre } from "./RemisionChip";
 import { SideNav } from "./SideNav";
 import { TopBar } from "./TopBar";
 
@@ -24,7 +27,7 @@ function focusSearch() {
   setTimeout(() => document.getElementById(SEARCH_ID)?.focus(), 0);
 }
 
-export function Shell({ m, route, children }: { m: Model; route: Route; children: ReactNode }) {
+export function Shell({ m, vf, route, children }: { m: Model; vf: Verifactu; route: Route; children: ReactNode }) {
   const [palette, setPalette] = useState(false);
 
   useEffect(() => {
@@ -83,7 +86,7 @@ export function Shell({ m, route, children }: { m: Model; route: Route; children
       <a className="cf-skip" href="#contenido">
         {t("app.saltar")}
       </a>
-      <TopBar m={m} onSearch={() => setPalette(true)} />
+      <TopBar m={m} vf={vf} onSearch={() => setPalette(true)} />
       <div className="bdr-body">
         <SideNav active={route.section} />
         <main className="bdr-main" id="contenido" tabIndex={-1}>
@@ -91,6 +94,7 @@ export function Shell({ m, route, children }: { m: Model; route: Route; children
         </main>
       </div>
       <CommandPalette open={palette} commands={commands} onClose={() => setPalette(false)} />
+      <RemisionCierre vf={vf} />
       <Toaster />
     </div>
   );

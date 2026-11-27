@@ -95,12 +95,12 @@ const result = await withViteServer({ root, port, logPath: serverLogPath }, asyn
 
     // Verifactu antes de emitir: botones deshabilitados y límites honestos.
     await goToSection(page, "Verifactu");
-    await expectTextVisible(page, "Esta versión no envía sola.");
+    await expectTextVisible(page, "Se envía sola a la AEAT.");
     await expect(page.getByRole("button", { name: "Comprobación previa", exact: true })).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Enviar a la AEAT", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Reintentar ahora", exact: true })).toBeDisabled();
     await openTechnical(page);
     initialVisibleLimits = await bodyHas(page, {
-      noSend: "Esta versión no envía sola",
+      noSend: "Se envía sola a la AEAT",
       gateNoAeat: "el gate no llama a AEAT",
       externalBlocked: "sin llamada AEAT real ni CSV",
     });
@@ -146,7 +146,7 @@ const result = await withViteServer({ root, port, logPath: serverLogPath }, asyn
     await clickByRole(page, "Emitir factura");
     const confirm = page.getByRole("dialog", { name: /¿Emitir la factura A-1\?/ });
     await expect(confirm).toBeVisible();
-    await expect(confirm.getByText("No se envía a la AEAT al emitir", { exact: false })).toBeVisible();
+    await expect(confirm.getByText("Se envía sola a la AEAT al emitir", { exact: false })).toBeVisible();
     await expect(confirm.getByRole("button", { name: "Emitir", exact: true })).toBeDisabled();
     await confirm.getByLabel("Lo entiendo").check();
     await confirm.getByRole("button", { name: "Emitir", exact: true }).click();
@@ -171,7 +171,9 @@ const result = await withViteServer({ root, port, logPath: serverLogPath }, asyn
     finalVisibleLimits = await bodyHas(page, { noAeatCsv: "sin llamada AEAT real ni CSV", gateNoAeat: "el gate no llama a AEAT" });
     await clickByRole(page, "Comprobación previa");
     await expectTextVisible(page, "Todo listo para enviar.");
-    await clickByRole(page, "Enviar a la AEAT");
+    // S4: la cola envía sola al escribir la contraseña si el envío está encendido; si no, a mano.
+    const retryNow = page.getByRole("button", { name: "Reintentar ahora", exact: true });
+    if (await retryNow.isEnabled()) await retryNow.click();
     await expectTextVisible(page, "Aceptada por la AEAT · A-1.");
     await expect(page.getByRole("table", { name: "Envíos a la AEAT" }).getByText("MOCK-CSV")).toBeVisible();
     passwordPersisted = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }).includes("mock-pass-123"));

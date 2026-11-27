@@ -19,6 +19,15 @@ export function sendingStatus(environment: "test" | "production", enabled: boole
   return s(enabled ? "info" : "neu", "envioEstado.pruebas");
 }
 
+/**
+ * S4: cola de remisión. Al día ✓; pendientes con aviso (envío apagado, más de una hora o falta
+ * la contraseña) !; pendientes en curso normal ◷.
+ */
+export function remisionStatus(pending: number, warn: boolean): Status {
+  if (!pending) return s("ok", "remision.alDia");
+  return s(warn ? "warn" : "info", "remision.pendientes");
+}
+
 const INVOICE: Record<string, Status> = {
   Draft: s("warn", "estado.borrador"),
   Issued: s("ok", "estado.emitida"),

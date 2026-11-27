@@ -13,7 +13,7 @@
 //!    Toda respuesta del envío, también `transport_error`, se guarda en
 //!    `verifactu_submissions`. Si el fallo pudo ocurrir después de salir hacia la
 //!    AEAT, `unconfirmed_response` lo convierte en `transport_error` («sin confirmar»).
-//!    Reintentar es siempre una decisión manual: aquí no hay reintentos automáticos.
+//!    Los reintentos los hace la cola de `services::remision`, que usa estas funciones.
 //!
 //! Qué comprueba de la respuesta del sidecar (defensa en profundidad):
 //! - el preflight nunca dice haber llamado a la AEAT;

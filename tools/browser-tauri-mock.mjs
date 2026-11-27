@@ -189,6 +189,21 @@ export function installTauriMock(page, seed = null) {
       return doc;
     }
 
+    // S4: cola de remisión simulada; `send` acepta todo lo pendiente.
+    function remisionMock(send) {
+      const pendingOf = () => state.invoices.filter((inv) => inv.number && inv.status === "Issued" && !state.submissions.some((row) => row.invoice_id === inv.id));
+      if (send) {
+        for (const inv of pendingOf()) {
+          state.submissions = [
+            { id: id("submission"), invoice_id: inv.id, fiscal_export_id: id("export"), endpoint_name: state.settings.verifactu_endpoint_name, xml_sha256: hex(99), status: "accepted", csv: "MOCK-CSV", estado_envio: "Correcto", estado_registro: "Correcto", codigo_error: null, descripcion_error: null, tiempo_espera_envio_seconds: null, submitted_at: now() },
+            ...state.submissions,
+          ];
+        }
+      }
+      const pending = pendingOf();
+      return { pending: pending.length, oldest_pending_at: pending[0]?.issued_at ?? null, last_attempt_at: state.submissions[0]?.submitted_at ?? null, next_attempt_at: null, last_error: null, sending_enabled: Boolean(state.settings.aeat_sending_enabled), busy: false };
+    }
+
     const handlers = {
       "plugin:dialog|open": (args) =>
         args.options?.directory
@@ -415,25 +430,10 @@ export function installTauriMock(page, seed = null) {
           certificate_expires_in_days: 484,
         };
       },
-      verifactu_submit: (args) => {
-        const row = {
-          id: id("submission"),
-          invoice_id: args.input.invoice_id,
-          fiscal_export_id: args.input.export_id,
-          endpoint_name: state.settings.verifactu_endpoint_name,
-          xml_sha256: args.input.xml_sha256,
-          status: "accepted",
-          csv: "MOCK-CSV",
-          estado_envio: "Correcto",
-          estado_registro: "Correcto",
-          codigo_error: null,
-          descripcion_error: null,
-          tiempo_espera_envio_seconds: 1,
-          submitted_at: new Date(Date.now() - 5000).toISOString(),
-        };
-        state.submissions = [row, ...state.submissions];
-        return { ...row, submission_id: row.id, export_id: row.fiscal_export_id, operation: "RegFactuSistemaFacturacion", http_status: 200, soap_fault: null, external_call_performed: true };
-      },
+      // S4: cola simulada. Pendiente = factura emitida sin envío; la vuelta manual (o con el envío
+      // real encendido) los «acepta» con MOCK-CSV.
+      remision_status: () => remisionMock(false),
+      remision_run: (args) => remisionMock(!args.automatic || Boolean(state.settings.aeat_sending_enabled)),
       verifactu_submission_list: (args) => state.submissions.filter((row) => !args.invoiceId || row.invoice_id === args.invoiceId),
       commercial_document_list: (args) => {
         const f = args.filters || {};

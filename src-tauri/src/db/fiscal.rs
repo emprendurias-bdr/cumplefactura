@@ -224,7 +224,7 @@ pub fn list_fiscal_records_for_verification(
 ) -> Result<Vec<FiscalRecordVerificationRow>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT fr.id, fr.company_id, c.tax_id, fr.invoice_id, i.kind, i.rectification_reason_code, i.series, i.number, i.status,
+            "SELECT fr.id, fr.company_id, COALESCE(i.issuer_tax_id, c.tax_id), fr.invoice_id, i.kind, i.rectification_reason_code, i.series, i.number, i.status,
                     i.tax_cents, i.total_cents, i.fiscal_hash, i.issued_at, fr.record_type,
                     fr.generated_at, fr.fiscal_hash, fr.previous_fiscal_hash, fr.xml_path, i.num_serie
              FROM fiscal_records fr
@@ -494,7 +494,7 @@ pub fn latest_fiscal_record_link_for_company(
     company_id: &str,
 ) -> Result<Option<PreviousInvoiceLink>, String> {
     conn.query_row(
-        "SELECT c.tax_id, i.series, i.number, i.issued_at, fr.fiscal_hash, i.num_serie
+        "SELECT COALESCE(i.issuer_tax_id, c.tax_id), i.series, i.number, i.issued_at, fr.fiscal_hash, i.num_serie
          FROM fiscal_records fr
          JOIN invoices i ON i.id = fr.invoice_id
          JOIN companies c ON c.id = fr.company_id
@@ -525,7 +525,7 @@ pub fn previous_fiscal_record_link_for_invoice(
     record_type: &str,
 ) -> Result<Option<PreviousInvoiceLink>, String> {
     conn.query_row(
-        "SELECT c.tax_id, i.series, i.number, i.issued_at, prev.fiscal_hash, i.num_serie
+        "SELECT COALESCE(i.issuer_tax_id, c.tax_id), i.series, i.number, i.issued_at, prev.fiscal_hash, i.num_serie
          FROM fiscal_records cur
          JOIN fiscal_records prev ON prev.fiscal_hash = cur.previous_fiscal_hash
          JOIN invoices i ON i.id = prev.invoice_id
@@ -552,12 +552,58 @@ pub fn previous_fiscal_record_link_for_invoice(
     .map_err(db_error)
 }
 
+/// Enlace al registro con huella `fiscal_hash`: lo que `previous_fiscal_record_link_for_invoice`
+/// devuelve para un registro cuyo `previous_fiscal_hash` es ese (N4: el alta aún no insertada).
+pub fn fiscal_record_link_by_hash(
+    conn: &Connection,
+    fiscal_hash: &str,
+) -> Result<Option<PreviousInvoiceLink>, String> {
+    conn.query_row(
+        "SELECT COALESCE(i.issuer_tax_id, c.tax_id), i.series, i.number, i.issued_at, prev.fiscal_hash, i.num_serie
+         FROM fiscal_records prev
+         JOIN invoices i ON i.id = prev.invoice_id
+         JOIN companies c ON c.id = prev.company_id
+         WHERE prev.fiscal_hash = ?1
+           AND i.number IS NOT NULL
+           AND i.issued_at IS NOT NULL
+         LIMIT 1",
+        params![fiscal_hash],
+        |row| {
+            Ok(PreviousInvoiceLink {
+                company_tax_id: row.get(0)?,
+                series: row.get(1)?,
+                number: row.get(2)?,
+                num_serie: row.get(5)?,
+                issued_at: row.get(3)?,
+                fiscal_hash: row.get(4)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(db_error)
+}
+
+/// N4: ninguna copia archivada se sobrescribe si un registro ya apunta a ella.
+pub fn ensure_archive_path_free(conn: &Connection, path: &std::path::Path) -> Result<(), String> {
+    let used: bool = conn
+        .query_row(
+            "SELECT EXISTS (SELECT 1 FROM fiscal_records WHERE xml_path = ?1)",
+            params![path.to_string_lossy()],
+            |row| row.get(0),
+        )
+        .map_err(db_error)?;
+    if used {
+        return Err(format!("archived_xml_exists: {}", path.display()));
+    }
+    Ok(())
+}
+
 pub fn rectified_invoice_link(
     conn: &Connection,
     invoice_id: &str,
 ) -> Result<RectifiedInvoiceLink, String> {
     conn.query_row(
-        "SELECT c.tax_id, i.series, i.number, i.issued_at, i.taxable_base_cents, i.tax_cents, i.num_serie,
+        "SELECT COALESCE(i.issuer_tax_id, c.tax_id), i.series, i.number, i.issued_at, i.taxable_base_cents, i.tax_cents, i.num_serie,
                 (SELECT COALESCE(SUM(l.surcharge_cents), 0) FROM invoice_lines l WHERE l.invoice_id = i.id)
          FROM invoices i
          JOIN companies c ON c.id = i.company_id
@@ -589,7 +635,7 @@ pub fn previous_issued_invoice_link(
     invoice_id: &str,
 ) -> Result<Option<PreviousInvoiceLink>, String> {
     conn.query_row(
-        "SELECT c.tax_id, p.series, p.number, p.issued_at, p.fiscal_hash, p.num_serie
+        "SELECT COALESCE(p.issuer_tax_id, c.tax_id), p.series, p.number, p.issued_at, p.fiscal_hash, p.num_serie
          FROM invoices cur
          JOIN invoices p ON p.company_id = cur.company_id
          JOIN companies c ON c.id = p.company_id

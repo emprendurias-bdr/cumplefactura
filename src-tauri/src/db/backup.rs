@@ -82,12 +82,25 @@ pub fn restore_database(conn: &mut Connection, source: &Path) -> Result<RestoreO
         .and_then(|()| fiscal_chain::verify(conn).map(|report| report.valid));
     let (chain_ok, reason) = match attempt {
         Ok(true) => {
+            let mut notes = vec!["Base restaurada; cadena fiscal verificada.".to_string()];
+            // N4: los XML archivados de la copia que falten aquí; nunca se sobrescribe uno existente.
+            let archive = xml_archive_backup_dir(source);
+            if archive.is_dir() {
+                let target = db_path.parent().map(|dir| dir.join("registros"));
+                match target.map(|target| copy_missing_files(&archive, &target)) {
+                    Some(Ok(copied)) => {
+                        notes.push(format!("XML archivados recuperados de la copia: {copied}."))
+                    }
+                    Some(Err(err)) => notes.push(format!("XML archivados no recuperados: {err}")),
+                    None => {}
+                }
+            }
             return Ok(RestoreOutcome {
                 status: "restored",
                 safety_backup_path,
                 chain_ok: Some(true),
-                notes: vec!["Base restaurada; cadena fiscal verificada.".to_string()],
-            })
+                notes,
+            });
         }
         Ok(false) => (
             Some(false),
@@ -107,6 +120,49 @@ pub fn restore_database(conn: &mut Connection, source: &Path) -> Result<RestoreO
             "Se ha vuelto a la base anterior desde la copia previa.".to_string(),
         ],
     })
+}
+
+/// N4: carpeta de XML archivados que acompaña a una copia (`copia.sqlite3` → `copia-registros/`).
+pub fn xml_archive_backup_dir(backup_path: &Path) -> PathBuf {
+    let stem = backup_path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    backup_path.with_file_name(format!("{stem}-registros"))
+}
+
+/// N4: copia `<carpeta de datos>/registros` junto a la copia de la base. La base sola no basta:
+/// el XML archivado es el registro tal como se generó (RD 1007/2023 art. 8.2.c) y regenerarlo con
+/// otra versión de la app cambiaría, p. ej., `SistemaInformatico`.
+pub fn backup_xml_archive(conn: &Connection, backup_path: &Path) -> Result<usize, String> {
+    let Some(source) = conn
+        .path()
+        .filter(|path| !path.is_empty())
+        .and_then(|path| Path::new(path).parent().map(|dir| dir.join("registros")))
+    else {
+        return Ok(0);
+    };
+    if !source.is_dir() {
+        return Ok(0);
+    }
+    copy_missing_files(&source, &xml_archive_backup_dir(backup_path))
+}
+
+/// Copia recursiva que nunca sobrescribe: los XML archivados no cambian una vez escritos.
+fn copy_missing_files(from: &Path, to: &Path) -> Result<usize, String> {
+    fs::create_dir_all(to).map_err(|err| format!("archive copy error: {err}"))?;
+    let mut copied = 0;
+    for entry in fs::read_dir(from).map_err(|err| format!("archive copy error: {err}"))? {
+        let entry = entry.map_err(|err| format!("archive copy error: {err}"))?;
+        let target = to.join(entry.file_name());
+        if entry.path().is_dir() {
+            copied += copy_missing_files(&entry.path(), &target)?;
+        } else if !target.exists() {
+            fs::copy(entry.path(), &target).map_err(|err| format!("archive copy error: {err}"))?;
+            copied += 1;
+        }
+    }
+    Ok(copied)
 }
 
 /// Cierra `conn`, copia `from` sobre `db_path` y deja `conn` abierta sobre el resultado.
@@ -153,6 +209,41 @@ mod tests {
                 default_series: None,
             });
         insert_company(conn, &company).unwrap();
+    }
+
+    #[test]
+    fn backup_and_restore_carry_archived_xml() {
+        let dir = temp_dir("registros");
+        let live = open_database(&dir.join("live.sqlite3")).unwrap();
+        let archived = dir.join("registros").join("2026").join("B1_A-1-Alta.xml");
+        fs::create_dir_all(archived.parent().unwrap()).unwrap();
+        fs::write(&archived, "<alta/>").unwrap();
+        let backup = dir.join("copias").join("copia.sqlite3");
+        backup_database(&live, backup.to_str().unwrap()).unwrap();
+        assert_eq!(backup_xml_archive(&live, &backup).unwrap(), 1);
+        let copied = dir
+            .join("copias")
+            .join("copia-registros")
+            .join("2026")
+            .join("B1_A-1-Alta.xml");
+        assert_eq!(fs::read_to_string(&copied).unwrap(), "<alta/>");
+
+        // En otra instalación sin el archivo, restaurar recupera el XML; uno existente no se toca.
+        let other = temp_dir("registros-otra");
+        let mut fresh = open_database(&other.join("live.sqlite3")).unwrap();
+        let kept = other.join("registros").join("2026").join("B1_A-1-Alta.xml");
+        fs::create_dir_all(kept.parent().unwrap()).unwrap();
+        fs::write(&kept, "<propio/>").unwrap();
+        fs::write(copied.with_file_name("B1_A-2-Alta.xml"), "<dos/>").unwrap();
+        let outcome = restore_database(&mut fresh, &backup).unwrap();
+        assert_eq!(outcome.status, "restored");
+        assert_eq!(fs::read_to_string(&kept).unwrap(), "<propio/>");
+        assert_eq!(
+            fs::read_to_string(kept.with_file_name("B1_A-2-Alta.xml")).unwrap(),
+            "<dos/>"
+        );
+        let _ = fs::remove_dir_all(dir);
+        let _ = fs::remove_dir_all(other);
     }
 
     #[test]

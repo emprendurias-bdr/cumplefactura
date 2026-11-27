@@ -1,10 +1,11 @@
 /**
- * Envío de una factura a la AEAT (flujo real de PR #7): 1 Exportar XML → 2 Comprobación previa
- * (el sidecar revisa certificado y entorno, sin llamar a la AEAT) → 3 Enviar a la AEAT.
+ * Envío a la AEAT: 1 Exportar XML (copia para ti) → 2 Comprobación previa (el sidecar revisa
+ * certificado y entorno, sin llamar a la AEAT) → 3 Reintentar ahora. El envío lo hace solo la cola de
+ * remisión (S4); «Reintentar ahora» lanza a mano la misma vuelta sobre todos los pendientes.
  * La contraseña del certificado se pide aquí en modo «Solo durante esta sesión» y vive en memoria.
  * Resultados en Callout: comprobación (lista o bloqueada con motivos traducidos) y respuesta de la
- * AEAT (aceptada con CSV, con errores, rechazada o «Sin confirmar» con Reintentar).
- * Si la AEAT pidió esperar, «Enviar» queda deshabilitado con los segundos que faltan.
+ * AEAT de la factura elegida (aceptada con CSV, con errores, rechazada o «Sin confirmar»).
+ * Si la AEAT pidió esperar, el motivo dice a qué hora sale el siguiente.
  */
 import { blockerText, clockTime, envLabel, t } from "../i18n/es";
 import { invoiceNumber } from "../lib/numberProposal";
@@ -12,6 +13,7 @@ import { Button } from "../ui/Button";
 import { Callout } from "../ui/Callout";
 import { Card } from "../ui/Card";
 import { Field, Input } from "../ui/Field";
+import { RemisionAviso } from "../shell/RemisionChip";
 import type { Ctx } from "./ctx";
 
 export function VerifactuEnvio({ m, vf }: Ctx) {
@@ -19,14 +21,15 @@ export function VerifactuEnvio({ m, vf }: Ctx) {
   const issued = invoice?.status === "Issued";
   const pkgForThis = vf.submission && vf.submission.invoice_id === invoice?.id;
   const pre = pkgForThis ? vf.submitPreflight : null;
-  const sent = pkgForThis ? vf.submitResult : null;
-  const sendReason = !pkgForThis
-    ? t("envio.motivoXml")
-    : pre?.status !== "ready"
-      ? t("envio.motivoComprobacion")
-      : vf.waitLeft > 0
-        ? t("envio.motivoEspera", { h: clockTime(vf.waitUntil) })
+  const sent = vf.submitResult;
+  const retryReason = !vf.remision?.pending
+    ? t("envio.motivoAlDia")
+    : vf.remisionRunning
+      ? t("envio.motivoEnCurso")
+      : vf.needsPassword && !vf.certificatePassword
+        ? t("envio.motivoPassword")
         : null;
+  const waiting = vf.waitUntil > Date.now() ? t("envio.motivoEspera", { h: clockTime(vf.waitUntil) }) : null;
 
   return (
     <Card title={t("envio.titulo")} label={t("envio.titulo")}>
@@ -65,9 +68,10 @@ export function VerifactuEnvio({ m, vf }: Ctx) {
         </li>
         <li>
           <span className="bdr-label">3</span>
-          <Button variant="primary" icon="send" onClick={() => void vf.submitToAeat()} disabled={!vf.canSubmit || !pkgForThis} reason={sendReason}>
+          <Button variant="primary" icon="send" onClick={() => void vf.retryNow()} disabled={!vf.canRetryNow} reason={retryReason}>
             {t("envio.enviar")}
           </Button>
+          <span className="bdr-small bdr-muted">{waiting ?? t("envio.pendientesAyuda")}</span>
         </li>
       </ol>
 
@@ -84,7 +88,8 @@ export function VerifactuEnvio({ m, vf }: Ctx) {
         )
       ) : null}
 
-      {sent ? <Respuesta status={sent.status} csv={sent.csv} detail={sent.descripcion_error} onRetry={() => vf.submission && void vf.retry({ fiscal_export_id: vf.submission.export_id, invoice_id: vf.submission.invoice_id })} n={invoice ? invoiceNumber(invoice) : null} /> : null}
+      <RemisionAviso vf={vf} />
+      {sent ? <Respuesta status={sent.status} csv={sent.csv} detail={sent.descripcion_error} onRetry={() => void vf.retryNow()} canRetry={vf.canRetryNow} n={invoice ? invoiceNumber(invoice) : null} /> : null}
       {m.sendingEnvironment === "production" ? (
         <Callout tone="warn" title={t("envio.produccionTitulo")}>{t("envio.produccion")}</Callout>
       ) : null}
@@ -95,13 +100,13 @@ export function VerifactuEnvio({ m, vf }: Ctx) {
   );
 }
 
-function Respuesta({ status, csv, detail, onRetry, n }: { status: string; csv: string | null; detail: string | null; onRetry: () => void; n: string | null }) {
+function Respuesta({ status, csv, detail, onRetry, canRetry, n }: { status: string; csv: string | null; detail: string | null; onRetry: () => void; canRetry: boolean; n: string | null }) {
   if (status === "accepted") return <Callout tone="ok" live title={t("envio.aceptadaTitulo", { n: n ?? "" })}>{t("envio.csv")} <span className="m">{csv}</span></Callout>;
   if (status === "accepted_with_errors")
     return <Callout tone="warn" live title={t("envio.conErroresTitulo")}>{detail ?? ""} {t("envio.csv")} <span className="m">{csv}</span></Callout>;
   if (status === "rejected") return <Callout tone="err" live title={t("envio.rechazadaTitulo")}>{detail ?? t("envio.rechazada")}</Callout>;
   return (
-    <Callout tone="warn" live title={t("envio.sinConfirmarTitulo")} actions={<Button variant="dark" onClick={onRetry}>{t("envio.reintentar")}</Button>}>
+    <Callout tone="warn" live title={t("envio.sinConfirmarTitulo")} actions={<Button variant="dark" onClick={onRetry} disabled={!canRetry}>{t("envio.reintentar")}</Button>}>
       {t("envio.sinConfirmar")}
     </Callout>
   );

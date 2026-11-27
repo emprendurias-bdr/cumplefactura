@@ -188,7 +188,7 @@ Otros errores del canal: 400 `bad_request` (JSON ilegible), 401 `hmac_invalid`, 
 | XML manipulado entre la app y la AEAT | La app envía el SHA-256 y el sidecar lo recalcula. La app comprueba el hash devuelto. |
 | XXE o DTD en el XML | `roxmltree` rechaza DTD. |
 | Enviar a producción por error | Hace falta `--allow-production`, que v1 nunca pasa. |
-| Doble registro por reintento automático | No hay reintentos automáticos. La app impide reenviar un XML ya aceptado e impone `TiempoEsperaEnvio`. |
+| Doble registro por reintento automático | La cola (S4) reenvía el mismo XML tras «sin confirmar»; si ya llegó, la AEAT responde `RegistroDuplicado` y `soap.rs` toma el estado que ya consta allí. La app impide reenviar un XML ya aceptado e impone `TiempoEsperaEnvio`. |
 | Servidor AEAT suplantado | Validación TLS estándar del sistema, sin excepciones. |
 | Filtración por logs o respuestas | Los logs solo llevan método, ruta, estado y traza. Las respuestas no contienen referencias, rutas, contraseñas ni el XML de la AEAT. La app rechaza respuestas que contengan la referencia, el secreto o la contraseña. |
 | Contraseña robada de la app o del disco | En modo `session` solo vive en memoria y viaja por loopback firmada; nunca se escribe en SQLite, logs ni ficheros. |

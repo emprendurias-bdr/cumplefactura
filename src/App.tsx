@@ -78,7 +78,7 @@ export default function App() {
 
   const Screen = SCREENS[route.section];
   return (
-    <Shell m={m} route={route}>
+    <Shell m={m} vf={vf} route={route}>
       <Screen m={m} vf={vf} docs={docs} rec={rec} route={route} />
     </Shell>
   );

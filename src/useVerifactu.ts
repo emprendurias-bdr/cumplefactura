@@ -1,58 +1,37 @@
 /**
- * Estado y llamadas del envío VERI*FACTU: XML, comprobación previa, envío, lista de envíos (F3),
- * reintento manual y contraseña del certificado.
+ * Estado y llamadas del envío VERI*FACTU: XML, comprobación previa, cola de remisión (S4), lista
+ * de envíos (F3) y contraseña del certificado.
  *
- * Flujo: Exportar XML → Comprobación previa (el sidecar no llama a la AEAT) → Enviar.
+ * Cola (S4, Orden HAC/1177/2024, art. 16.4): `remision_run` remite en orden los registros
+ * pendientes. La app la mueve sola al abrir, cuando cambian las facturas (emitir, anular), cada
+ * hora y cuando acaba la espera que pidió la AEAT. «Reintentar ahora» lanza la misma vuelta a mano.
+ * Con el envío real apagado, las vueltas automáticas no envían nada (lo comprueba Rust).
  * Sin firma XAdES (RD 1007/2023, art. 16.3): la AEAT autentica el certificado en la conexión.
  * Contraseña (ADR-002, modo «Solo durante esta sesión»): vive SOLO en el estado de React; nunca
  * en localStorage, SQLite ni logs, y se olvida al cerrar la app. En modo `env` va `null`.
- * No hay reintentos automáticos ni cola: «Reintentar» lo pulsa la persona.
+ * En ese modo, sin contraseña la cola no se mueve sola y el chip lo avisa.
  */
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { t } from "./i18n/es";
 import { isMissingCommand } from "./lib/tauri";
 import type {
   AnulacionRejection,
+  RemisionStatus,
   SubmissionPackage,
   SubmitPreflight,
-  VerifactuSubmission,
   VerifactuSubmissionSummary,
   VerifactuXmlResult,
 } from "./types";
 import { action, need, run, type Model } from "./useCumpleFactura";
 
-/** Fila «como en la tabla» a partir de la respuesta del envío de esta sesión. */
-function asSummary(result: VerifactuSubmission): VerifactuSubmissionSummary {
-  return {
-    id: result.submission_id ?? `sesion-${result.export_id}`,
-    invoice_id: result.invoice_id,
-    fiscal_export_id: result.export_id,
-    endpoint_name: result.endpoint_name,
-    xml_sha256: result.xml_sha256,
-    status: result.status,
-    csv: result.csv,
-    estado_envio: result.estado_envio,
-    estado_registro: result.estado_registro,
-    codigo_error: result.codigo_error,
-    descripcion_error: result.descripcion_error,
-    tiempo_espera_envio_seconds: result.tiempo_espera_envio_seconds,
-    submitted_at: new Date().toISOString(),
-  };
-}
+/** Una hora: reintento mínimo de la Orden HAC/1177/2024, art. 16.4. */
+export const RETRY_MS = 60 * 60 * 1000;
 
-/** Momento (ms) a partir del que la AEAT deja enviar según el último envío con respuesta; 0 si no pide esperar. */
-export function waitUntil(rows: VerifactuSubmissionSummary[]): number {
-  const last = rows.find((row) => row.tiempo_espera_envio_seconds != null && row.status !== "transport_error");
-  if (!last?.tiempo_espera_envio_seconds) return 0;
-  const until = Date.parse(last.submitted_at) + last.tiempo_espera_envio_seconds * 1000;
-  return Number.isFinite(until) ? until : 0;
-}
-
-/** Segundos que aún pide esperar la AEAT según el último envío con respuesta. */
-export function waitSecondsLeft(rows: VerifactuSubmissionSummary[], now = Date.now()): number {
-  const until = waitUntil(rows);
-  return until ? Math.max(0, Math.ceil((until - now) / 1000)) : 0;
+/** `true` si el registro pendiente más antiguo lleva más de una hora sin remitir. */
+export function remisionOverdue(status: RemisionStatus | null, now = Date.now()): boolean {
+  const oldest = status?.oldest_pending_at ? Date.parse(status.oldest_pending_at) : NaN;
+  return Boolean(status?.pending) && Number.isFinite(oldest) && now - oldest > RETRY_MS;
 }
 
 export function useVerifactu(m: Model) {
@@ -64,27 +43,79 @@ export function useVerifactu(m: Model) {
   const [certificateRef, setCertificateRef] = useState("vault://certs/empresa");
   const [certificatePassword, setCertificatePassword] = useState("");
   const [submitPreflight, setSubmitPreflight] = useState<SubmitPreflight | null>(null);
-  const [submitResult, setSubmitResult] = useState<VerifactuSubmission | null>(null);
   const [submissions, setSubmissions] = useState<VerifactuSubmissionSummary[]>([]);
   const [submissionsAvailable, setSubmissionsAvailable] = useState(true);
-  const [now, setNow] = useState(Date.now());
+  const [remision, setRemision] = useState<RemisionStatus | null>(null);
+  const [remisionRunning, setRemisionRunning] = useState(false);
 
   const issuedInvoices = m.invoices.filter((item) => ["Issued", "VoidPending", "VoidRejected", "Void", "Rectified"].includes(item.status));
   const selected = m.invoices.find((item) => item.id === selectedId) ?? issuedInvoices[0] ?? null;
   const needsPassword = m.passwordMode !== "env";
-  const waitLeft = waitSecondsLeft(submissions, now);
   const canPreflight = Boolean(submission) && (!needsPassword || certificatePassword.length > 0);
-  const canSubmit = Boolean(submission) && submitPreflight?.status === "ready" && waitLeft === 0;
+  const waitUntil = remision?.next_attempt_at ? Date.parse(remision.next_attempt_at) : 0;
+  // Última respuesta guardada de la factura elegida (la lista va de la más reciente a la más antigua).
+  const submitResult = submissions.find((row) => row.invoice_id === selected?.id) ?? null;
+  // Las vueltas lanzadas por temporizador leen siempre lo último que escribió la persona.
+  const latest = useRef({ certificateRef, certificatePassword, needsPassword, lastAttempt: remision?.last_attempt_at });
+  latest.current = { certificateRef, certificatePassword, needsPassword, lastAttempt: remision?.last_attempt_at };
 
+  /** S4: una vuelta de la cola. La automática va en silencio y no sale sin contraseña si hace falta. */
+  async function runRemision(automatic: boolean) {
+    const { certificateRef: ref, certificatePassword: password, needsPassword: needs, lastAttempt } = latest.current;
+    if (automatic && needs && !password) return loadRemision();
+    setRemisionRunning(true);
+    try {
+      const call = () =>
+        invoke<RemisionStatus>("remision_run", { certificateRef: ref, certificatePassword: needs ? password || null : null, automatic });
+      const status = automatic ? await call() : await run(call);
+      setRemision(status);
+      // Solo si hubo intento: la respuesta a una anulación cambia la factura en Rust.
+      if (status.last_attempt_at !== lastAttempt) {
+        await loadSubmissions();
+        await m.refreshData();
+      }
+    } catch (error) {
+      if (!isMissingCommand(error) && automatic) console.warn("remision_run", error);
+    } finally {
+      setRemisionRunning(false);
+    }
+  }
+
+  async function loadRemision() {
+    try {
+      setRemision(await invoke<RemisionStatus>("remision_status"));
+    } catch {
+      // Sin comando (navegador o versión anterior): no hay chip de remisión.
+    }
+  }
+
+  // Al abrir la app y cada vez que cambian las facturas (emitir, anular): remitir lo nuevo.
   useEffect(() => {
     void loadSubmissions();
+    void runRemision(true);
   }, [m.invoices]);
 
+  // Reintento al menos cada hora (art. 16.4); la antigüedad del pendiente se refresca cada minuto.
   useEffect(() => {
-    if (waitLeft === 0) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [waitLeft > 0]);
+    const retry = setInterval(() => void runRemision(true), RETRY_MS);
+    const refresh = setInterval(() => void loadRemision(), 60 * 1000);
+    return () => {
+      clearInterval(retry);
+      clearInterval(refresh);
+    };
+  }, []);
+
+  // Cuando acaba la espera que pidió la AEAT (TiempoEsperaEnvio), sale el siguiente.
+  useEffect(() => {
+    if (!remision?.pending || !waitUntil) return;
+    const timer = setTimeout(() => void runRemision(true), Math.max(0, waitUntil - Date.now()) + 1000);
+    return () => clearTimeout(timer);
+  }, [waitUntil, remision?.pending]);
+
+  // Modo sesión: al escribir la contraseña, la cola ya puede moverse.
+  useEffect(() => {
+    if (certificatePassword && remision?.pending) void runRemision(true);
+  }, [certificatePassword.length > 0]);
 
   /** F3: `verifactu_submission_list`. Si el comando aún no existe, solo se ve el envío de esta sesión. */
   async function loadSubmissions() {
@@ -101,7 +132,6 @@ export function useVerifactu(m: Model) {
     const pkg = exportsThisSession.find((item) => item.invoice_id === id) ?? null;
     setSubmission(pkg);
     setSubmitPreflight(null);
-    setSubmitResult(null);
     if (!pkg) void recoverPendingAnulacion(id);
   }
 
@@ -126,7 +156,6 @@ export function useVerifactu(m: Model) {
     setSubmission(pkg);
     setExports((current) => [pkg, ...current.filter((item) => item.invoice_id !== invoiceId)]);
     setSubmitPreflight(null);
-    setSubmitResult(null);
   }
 
   const exportXml = action(
@@ -181,7 +210,7 @@ export function useVerifactu(m: Model) {
     () => m.refreshData(),
   );
 
-  /** Entrada común de comprobación y envío: paquete exportado, certificado y contraseña en memoria. */
+  /** Entrada de la comprobación previa: paquete exportado, certificado y contraseña en memoria. */
   const submitInput = (pkg: SubmissionPackage) => ({
     input: {
       ...pkg,
@@ -189,37 +218,10 @@ export function useVerifactu(m: Model) {
       certificate_password: needsPassword ? certificatePassword || null : null,
     },
   });
-  const doPreflight = (pkg: SubmissionPackage) => invoke<SubmitPreflight>("verifactu_submit_preflight", submitInput(pkg));
-  const doSubmit = (pkg: SubmissionPackage) => invoke<VerifactuSubmission>("verifactu_submit", submitInput(pkg));
-
-  async function afterSubmit(result: VerifactuSubmission | null) {
-    if (!result) return;
-    setSubmitResult(result);
-    if (!submissionsAvailable) setSubmissions((current) => [asSummary(result), ...current]);
-    else await loadSubmissions();
-    // S1: la respuesta a una anulación cambia el estado de la factura en Rust.
-    await m.refreshData();
-  }
-
-  const preflightSubmit = action(null, () => doPreflight(need(submission, t("error.sinXml"))), setSubmitPreflight);
-  const submitToAeat = action(null, () => doSubmit(need(submission, t("error.sinXml"))), afterSubmit);
-
-  /** Reintento manual de un envío «Sin confirmar»: repite comprobación previa y envío del mismo XML. */
-  const retry = action(
+  const preflightSubmit = action(
     null,
-    async (row: Pick<VerifactuSubmissionSummary, "fiscal_export_id" | "invoice_id">) => {
-      const pkg = need(
-        exportsThisSession.find((item) => item.export_id === row.fiscal_export_id) ??
-          (await recoverPendingAnulacion(row.invoice_id).then((found) => (found?.export_id === row.fiscal_export_id ? found : null))),
-        t("error.sinXml"),
-      );
-      setSelectedId(row.invoice_id);
-      setSubmission(pkg);
-      const check = await doPreflight(pkg);
-      setSubmitPreflight(check);
-      return check.status === "ready" ? doSubmit(pkg) : null;
-    },
-    afterSubmit,
+    () => invoke<SubmitPreflight>("verifactu_submit_preflight", submitInput(need(submission, t("error.sinXml")))),
+    setSubmitPreflight,
   );
 
   return {
@@ -240,20 +242,18 @@ export function useVerifactu(m: Model) {
     submitResult,
     submissions,
     submissionsAvailable,
-    waitLeft,
-    waitUntil: waitUntil(submissions),
+    waitUntil,
     canPreflight,
-    canSubmit,
     exportXml,
     exportCancelXml,
     loadAnulacionRejection,
     desistVoid,
     preflightSubmit,
-    submitToAeat,
-    retry,
-    canRetry: (row: VerifactuSubmissionSummary) =>
-      exportsThisSession.some((item) => item.export_id === row.fiscal_export_id) ||
-      m.invoices.some((item) => item.id === row.invoice_id && item.status === "VoidPending"),
+    remision,
+    remisionRunning,
+    /** «Reintentar ahora»: la misma vuelta de la cola, lanzada por la persona. */
+    retryNow: () => runRemision(false),
+    canRetryNow: Boolean(remision?.pending) && !remisionRunning && (!needsPassword || certificatePassword.length > 0),
     loadSubmissions,
   };
 }
